@@ -128,7 +128,7 @@ const routes = {
     for (const [p, rec] of Object.entries(ledger())) {
       if (!state.files[p]) continue;
       S.upsertFile(p, rec.state === 'improved'
-        ? { status: 'improved', prUrl: rec.prUrl || null, prPatch: rec.patchPath || null }
+        ? { status: 'improved', prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
         : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', attempts: 2 });
       replayed += 1;
     }
@@ -481,7 +481,14 @@ const routes = {
       file, branch: f.branch, title: body.title, body: body.body || '', labels: body.labels || [],
     });
     S.upsertFile(file, { status: 'improved', prUrl: rec.url, prPatch: rec.patchPath });
-    ledger()[file] = { state: 'improved', prUrl: rec.url, patchPath: rec.patchPath, branch: f.branch, ts: Date.now() };
+    ledger()[file] = {
+      state: 'improved', prUrl: rec.url, patchPath: rec.patchPath, branch: f.branch, ts: Date.now(),
+      metrics: {
+        coverageBefore: f.coverageBefore, coverageAfter: f.coverageAfter,
+        mutationBefore: f.mutationBefore, mutationAfter: f.mutationAfter,
+        macBefore: f.macBefore, macAfter: f.macAfter,
+      },
+    };
     S.save();
     await repo.resetToBase();
     return { ok: true, pr: rec };
