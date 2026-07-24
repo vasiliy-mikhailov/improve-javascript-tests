@@ -70,6 +70,7 @@ const uiGuidance = (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT ('
 
 const COMMON_TEST_RULES = `
 - Tests must be deterministic (no timing races, no network, no randomness without seeding).
+- Code must satisfy strict linters: no \`any\` types, no unused imports or variables, no non-null assertions.
 - Import the module under test via its public path exactly as existing tests do.
 - Never inspect function source code (no fn.toString() introspection).
 - No snapshot tests. Prefer precise value assertions.
