@@ -55,6 +55,19 @@ function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000 }) 
 }
 
 // ── shared prompt fragments (live inside Code nodes) ───────────────────────
+// Component-testing guidance, injected when the picked file is a UI component
+// (.jsx/.tsx or imports the detected framework). Kept as a Code-node snippet.
+const UI_GUIDANCE_SNIPPET = `
+const isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+["'](react|vue|svelte|preact)["']/.test(String(gaps.source || '').slice(0, 2000)));
+const uiGuidance = (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'
+  + '\\n- Render it with ' + (gaps.ui.testingLibrary || "the repo's established component-testing approach") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'
+  + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'
+  + (gaps.ui.userEvent ? "\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations." : '')
+  + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')
+  + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'
+  + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'
+  : '';`;
+
 const COMMON_TEST_RULES = `
 - Tests must be deterministic (no timing races, no network, no randomness without seeding).
 - Import the module under test via its public path exactly as existing tests do.
@@ -183,8 +196,9 @@ const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace
 const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';
 const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;
 if (nothingToCover) return [{ json: { skip: true, reason: 'file fully covered', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
-const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');
+const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');${UI_GUIDANCE_SNIPPET}
 const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full test file content"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
+  + uiGuidance
   + (constraints ? '\\nTeam constraints:\\n' + constraints : '');
 const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'
   + String(gaps.source || '').slice(0, 14000)
@@ -211,11 +225,12 @@ const targetPath = base + '.mac-mut' + roundSuffix + '.test' + ext;
 const allSurvived = (gaps.survived && gaps.survived.length) ? gaps.survived : ($('Baseline Mutation').first().json.survived || []);
 const survived = allSurvived.slice(0, cfg.maxMutantsPerFile || 5);
 if (!survived.length) return [{ json: { skip: true, reason: 'no surviving mutants', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
-const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');
+const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');${UI_GUIDANCE_SNIPPET}
 const mutantsTxt = survived.map((m, i) =>
   '#' + (i + 1) + ' ' + m.mutator + ' at line ' + m.line + ' — mutated code would become: ' + JSON.stringify(m.replacement)
   + (m.context ? '\\ncontext:\\n' + m.context : '')).join('\\n\\n');
 const system = 'You are an expert test engineer writing ' + gaps.runner + ' tests that KILL surviving Stryker mutants of one source file. A mutant is killed when at least one test FAILS on the mutated code while PASSING on the original code. Write precise assertions that distinguish original from mutated behavior. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full test file content"}]}. Create NEW test files only. Preferred new file path: ' + targetPath + '. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
+  + uiGuidance
   + (constraints ? '\\nTeam constraints:\\n' + constraints : '');
 const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'
   + String(gaps.source || '').slice(0, 12000)

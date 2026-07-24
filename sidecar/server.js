@@ -228,12 +228,19 @@ const routes = {
     S.setStage('improving_coverage', `analysing coverage gaps in ${p}`);
     const source = repo.readFileSafe(p, 24000);
     const guess = repo.guessTestPath(p);
-    const existingTest = guess.exists ? repo.readFileSafe(guess.path, 12000) : null;
+    let existingTest = guess.exists ? repo.readFileSafe(guess.path, 12000) : null;
+    if (!existingTest) {
+      // no test for this file yet → hand the LLM a sibling test to imitate
+      // (import aliases, setup files, naming conventions)
+      const ref = repo.findStyleReference(p);
+      if (ref) existingTest = `// STYLE REFERENCE — an existing test from this repo (${ref.path}).\n// Imitate its imports, aliases and conventions. Do not modify it.\n${ref.content}`;
+    }
     return {
       ok: true, path: p, source, sourceLines: source ? source.split('\n').length : 0,
       uncovered: coverage.uncoveredLines(p),
       rounds: state.files[p]?.rounds || 0,
       survived: state.files[p]?.lastSurvived || [],
+      ui: repo.detectUi(),
       testPath: guess.path, testExists: guess.exists, existingTest,
       runner: state.runner?.testRunner,
       constraints: rulesMod.testWritingConstraints(),

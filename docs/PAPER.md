@@ -403,7 +403,21 @@ residual scratch commentary and dead-weight tests — and is itself verified by 
 with automatic revert. Result: PRs contain tests with at most one intent comment each, and every
 test earns its place.
 
-### 3.6 Access model
+### 3.6 UI components are first-class
+
+"JavaScript repo" includes UI components, not just plain logic. `.jsx`/`.tsx` files are in
+scope like any other source, Stryker mutates them normally, and the pipeline adapts test
+generation to them: it detects the UI stack from `package.json` (react/vue/svelte/preact,
+`@testing-library/*`, `user-event`, `jest-dom`) and injects component-testing guidance into the
+prompts — render with the repo's testing library, assert on *visible* behavior via accessible
+queries (`getByRole`, `getByLabelText`), exercise props/variants/conditional branches and event
+callbacks, never snapshot or reach into internals. When a component has no test yet, the
+pipeline hands the LLM a **sibling test as a style reference**, so repo conventions (import
+aliases like `@/components/…`, setup files, naming) are followed from the first try. Validated
+end-to-end: moex-portal's `ChartCard.tsx` went 0 → 100 MAC with a real PR
+(accessible-query tests covering every prop branch).
+
+### 3.7 Access model
 
 Caddy terminates TLS and enforces basic-auth for both UIs. n8n's own login never appears: at
 boot the container creates the owner account and logs in once with
@@ -488,6 +502,7 @@ Failure modes met (and fixed) while evaluating against 13 real repos — check t
 | Missing peer deps after install (e.g. `@testing-library/dom`) | `--legacy-peer-deps` prunes auto-installed peers; the pipeline uses it only as a fallback. |
 | Tests need built artifacts (self-referencing imports) | Set `SETUP_SCRIPT=build` (any npm script) to run after install. |
 | LLM output empty / JSON parse failures with thinking on | Reasoning ate the completion budget — raise `LLM_THINKING_BUDGET`. |
+| Component test fails with `Failed to resolve import` | The repo imports via an alias (e.g. `@/components/…`). The pipeline shows the LLM a sibling test as style reference so aliases are used; if your repo has *no* component tests at all, add one seed test or state the import style in `RULES_WRITE_TEST`. |
 | Run marked `failed` on the dashboard | Any hard sidecar error aborts that n8n execution and marks the run; the event feed has the cause. Re-trigger — the ledger skips settled files. |
 
 ---

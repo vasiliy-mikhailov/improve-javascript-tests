@@ -10,7 +10,7 @@
         220,
         0
       ],
-      "id": "fbd99760-fc37-405a-9a27-93cea113102a",
+      "id": "b9d1e9de-1bcf-4ac7-9e46-2ab32883d51c",
       "name": "Start (manual)"
     },
     {
@@ -26,7 +26,7 @@
         440,
         0
       ],
-      "id": "ed4cc333-bbf9-418b-b2bd-678b4ea0b7f7",
+      "id": "cbb52978-5e6e-40a9-b905-3e20fc4976d8",
       "name": "Start (webhook)",
       "webhookId": "aa11bb22-ijst-4run-9000-improverun001"
     },
@@ -50,7 +50,7 @@
         660,
         0
       ],
-      "id": "1b4816ca-a2a0-4dc4-9cdc-776d973341bb",
+      "id": "eebcb9c8-9d75-4ed7-ba9c-1f7bd11f9dd5",
       "name": "Start Run"
     },
     {
@@ -73,7 +73,7 @@
         880,
         0
       ],
-      "id": "ef2e34c9-087e-4bf9-8a39-25b1eba80f22",
+      "id": "601228d4-7c66-441f-9b39-2ff82a834f8a",
       "name": "Clone Repo"
     },
     {
@@ -96,7 +96,7 @@
         1100,
         0
       ],
-      "id": "0afc3fd6-899d-4339-9227-e170ff345c7a",
+      "id": "92432d77-14f4-4b84-879a-b3635911968d",
       "name": "Rules: post-clone"
     },
     {
@@ -119,7 +119,7 @@
         1320,
         0
       ],
-      "id": "cc4fa633-e7e6-45ba-bced-1bec362b0504",
+      "id": "f6dfdbcf-031e-4876-aeaf-0e7e10f5a981",
       "name": "Install & Detect"
     },
     {
@@ -142,7 +142,7 @@
         1540,
         0
       ],
-      "id": "7308fb0f-d452-4c12-8b03-337b7d54506e",
+      "id": "da8d0100-59df-4499-bb85-e763fed163a9",
       "name": "Baseline Coverage"
     },
     {
@@ -165,7 +165,7 @@
         1760,
         0
       ],
-      "id": "e68ee8f4-10dd-42a3-b7fe-4e5e00f63261",
+      "id": "e3d56238-ad84-46a9-9edd-2df8e6d4c2e5",
       "name": "Rules: pre-pick"
     },
     {
@@ -188,7 +188,7 @@
         1980,
         0
       ],
-      "id": "eeea2490-a4e8-4312-a185-f1eea2792bb0",
+      "id": "932b0401-41da-4606-b354-42e51fc37b24",
       "name": "Rules: write-test"
     },
     {
@@ -199,7 +199,7 @@
         2200,
         0
       ],
-      "id": "365a7b7b-5207-4325-81c4-c1c700b9c6a2",
+      "id": "c6fc7d53-14a4-4c7d-a780-b20e2f55c8de",
       "name": "Next Iteration"
     },
     {
@@ -219,7 +219,7 @@
         2420,
         0
       ],
-      "id": "f440c3e4-f020-4e34-b08e-b6f2d0019691",
+      "id": "7f91456b-8b76-4c76-b8ce-bf9d5dedf257",
       "name": "Get Candidates"
     },
     {
@@ -240,7 +240,7 @@
         2640,
         0
       ],
-      "id": "29c9c3fe-5b6c-4407-88d3-1391fd59bbad",
+      "id": "297838e0-9d0a-4cc4-9fc1-8f870d3c31be",
       "name": "More Work?"
     },
     {
@@ -263,7 +263,7 @@
         2860,
         0
       ],
-      "id": "eb4ac9c7-2ff3-4ab4-9d14-44e36af9a01f",
+      "id": "3355f23f-67c3-4a55-b2b8-cec8274466e2",
       "name": "Rules: pick file"
     },
     {
@@ -284,7 +284,7 @@
         3080,
         0
       ],
-      "id": "7570b929-14ec-477b-81ce-7035adda6b28",
+      "id": "e01c8297-6e93-4a3f-99ec-6fda2786782a",
       "name": "File Picked?"
     },
     {
@@ -307,7 +307,7 @@
         3300,
         0
       ],
-      "id": "04a8293c-0ffa-45e3-94e9-50ab8244ea79",
+      "id": "c297c859-8f10-450b-afbe-ac4449a0fc2a",
       "name": "Start Iteration"
     },
     {
@@ -330,7 +330,7 @@
         3520,
         0
       ],
-      "id": "cd912ad6-5161-40e5-96b5-fa0865b2be9e",
+      "id": "701d4943-e26c-477a-82d7-17fe6cf8be4e",
       "name": "Baseline Mutation"
     },
     {
@@ -350,12 +350,12 @@
         220,
         200
       ],
-      "id": "6517de15-123e-474e-9ce1-f130ff6c9626",
+      "id": "ee4fae7b-a465-4ae4-975c-729bb82711cc",
       "name": "Coverage Gaps"
     },
     {
       "parameters": {
-        "jsCode": "\nconst gaps = $json; // response of Coverage Gaps\nconst file = $('Start Iteration').first().json.file;\nconst ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\nconst u = gaps.uncovered || {};\nconst fullyUncovered = u.lines === 'all';\nconst nothingToCover = !fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length);\nconst base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\nconst roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\nconst targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;\nif (nothingToCover) return [{ json: { skip: true, reason: 'file fully covered', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];\nconst constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\nconst system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).\\n- Import the module under test via its public path exactly as existing tests do.\\n- Never inspect function source code (no fn.toString() introspection).\\n- No snapshot tests. Prefer precise value assertions.\\n- The tests MUST pass against the CURRENT implementation of the source file.\\n- Output at most 2 test files.'\n  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\nconst prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n  + String(gaps.source || '').slice(0, 14000)\n  + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :\n      'lines ' + JSON.stringify((u.lines || []).slice(0, 120))\n      + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))\n      + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))\n  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n  + String(gaps.existingTest || '(none)').slice(0, 6000)\n  + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';\nreturn [{ json: { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];",
+        "jsCode": "\nconst gaps = $json; // response of Coverage Gaps\nconst file = $('Start Iteration').first().json.file;\nconst ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\nconst u = gaps.uncovered || {};\nconst fullyUncovered = u.lines === 'all';\nconst nothingToCover = !fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length);\nconst base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\nconst roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\nconst targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;\nif (nothingToCover) return [{ json: { skip: true, reason: 'file fully covered', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];\nconst constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\nconst isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+[\"'](react|vue|svelte|preact)[\"']/.test(String(gaps.source || '').slice(0, 2000)));\nconst uiGuidance = (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'\n  + '\\n- Render it with ' + (gaps.ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n  + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n  + (gaps.ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n  + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n  + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n  + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n  : '';\nconst system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).\\n- Import the module under test via its public path exactly as existing tests do.\\n- Never inspect function source code (no fn.toString() introspection).\\n- No snapshot tests. Prefer precise value assertions.\\n- The tests MUST pass against the CURRENT implementation of the source file.\\n- Output at most 2 test files.'\n  + uiGuidance\n  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\nconst prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n  + String(gaps.source || '').slice(0, 14000)\n  + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :\n      'lines ' + JSON.stringify((u.lines || []).slice(0, 120))\n      + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))\n      + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))\n  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n  + String(gaps.existingTest || '(none)').slice(0, 6000)\n  + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';\nreturn [{ json: { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -364,7 +364,7 @@
         440,
         200
       ],
-      "id": "ab76667a-b2c5-4c88-9c98-e5bed046a2e3",
+      "id": "54b12442-efc7-4c77-b21d-7d9c8c79e6c3",
       "name": "Cov: Build Prompt"
     },
     {
@@ -385,7 +385,7 @@
         660,
         200
       ],
-      "id": "8dc7ad25-6fea-4ded-98c4-97df99e026ba",
+      "id": "cdcb44c9-0507-40e1-a677-ecf4c2b9093d",
       "name": "Cov: Has Work?"
     },
     {
@@ -408,7 +408,7 @@
         880,
         200
       ],
-      "id": "7a497f3a-cb7b-4bfa-8f2a-a2c8d337c2b4",
+      "id": "b755ee6f-178c-4afb-aa9c-5e94876bee35",
       "name": "Cov: LLM Write Tests"
     },
     {
@@ -422,7 +422,7 @@
         1100,
         200
       ],
-      "id": "01321ad1-2b72-4091-955b-ec7990e67ad5",
+      "id": "a3420028-8ace-4153-ab0a-99f43465b44a",
       "name": "Cov: Parse Tests"
     },
     {
@@ -445,7 +445,7 @@
         1320,
         200
       ],
-      "id": "f4cad5ca-961f-4426-b737-efe6e59bf6df",
+      "id": "43959238-2653-4bf8-ac85-791f92d3b539",
       "name": "Cov: Write Tests"
     },
     {
@@ -468,7 +468,7 @@
         1540,
         200
       ],
-      "id": "dce8d723-b422-4807-a93f-4225177c1fed",
+      "id": "756fcc7e-aaf0-4e8e-8e29-a9852fd8f6c0",
       "name": "Cov: Run Tests"
     },
     {
@@ -489,7 +489,7 @@
         1760,
         200
       ],
-      "id": "82a0be93-3da6-42a0-872f-de191291229e",
+      "id": "8a815177-4e12-4719-9beb-d5e28d011de0",
       "name": "Cov: Green?"
     },
     {
@@ -510,7 +510,7 @@
         1980,
         200
       ],
-      "id": "93f15ac5-878c-475c-ae15-26468a53b9c1",
+      "id": "dc979e84-e035-4029-b0e9-7128e8fff8b2",
       "name": "Cov: Wrote Any?"
     },
     {
@@ -524,7 +524,7 @@
         2200,
         200
       ],
-      "id": "8c8d930f-fb0d-47fe-b090-83502ead293c",
+      "id": "a7272f9a-e84f-48ee-9401-ea965c79a838",
       "name": "Cov: Build Repair"
     },
     {
@@ -547,7 +547,7 @@
         2420,
         200
       ],
-      "id": "8668b876-953c-4d5f-ae0d-0401add27783",
+      "id": "afca4774-6a59-48fd-aeb1-3079c92035c3",
       "name": "Cov: LLM Repair"
     },
     {
@@ -561,7 +561,7 @@
         2640,
         200
       ],
-      "id": "245e9e89-e545-496c-ba81-35698ed947b4",
+      "id": "9a9ffefe-bff6-453c-bcf3-ff239516ab16",
       "name": "Cov: Parse Repair"
     },
     {
@@ -584,7 +584,7 @@
         2860,
         200
       ],
-      "id": "35c12ee6-0997-479c-9d76-0e5be6256115",
+      "id": "05c3bf44-e60e-4296-990a-2c240ce01a62",
       "name": "Cov: Write Repair"
     },
     {
@@ -607,7 +607,7 @@
         3080,
         200
       ],
-      "id": "0a67721c-dc2c-42cc-8a7b-91cfc25c0689",
+      "id": "0812dd36-5585-4568-8a9f-4d86e9746063",
       "name": "Cov: Re-run Tests"
     },
     {
@@ -628,7 +628,7 @@
         3300,
         200
       ],
-      "id": "06487d6d-bbd2-4ef9-82d7-9eadb1aed907",
+      "id": "c546fef6-8d9f-4496-bcfc-d7b9a0506475",
       "name": "Cov: Green After Repair?"
     },
     {
@@ -651,7 +651,7 @@
         3520,
         200
       ],
-      "id": "093752e2-5ee9-4cd4-a13f-cc9da2179c51",
+      "id": "46c72dda-6f5f-40a5-94ad-3ff162420f63",
       "name": "Cov: Delete Broken Tests"
     },
     {
@@ -662,12 +662,12 @@
         220,
         400
       ],
-      "id": "599f23a7-41f2-49f6-98b0-24fb4a546c03",
+      "id": "f2130e8b-1a19-4588-bfee-c9bb58b9ddf4",
       "name": "Cov: Done"
     },
     {
       "parameters": {
-        "jsCode": "\nconst gaps = $('Coverage Gaps').first().json;\nconst file = $('Start Iteration').first().json.file;\nconst cfg = $('Start Run').first().json.run.config;\nconst ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\nconst base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\nconst roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\nconst targetPath = base + '.mac-mut' + roundSuffix + '.test' + ext;\n// freshest survivors: sidecar tracks the last stryker run of this file (any round)\nconst allSurvived = (gaps.survived && gaps.survived.length) ? gaps.survived : ($('Baseline Mutation').first().json.survived || []);\nconst survived = allSurvived.slice(0, cfg.maxMutantsPerFile || 5);\nif (!survived.length) return [{ json: { skip: true, reason: 'no surviving mutants', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];\nconst constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\nconst mutantsTxt = survived.map((m, i) =>\n  '#' + (i + 1) + ' ' + m.mutator + ' at line ' + m.line + ' — mutated code would become: ' + JSON.stringify(m.replacement)\n  + (m.context ? '\\ncontext:\\n' + m.context : '')).join('\\n\\n');\nconst system = 'You are an expert test engineer writing ' + gaps.runner + ' tests that KILL surviving Stryker mutants of one source file. A mutant is killed when at least one test FAILS on the mutated code while PASSING on the original code. Write precise assertions that distinguish original from mutated behavior. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only. Preferred new file path: ' + targetPath + '. Rules:\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).\\n- Import the module under test via its public path exactly as existing tests do.\\n- Never inspect function source code (no fn.toString() introspection).\\n- No snapshot tests. Prefer precise value assertions.\\n- The tests MUST pass against the CURRENT implementation of the source file.\\n- Output at most 2 test files.'\n  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\nconst prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n  + String(gaps.source || '').slice(0, 12000)\n  + '\\n\\nSURVIVING MUTANTS TO KILL:\\n' + mutantsTxt\n  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n  + String(gaps.existingTest || '(none)').slice(0, 4000)\n  + '\\n\\nWrite tests that kill as many of these mutants as possible. JSON only.';\nreturn [{ json: { system, prompt, json: true, maxTokens: 7000, temperature: 0.3, stage: 'improving_mutation', stageDetail: 'writing mutant-killing tests', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];",
+        "jsCode": "\nconst gaps = $('Coverage Gaps').first().json;\nconst file = $('Start Iteration').first().json.file;\nconst cfg = $('Start Run').first().json.run.config;\nconst ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\nconst base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\nconst roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\nconst targetPath = base + '.mac-mut' + roundSuffix + '.test' + ext;\n// freshest survivors: sidecar tracks the last stryker run of this file (any round)\nconst allSurvived = (gaps.survived && gaps.survived.length) ? gaps.survived : ($('Baseline Mutation').first().json.survived || []);\nconst survived = allSurvived.slice(0, cfg.maxMutantsPerFile || 5);\nif (!survived.length) return [{ json: { skip: true, reason: 'no surviving mutants', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];\nconst constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\nconst isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+[\"'](react|vue|svelte|preact)[\"']/.test(String(gaps.source || '').slice(0, 2000)));\nconst uiGuidance = (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'\n  + '\\n- Render it with ' + (gaps.ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n  + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n  + (gaps.ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n  + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n  + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n  + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n  : '';\nconst mutantsTxt = survived.map((m, i) =>\n  '#' + (i + 1) + ' ' + m.mutator + ' at line ' + m.line + ' — mutated code would become: ' + JSON.stringify(m.replacement)\n  + (m.context ? '\\ncontext:\\n' + m.context : '')).join('\\n\\n');\nconst system = 'You are an expert test engineer writing ' + gaps.runner + ' tests that KILL surviving Stryker mutants of one source file. A mutant is killed when at least one test FAILS on the mutated code while PASSING on the original code. Write precise assertions that distinguish original from mutated behavior. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only. Preferred new file path: ' + targetPath + '. Rules:\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).\\n- Import the module under test via its public path exactly as existing tests do.\\n- Never inspect function source code (no fn.toString() introspection).\\n- No snapshot tests. Prefer precise value assertions.\\n- The tests MUST pass against the CURRENT implementation of the source file.\\n- Output at most 2 test files.'\n  + uiGuidance\n  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\nconst prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n  + String(gaps.source || '').slice(0, 12000)\n  + '\\n\\nSURVIVING MUTANTS TO KILL:\\n' + mutantsTxt\n  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n  + String(gaps.existingTest || '(none)').slice(0, 4000)\n  + '\\n\\nWrite tests that kill as many of these mutants as possible. JSON only.';\nreturn [{ json: { system, prompt, json: true, maxTokens: 7000, temperature: 0.3, stage: 'improving_mutation', stageDetail: 'writing mutant-killing tests', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -676,7 +676,7 @@
         440,
         400
       ],
-      "id": "902058ea-43bd-4acb-8ed7-684f59abd722",
+      "id": "34e8ec52-036a-4710-87d1-15ce748e543a",
       "name": "Mut: Build Prompt"
     },
     {
@@ -697,7 +697,7 @@
         660,
         400
       ],
-      "id": "b10db1ea-c9fc-48bf-a7e3-8ed59d5e2f51",
+      "id": "26114125-2bcd-419e-88c4-26365cd4e073",
       "name": "Mut: Has Work?"
     },
     {
@@ -720,7 +720,7 @@
         880,
         400
       ],
-      "id": "228d58e2-6f7b-47cd-ac39-a6e2ffcc09e7",
+      "id": "73486104-5c01-4137-9608-b9b5666b95da",
       "name": "Mut: LLM Write Tests"
     },
     {
@@ -734,7 +734,7 @@
         1100,
         400
       ],
-      "id": "0d74054c-23e7-4923-8129-1e3ceac500b1",
+      "id": "5eb408ad-666a-4abc-8d49-d6609d2db29a",
       "name": "Mut: Parse Tests"
     },
     {
@@ -757,7 +757,7 @@
         1320,
         400
       ],
-      "id": "44bf2e6e-b8b6-475c-81f8-2c418447d1b8",
+      "id": "68488e50-0cf1-45c3-98ed-8c9031537056",
       "name": "Mut: Write Tests"
     },
     {
@@ -780,7 +780,7 @@
         1540,
         400
       ],
-      "id": "033cc49c-1702-4b55-86be-bc5e32efa588",
+      "id": "7766002f-9291-4d11-afe4-5dd4203e2d49",
       "name": "Mut: Run Tests"
     },
     {
@@ -801,7 +801,7 @@
         1760,
         400
       ],
-      "id": "250af3ab-333c-4683-ac7b-a5429bddd911",
+      "id": "c225674e-0762-4903-b5fe-e88326b65e0b",
       "name": "Mut: Green?"
     },
     {
@@ -822,7 +822,7 @@
         1980,
         400
       ],
-      "id": "3144b9fb-e138-4d4b-8240-c8fa2528f2d8",
+      "id": "f171c8a9-3340-4830-8c95-b588cc427227",
       "name": "Mut: Wrote Any?"
     },
     {
@@ -836,7 +836,7 @@
         2200,
         400
       ],
-      "id": "416f4589-c9f2-4c4d-824e-20afd0d46eca",
+      "id": "55e6639e-4f10-420b-90d4-c91468a57ea9",
       "name": "Mut: Build Repair"
     },
     {
@@ -859,7 +859,7 @@
         2420,
         400
       ],
-      "id": "4e1db8d4-3d61-498e-a78e-eb8ba8317ccc",
+      "id": "c9538ef2-6d85-4a28-bdc4-655c3662bf04",
       "name": "Mut: LLM Repair"
     },
     {
@@ -873,7 +873,7 @@
         2640,
         400
       ],
-      "id": "384441ee-eec1-49dc-9875-a40cb2a5c298",
+      "id": "cf1ba6ae-413b-41ab-91f3-7bd3fe1111ea",
       "name": "Mut: Parse Repair"
     },
     {
@@ -896,7 +896,7 @@
         2860,
         400
       ],
-      "id": "42890265-e1da-40e4-8b4a-5a1a0811bd91",
+      "id": "6bb9b4b1-1b7d-49fc-88b8-326b00ed7ea1",
       "name": "Mut: Write Repair"
     },
     {
@@ -919,7 +919,7 @@
         3080,
         400
       ],
-      "id": "0bb10275-1941-4ef8-9713-d61c5c2806ee",
+      "id": "5198e928-865b-4028-9aa7-a690c99184bf",
       "name": "Mut: Re-run Tests"
     },
     {
@@ -940,7 +940,7 @@
         3300,
         400
       ],
-      "id": "fb93631e-0d7b-42bd-8bb3-5d4a3f2bdd9a",
+      "id": "2aca7ffd-9ea6-4e48-9279-ce0d13309c72",
       "name": "Mut: Green After Repair?"
     },
     {
@@ -963,7 +963,7 @@
         3520,
         400
       ],
-      "id": "db0a6ae6-d36a-4725-aff2-1377dfb478df",
+      "id": "60018aab-fb7d-4f60-996a-878e0233c285",
       "name": "Mut: Delete Broken Tests"
     },
     {
@@ -974,7 +974,7 @@
         220,
         600
       ],
-      "id": "48b33977-6ca9-40e6-b618-1c0a83f66121",
+      "id": "d322e79d-d2c7-40b9-87ba-e1582689e6f0",
       "name": "Mut: Done"
     },
     {
@@ -997,7 +997,7 @@
         440,
         600
       ],
-      "id": "220d1863-0703-4809-a071-3492ffd2a06f",
+      "id": "b9ea7dc2-4ebc-44a3-8666-92c36dd0d9c1",
       "name": "Verify"
     },
     {
@@ -1018,7 +1018,7 @@
         660,
         600
       ],
-      "id": "a2f25e2e-f121-4b85-9bd9-d97479a9d9ae",
+      "id": "36ce863f-d075-4658-af32-4d5ed2fed921",
       "name": "Another Round?"
     },
     {
@@ -1041,7 +1041,7 @@
         880,
         600
       ],
-      "id": "6f3a8a76-4a73-4a72-a831-2cb5d5ad85ad",
+      "id": "5baef819-d259-4e30-b20e-f9002d524b5b",
       "name": "Accept Round"
     },
     {
@@ -1064,7 +1064,7 @@
         1100,
         600
       ],
-      "id": "34bd8379-fe82-4a54-8eff-fb3f96abf432",
+      "id": "7042cdce-ee9e-4483-83b8-8d92cdaf8284",
       "name": "Drop Last Round"
     },
     {
@@ -1087,7 +1087,7 @@
         1320,
         600
       ],
-      "id": "b9536433-59b9-49d6-b054-d33bb3508d2b",
+      "id": "e2ea40a7-157a-4a0a-bb10-fa7109c90259",
       "name": "Cleanup Tests"
     },
     {
@@ -1110,7 +1110,7 @@
         1540,
         600
       ],
-      "id": "475c84f7-8269-4901-971f-67430b4baf65",
+      "id": "9581cd59-1fec-4c9e-9f8f-c832aef74ac4",
       "name": "Rules: check changes"
     },
     {
@@ -1131,7 +1131,7 @@
         1760,
         600
       ],
-      "id": "fc44ad06-ce45-47fc-b3e2-838160a72b0c",
+      "id": "c1d43ab8-1df7-46e9-ae3f-fbfcf704b8f7",
       "name": "Approved?"
     },
     {
@@ -1154,7 +1154,7 @@
         1980,
         600
       ],
-      "id": "29cae022-d51a-4e82-afd6-1cd889379066",
+      "id": "77e36d1c-715a-4a6b-be0a-2f16f9480d26",
       "name": "Rules: make PR"
     },
     {
@@ -1177,7 +1177,7 @@
         2200,
         600
       ],
-      "id": "2e1c4bd6-adf3-4d75-a3d6-02bf4ab84b70",
+      "id": "d05d35bf-f939-44ea-ac0e-c0c6062e8508",
       "name": "Create PR"
     },
     {
@@ -1200,7 +1200,7 @@
         2420,
         600
       ],
-      "id": "cd26509e-1485-4d7b-a375-9a28ec73a2b2",
+      "id": "81fe96f8-e613-4bf1-b387-5f3e87cc8e66",
       "name": "Discard Changes"
     },
     {
@@ -1211,7 +1211,7 @@
         2640,
         600
       ],
-      "id": "9fec182e-0ced-40a2-9278-6a362b1ac759",
+      "id": "af5218ae-3e9a-4691-8eaa-dfc46f2a396f",
       "name": "Iteration Done"
     },
     {
@@ -1234,7 +1234,7 @@
         2860,
         600
       ],
-      "id": "b182dd8d-3939-4a27-8ba6-fd3453f31d4c",
+      "id": "27eddb96-d3c3-48eb-9840-b6175dd4b264",
       "name": "Finish Run"
     },
     {
@@ -1245,7 +1245,7 @@
         3080,
         600
       ],
-      "id": "dd16d54e-06d0-4d1e-bf03-bd79cbd786b4",
+      "id": "24f73fa4-46b0-4ada-b68c-b8bef69197b2",
       "name": "End"
     }
   ],

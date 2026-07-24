@@ -62,6 +62,26 @@ function detectRunner() {
   return { pm, testRunner, hasStrykerConfig, testScript };
 }
 
+/** UI stack detection — components need different tests than pure logic. */
+function detectUi() {
+  const pkg = readPkg();
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const framework = deps.react ? 'react' : deps.vue ? 'vue' : deps.svelte ? 'svelte' : deps.preact ? 'preact' : null;
+  if (!framework) return null;
+  const testingLibrary = deps['@testing-library/react'] ? '@testing-library/react'
+    : deps['@testing-library/vue'] ? '@testing-library/vue'
+      : deps['@testing-library/svelte'] ? '@testing-library/svelte'
+        : deps['@testing-library/preact'] ? '@testing-library/preact'
+          : deps.enzyme ? 'enzyme' : null;
+  return {
+    framework,
+    testingLibrary,
+    userEvent: !!deps['@testing-library/user-event'],
+    jestDom: !!deps['@testing-library/jest-dom'],
+    domEnv: deps.jsdom || deps['jest-environment-jsdom'] || deps['happy-dom'] ? true : false,
+  };
+}
+
 async function install() {
   const dir = repoDir();
   const det = detectRunner();
@@ -224,6 +244,40 @@ function testDirCounts() {
   return counts;
 }
 
+/**
+ * When the target file has no test yet, find a sibling test to imitate —
+ * it shows the LLM the repo's import aliases, setup and naming conventions.
+ * Prefers tests of the same kind (component .tsx/.jsx vs plain .ts/.js).
+ */
+function findStyleReference(srcRel) {
+  const dir = repoDir();
+  const wantComponent = /\.[jt]sx$/.test(srcRel);
+  const matches = [];
+  const walk = (d, depth) => {
+    if (depth > 5 || matches.length > 200) return;
+    let entries;
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const ent of entries) {
+      if (ent.name === 'node_modules' || ent.name.startsWith('.') || ent.name === 'dist' || ent.name === 'coverage') continue;
+      const p = path.join(d, ent.name);
+      if (ent.isDirectory()) walk(p, depth + 1);
+      else if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(ent.name)) matches.push(p);
+    }
+  };
+  walk(dir, 0);
+  if (!matches.length) return null;
+  const sameKind = matches.filter((p) => /x$/.test(p) === wantComponent);
+  const pool = sameKind.length ? sameKind : matches;
+  // smallest file of the right kind → most digestible reference
+  let best = null, bestSize = Infinity;
+  for (const p of pool) {
+    try { const size = fs.statSync(p).size; if (size > 300 && size < bestSize) { best = p; bestSize = size; } } catch { }
+  }
+  if (!best) return null;
+  const rel = path.relative(dir, best).split(path.sep).join('/');
+  return { path: rel, content: fs.readFileSync(best, 'utf8').slice(0, 8000) };
+}
+
 /** Guess where a test for `srcRel` should live, following existing repo conventions. */
 function guessTestPath(srcRel) {
   const dir = repoDir();
@@ -265,6 +319,6 @@ function guessTestPath(srcRel) {
 }
 
 module.exports = {
-  repoDir, clone, install, detectRunner, listScopeFiles, createBranch, resetToBase, discardUncommitted,
+  repoDir, clone, install, detectRunner, detectUi, findStyleReference, listScopeFiles, createBranch, resetToBase, discardUncommitted,
   readFileSafe, writeTestFile, deleteTestFile, guessTestPath, readPkg,
 };

@@ -24,7 +24,7 @@
       "name": "moex-portal",
       "repoUrl": "https://github.com/vasiliy-mikhailov/moex-portal-improve-javascript-tests",
       "repoBranch": "next",
-      "scopeGlob": "lib/**/*.ts",
+      "scopeGlob": "lib/**/*.ts,components/ui/**/*.tsx",
       "scopeLimit": 1,
       "maxIterations": 2,
       "prMode": "github",

@@ -30,4 +30,10 @@
   Rounds are bounded by `MAX_ROUNDS_PER_FILE`. The file then gets one cumulative PR if it netted
   improvement.
 
+- 2026-07-24 (iteration 5): clarified that "javascript repo" includes **UI components**, not just
+  plain js/ts logic — the pipeline detects the UI stack (react/vue/svelte/preact +
+  @testing-library/*, user-event, jest-dom) and switches to component-testing guidance for
+  `.jsx`/`.tsx` files: render + assert on visible behavior via accessible queries, exercise
+  props/variants/handlers, no snapshots, no internals.
+
 See RESEARCH.md for the derived DoD and reward formula, eval/RESULTS.md for iteration history.
