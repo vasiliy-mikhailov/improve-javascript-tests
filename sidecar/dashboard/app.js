@@ -56,14 +56,23 @@ function render(m) {
   const tb = $('files').querySelector('tbody');
   const files = (m.files || []).filter((f) => f.status !== 'candidate' || f.coverage != null).slice(0, 200);
   $('files-count').textContent = `(${(m.files || []).length} in scope)`;
-  tb.innerHTML = files.map((f) => `<tr class="st-${esc(f.status)}">
+  tb.innerHTML = files.map((f) => {
+    // before = frozen at pick time (falls back to live measurement for candidates);
+    // after = frozen at verify/PR time; live values never overwrite these columns
+    const covB = f.coverageBefore ?? f.coverage;
+    const mutB = f.mutationBefore ?? (f.macBefore != null ? f.mutation : null);
+    const macB = f.macBefore ?? (f.mac != null && f.macAfter == null ? f.mac : null);
+    const hasAfter = f.macAfter != null;
+    return `<tr class="st-${esc(f.status)}">
     <td class="path">${esc(f.path)}</td>
-    <td>${fmt(f.coverage)}</td><td>${fmt(f.mutation)}</td>
-    <td>${fmt(f.macBefore, '')}</td>
-    <td>${f.macAfter != null ? `<b>${fmt(f.macAfter, '')}</b>` : '–'}</td>
+    <td>${fmt(covB)}</td><td>${fmt(mutB)}</td><td>${fmt(macB, '')}</td>
+    <td>${hasAfter ? `<b>${fmt(f.coverageAfter)}</b>` : '–'}</td>
+    <td>${hasAfter ? `<b>${fmt(f.mutationAfter)}</b>` : '–'}</td>
+    <td>${hasAfter ? `<b>${fmt(f.macAfter, '')}</b>` : '–'}</td>
     <td><span class="badge b-${esc(f.status)}">${esc(f.status)}</span></td>
     <td>${f.prUrl ? `<a href="${esc(f.prUrl)}" target="_blank">PR ↗</a>` : (f.prPatch ? 'patch' : '')}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 
   $('prs').innerHTML = (m.prs || []).map((p) => `<li>
     <b>${esc(p.title)}</b> — <code>${esc(p.branch)}</code>
