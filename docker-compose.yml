@@ -1,0 +1,20 @@
+services:
+  improve-javascript-tests:
+    build: .
+    image: improve-javascript-tests:latest
+    container_name: ijst-n8n
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ijst_data:/data
+    networks:
+      - proxy-net
+    # no host ports: Caddy (inference-caddy, same proxy-net) fronts everything at
+    # https://improve-javascript-tests.mikhailov.tech (n8n) and /dashboard (sidecar)
+
+volumes:
+  ijst_data:
+
+networks:
+  proxy-net:
+    external: true

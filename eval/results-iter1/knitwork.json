@@ -1,0 +1,267 @@
+{
+  "name": "knitwork",
+  "config": {
+    "repoUrl": "https://github.com/unjs/knitwork",
+    "repoBranch": "main",
+    "scopeGlob": "src/**/*.ts",
+    "scopeLimit": 1,
+    "maxIterations": 2,
+    "prMode": "local",
+    "rules": {
+      "post_clone": "",
+      "pre_pick": "",
+      "pick_file": "",
+      "write_test": "",
+      "check_changes": "",
+      "make_pr": ""
+    }
+  },
+  "finishedStatus": "done",
+  "stage": "done",
+  "durationSec": 70,
+  "baseline": {
+    "coveragePct": 100,
+    "mutationPct": 46.77,
+    "mac": 46.77
+  },
+  "result": {
+    "coveragePct": 100,
+    "mutationPct": 47.73,
+    "mac": 47.73
+  },
+  "targetedFiles": [
+    {
+      "path": "src/_utils.ts",
+      "status": "candidate",
+      "coverageBefore": 100,
+      "coverageAfter": 100,
+      "mutationBefore": 46.77,
+      "mutationAfter": 45.16,
+      "macBefore": 46.77,
+      "macAfter": 45.16,
+      "prUrl": null,
+      "prPatch": null
+    },
+    {
+      "path": "src/esm.ts",
+      "status": "candidate",
+      "coverageBefore": 100,
+      "coverageAfter": 100,
+      "mutationBefore": 54.55,
+      "mutationAfter": 47.73,
+      "macBefore": 54.55,
+      "macAfter": 47.73,
+      "prUrl": null,
+      "prPatch": null
+    }
+  ],
+  "prs": [],
+  "decisions": {
+    "post_clone": {
+      "constraints": [],
+      "notes": "no post-clone rules configured"
+    },
+    "pre_pick": {
+      "branchTemplate": "tests/improve-{file}",
+      "notes": "default branch naming"
+    },
+    "write_test": {
+      "constraints": []
+    },
+    "pick_file": {
+      "file": "src/esm.ts",
+      "reason": "lowest MAC (mechanical pick)"
+    },
+    "check_changes": {
+      "approved": false,
+      "reason": "MAC did not improve (54.55 → 47.73)",
+      "mechanical": {
+        "testsGreen": true,
+        "macImproved": false
+      }
+    }
+  },
+  "lastEvents": [
+    {
+      "seq": 852,
+      "ts": 1784878274,
+      "stage": "tests",
+      "msg": "full suite: RED (exit 1)"
+    },
+    {
+      "seq": 853,
+      "ts": 1784878274,
+      "stage": "improving_coverage",
+      "msg": "deleted generated tests that broke the suite: test/_utils.mac-mut.test.ts"
+    },
+    {
+      "seq": 854,
+      "ts": 1784878274,
+      "stage": "improving_mac",
+      "msg": "verifying MAC improvement for src/_utils.ts"
+    },
+    {
+      "seq": 855,
+      "ts": 1784878274,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 856,
+      "ts": 1784878275,
+      "stage": "coverage",
+      "msg": "total line coverage 100% (suite exit 0)"
+    },
+    {
+      "seq": 857,
+      "ts": 1784878275,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/_utils.ts"
+    },
+    {
+      "seq": 858,
+      "ts": 1784878279,
+      "stage": "stryker",
+      "msg": "src/_utils.ts: 62 mutants, 28 killed, 5 survived+nocov, score 45.16%"
+    },
+    {
+      "seq": 859,
+      "ts": 1784878279,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 860,
+      "ts": 1784878279,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":false,\"reason\":\"MAC did not improve (46.77 → 45.16)\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":false}}"
+    },
+    {
+      "seq": 861,
+      "ts": 1784878279,
+      "stage": "improving_mac",
+      "msg": "no improvement for src/_utils.ts — discarding changes"
+    },
+    {
+      "seq": 862,
+      "ts": 1784878279,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/_utils.ts: MAC did not improve (46.77 → 45.16)"
+    },
+    {
+      "seq": 863,
+      "ts": 1784878279,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 864,
+      "ts": 1784878279,
+      "stage": "picking_file",
+      "msg": "picking a file to mutate"
+    },
+    {
+      "seq": 865,
+      "ts": 1784878279,
+      "stage": "rules",
+      "msg": "applied pick_file rules: {\"file\":\"src/esm.ts\",\"reason\":\"lowest MAC (mechanical pick)\"}"
+    },
+    {
+      "seq": 866,
+      "ts": 1784878279,
+      "stage": "picking_file",
+      "msg": "iteration 2: picked src/esm.ts"
+    },
+    {
+      "seq": 867,
+      "ts": 1784878279,
+      "stage": "branching",
+      "msg": "working on branch tests/improve-src-esm"
+    },
+    {
+      "seq": 868,
+      "ts": 1784878279,
+      "stage": "improving_mutation",
+      "msg": "mutation testing src/esm.ts"
+    },
+    {
+      "seq": 869,
+      "ts": 1784878282,
+      "stage": "stryker",
+      "msg": "src/esm.ts: 44 mutants, 24 killed, 0 survived+nocov, score 54.55%"
+    },
+    {
+      "seq": 870,
+      "ts": 1784878282,
+      "stage": "improving_coverage",
+      "msg": "analysing coverage gaps in src/esm.ts"
+    },
+    {
+      "seq": 871,
+      "ts": 1784878282,
+      "stage": "improving_mac",
+      "msg": "verifying MAC improvement for src/esm.ts"
+    },
+    {
+      "seq": 872,
+      "ts": 1784878282,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 873,
+      "ts": 1784878283,
+      "stage": "coverage",
+      "msg": "total line coverage 100% (suite exit 0)"
+    },
+    {
+      "seq": 874,
+      "ts": 1784878283,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/esm.ts"
+    },
+    {
+      "seq": 875,
+      "ts": 1784878286,
+      "stage": "stryker",
+      "msg": "src/esm.ts: 44 mutants, 21 killed, 0 survived+nocov, score 47.73%"
+    },
+    {
+      "seq": 876,
+      "ts": 1784878286,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 877,
+      "ts": 1784878286,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":false,\"reason\":\"MAC did not improve (54.55 → 47.73)\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":false}}"
+    },
+    {
+      "seq": 878,
+      "ts": 1784878286,
+      "stage": "improving_mac",
+      "msg": "no improvement for src/esm.ts — discarding changes"
+    },
+    {
+      "seq": 879,
+      "ts": 1784878286,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/esm.ts: MAC did not improve (54.55 → 47.73)"
+    },
+    {
+      "seq": 880,
+      "ts": 1784878286,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 881,
+      "ts": 1784878286,
+      "stage": "done",
+      "msg": "run finished: done; 0 PR(s)"
+    }
+  ],
+  "ranAt": "2026-07-24T07:31:34.618Z"
+}

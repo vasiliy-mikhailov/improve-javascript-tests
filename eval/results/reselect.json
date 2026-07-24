@@ -1,0 +1,235 @@
+{
+  "name": "reselect",
+  "config": {
+    "repoUrl": "https://github.com/reduxjs/reselect",
+    "repoBranch": "master",
+    "scopeGlob": "src/**/*.ts",
+    "scopeLimit": 1,
+    "maxIterations": 2,
+    "prMode": "local",
+    "maxMutantsPerFile": 8,
+    "rules": {
+      "post_clone": "",
+      "pre_pick": "",
+      "pick_file": "",
+      "write_test": "",
+      "check_changes": "",
+      "make_pr": ""
+    }
+  },
+  "finishedStatus": "failed",
+  "stage": "failed",
+  "durationSec": 20,
+  "baseline": {
+    "coveragePct": 32.71,
+    "mutationPct": null,
+    "mac": null
+  },
+  "result": {
+    "coveragePct": 32.71,
+    "mutationPct": null,
+    "mac": null
+  },
+  "targetedFiles": [],
+  "prs": [],
+  "decisions": {
+    "post_clone": {
+      "constraints": [],
+      "notes": "no post-clone rules configured"
+    },
+    "pre_pick": {
+      "branchTemplate": "tests/improve-{file}",
+      "notes": "default branch naming"
+    },
+    "write_test": {
+      "constraints": []
+    },
+    "pick_file": {
+      "file": "src/autotrackMemoize/utils.ts",
+      "reason": "lowest MAC (mechanical pick)"
+    }
+  },
+  "lastEvents": [
+    {
+      "seq": 1855,
+      "ts": 1784883914,
+      "stage": "preparing_pr",
+      "msg": "composing PR per team rules"
+    },
+    {
+      "seq": 1856,
+      "ts": 1784883914,
+      "stage": "rules",
+      "msg": "applied make_pr rules: {\"title\":\"test: improve mutation-adjusted coverage of src/index.ts\",\"body\":\"## Test improvements for `src/index.ts`\\n\\n| metric | before | after |\\n|---|---|---|\\n| line coverage | 100% | 100% |\\n| mutation score | 85.46% | 89.87% |\\n| **MA"
+    },
+    {
+      "seq": 1857,
+      "ts": 1784883914,
+      "stage": "preparing_pr",
+      "msg": "preparing PR for src/index.ts"
+    },
+    {
+      "seq": 1858,
+      "ts": 1784883914,
+      "stage": "preparing_pr",
+      "msg": "PR prepared locally: /data/prs/tests-improve-src-index.patch"
+    },
+    {
+      "seq": 1859,
+      "ts": 1784883914,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1860,
+      "ts": 1784883914,
+      "stage": "done",
+      "msg": "run finished: done; 1 PR(s)"
+    },
+    {
+      "seq": 1861,
+      "ts": 1784883920,
+      "stage": "starting",
+      "msg": "run run-1784883920299 on https://github.com/reduxjs/reselect#master"
+    },
+    {
+      "seq": 1862,
+      "ts": 1784883920,
+      "stage": "cloning",
+      "msg": "https://github.com/reduxjs/reselect"
+    },
+    {
+      "seq": 1863,
+      "ts": 1784883920,
+      "stage": "cloning",
+      "msg": "repo exists, fetching latest"
+    },
+    {
+      "seq": 1864,
+      "ts": 1784883920,
+      "stage": "cloning",
+      "msg": "repo ready at 93bb49091fc5"
+    },
+    {
+      "seq": 1865,
+      "ts": 1784883920,
+      "stage": "applying_rules",
+      "msg": "post-clone rules"
+    },
+    {
+      "seq": 1866,
+      "ts": 1784883920,
+      "stage": "rules",
+      "msg": "applied post_clone rules: {\"constraints\":[],\"notes\":\"no post-clone rules configured\"}"
+    },
+    {
+      "seq": 1867,
+      "ts": 1784883920,
+      "stage": "installing",
+      "msg": "installing dependencies + tooling"
+    },
+    {
+      "seq": 1868,
+      "ts": 1784883921,
+      "stage": "installing",
+      "msg": "vitest 1.6.1 detected → stryker@8"
+    },
+    {
+      "seq": 1869,
+      "ts": 1784883921,
+      "stage": "installing",
+      "msg": "adding tooling via yarn: @vitest/coverage-v8@~1.6.0, @stryker-mutator/core@8, @stryker-mutator/vitest-runner@8"
+    },
+    {
+      "seq": 1870,
+      "ts": 1784883925,
+      "stage": "installing",
+      "msg": "deps ready (pm=yarn, runner=vitest, strykerConfig=false)"
+    },
+    {
+      "seq": 1871,
+      "ts": 1784883925,
+      "stage": "measuring_baseline",
+      "msg": "running test suite with coverage"
+    },
+    {
+      "seq": 1872,
+      "ts": 1784883929,
+      "stage": "coverage",
+      "msg": "total line coverage 32.71% (suite exit 0)"
+    },
+    {
+      "seq": 1873,
+      "ts": 1784883929,
+      "stage": "applying_rules",
+      "msg": "pre-pick rules"
+    },
+    {
+      "seq": 1874,
+      "ts": 1784883929,
+      "stage": "rules",
+      "msg": "applied pre_pick rules: {\"branchTemplate\":\"tests/improve-{file}\",\"notes\":\"default branch naming\"}"
+    },
+    {
+      "seq": 1875,
+      "ts": 1784883929,
+      "stage": "improving_coverage",
+      "msg": "assembling test-writing constraints"
+    },
+    {
+      "seq": 1876,
+      "ts": 1784883929,
+      "stage": "rules",
+      "msg": "applied write_test rules: {\"constraints\":[]}"
+    },
+    {
+      "seq": 1877,
+      "ts": 1784883929,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1878,
+      "ts": 1784883929,
+      "stage": "picking_file",
+      "msg": "picking a file to mutate"
+    },
+    {
+      "seq": 1879,
+      "ts": 1784883929,
+      "stage": "rules",
+      "msg": "applied pick_file rules: {\"file\":\"src/autotrackMemoize/utils.ts\",\"reason\":\"lowest MAC (mechanical pick)\"}"
+    },
+    {
+      "seq": 1880,
+      "ts": 1784883929,
+      "stage": "picking_file",
+      "msg": "iteration 1: picked src/autotrackMemoize/utils.ts"
+    },
+    {
+      "seq": 1881,
+      "ts": 1784883929,
+      "stage": "branching",
+      "msg": "working on branch tests/improve-src-autotrackmemoize-utils"
+    },
+    {
+      "seq": 1882,
+      "ts": 1784883929,
+      "stage": "improving_mutation",
+      "msg": "mutation testing src/autotrackMemoize/utils.ts"
+    },
+    {
+      "seq": 1883,
+      "ts": 1784883932,
+      "stage": "error",
+      "msg": "POST /api/stryker/run: stryker produced no report (exit 1): tant(s)\n\u001b[32m09:05:30 (54059) INFO ConcurrencyTokenProvider\u001b[39m Creating 2 test runner process(es).\n\u001b[32m09:05:31 (54059) INFO BroadcastReporter\u001b[39m Detected that current console does not support the \"progress\" reporter, downgrading to \"progress-append-only\" reporter\n\u001b[32m09:05:31 (54059) INFO DryRunExecutor\u001b[39m Starting initial test run (vitest test runner with \"perTest\" coverage analysis). This may take a while.\n\u001b[91m09:05:31 (5405"
+    },
+    {
+      "seq": 1884,
+      "ts": 1784883932,
+      "stage": "failed",
+      "msg": "stryker produced no report (exit 1): tant(s)\n\u001b[32m09:05:30 (54059) INFO ConcurrencyTokenProvider\u001b[39m Creating 2 test runner process(es).\n\u001b[32m09:05:31 (54059) INFO BroadcastReporter\u001b[39m Detected tha"
+    }
+  ],
+  "ranAt": "2026-07-24T09:05:40.314Z"
+}

@@ -1,0 +1,256 @@
+{
+  "name": "defu",
+  "config": {
+    "repoUrl": "https://github.com/unjs/defu",
+    "repoBranch": "main",
+    "scopeGlob": "src/**/*.ts",
+    "scopeLimit": 1,
+    "maxIterations": 2,
+    "prMode": "local",
+    "maxMutantsPerFile": 8,
+    "rules": {
+      "post_clone": "",
+      "pre_pick": "",
+      "pick_file": "",
+      "write_test": "",
+      "check_changes": "",
+      "make_pr": ""
+    }
+  },
+  "finishedStatus": "done",
+  "stage": "done",
+  "durationSec": 170,
+  "baseline": {
+    "coveragePct": 100,
+    "mutationPct": 0,
+    "mac": 0
+  },
+  "result": {
+    "coveragePct": 100,
+    "mutationPct": 0,
+    "mac": 0
+  },
+  "targetedFiles": [
+    {
+      "path": "src/types.ts",
+      "status": "no_improvement",
+      "coverageBefore": 0,
+      "coverageAfter": 0,
+      "mutationBefore": 0,
+      "mutationAfter": 0,
+      "macBefore": 0,
+      "macAfter": 0,
+      "prUrl": null,
+      "prPatch": null
+    }
+  ],
+  "prs": [],
+  "decisions": {
+    "post_clone": {
+      "constraints": [],
+      "notes": "no post-clone rules configured"
+    },
+    "pre_pick": {
+      "branchTemplate": "tests/improve-{file}",
+      "notes": "default branch naming"
+    },
+    "write_test": {
+      "constraints": []
+    },
+    "pick_file": {
+      "file": "src/types.ts",
+      "reason": "lowest MAC (mechanical pick)"
+    },
+    "check_changes": {
+      "approved": false,
+      "reason": "MAC did not improve (0 → 0)",
+      "mechanical": {
+        "testsGreen": true,
+        "macImproved": false
+      }
+    }
+  },
+  "lastEvents": [
+    {
+      "seq": 1334,
+      "ts": 1784881842,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/types.ts"
+    },
+    {
+      "seq": 1335,
+      "ts": 1784881844,
+      "stage": "stryker",
+      "msg": "src/types.ts: no tests executed — mutation score 0 (nothing kills mutants yet)"
+    },
+    {
+      "seq": 1336,
+      "ts": 1784881844,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 1337,
+      "ts": 1784881844,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":false,\"reason\":\"MAC did not improve (0 → 0)\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":false}}"
+    },
+    {
+      "seq": 1338,
+      "ts": 1784881844,
+      "stage": "improving_mac",
+      "msg": "no improvement for src/types.ts — discarding changes"
+    },
+    {
+      "seq": 1339,
+      "ts": 1784881844,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/types.ts: MAC did not improve (0 → 0)"
+    },
+    {
+      "seq": 1340,
+      "ts": 1784881844,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1341,
+      "ts": 1784881844,
+      "stage": "picking_file",
+      "msg": "picking a file to mutate"
+    },
+    {
+      "seq": 1342,
+      "ts": 1784881844,
+      "stage": "rules",
+      "msg": "applied pick_file rules: {\"file\":\"src/types.ts\",\"reason\":\"lowest MAC (mechanical pick)\"}"
+    },
+    {
+      "seq": 1343,
+      "ts": 1784881844,
+      "stage": "picking_file",
+      "msg": "iteration 2: picked src/types.ts"
+    },
+    {
+      "seq": 1344,
+      "ts": 1784881844,
+      "stage": "branching",
+      "msg": "working on branch tests/improve-src-types"
+    },
+    {
+      "seq": 1345,
+      "ts": 1784881844,
+      "stage": "improving_mutation",
+      "msg": "mutation testing src/types.ts"
+    },
+    {
+      "seq": 1346,
+      "ts": 1784881845,
+      "stage": "stryker",
+      "msg": "src/types.ts: no tests executed — mutation score 0 (nothing kills mutants yet)"
+    },
+    {
+      "seq": 1347,
+      "ts": 1784881845,
+      "stage": "improving_coverage",
+      "msg": "analysing coverage gaps in src/types.ts"
+    },
+    {
+      "seq": 1348,
+      "ts": 1784881845,
+      "stage": "improving_coverage",
+      "msg": "writing tests for uncovered code"
+    },
+    {
+      "seq": 1349,
+      "ts": 1784881911,
+      "stage": "improving_coverage",
+      "msg": "writing generated tests"
+    },
+    {
+      "seq": 1350,
+      "ts": 1784881911,
+      "stage": "improving_coverage",
+      "msg": "wrote test/types.mac-cov.test.ts (9978 bytes)"
+    },
+    {
+      "seq": 1351,
+      "ts": 1784881911,
+      "stage": "improving_coverage",
+      "msg": "running tests (full suite)"
+    },
+    {
+      "seq": 1352,
+      "ts": 1784881912,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 1353,
+      "ts": 1784881912,
+      "stage": "improving_mac",
+      "msg": "verifying MAC improvement for src/types.ts"
+    },
+    {
+      "seq": 1354,
+      "ts": 1784881912,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 1355,
+      "ts": 1784881913,
+      "stage": "coverage",
+      "msg": "total line coverage 100% (suite exit 0)"
+    },
+    {
+      "seq": 1356,
+      "ts": 1784881913,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/types.ts"
+    },
+    {
+      "seq": 1357,
+      "ts": 1784881914,
+      "stage": "stryker",
+      "msg": "src/types.ts: no tests executed — mutation score 0 (nothing kills mutants yet)"
+    },
+    {
+      "seq": 1358,
+      "ts": 1784881914,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 1359,
+      "ts": 1784881914,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":false,\"reason\":\"MAC did not improve (0 → 0)\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":false}}"
+    },
+    {
+      "seq": 1360,
+      "ts": 1784881914,
+      "stage": "improving_mac",
+      "msg": "no improvement for src/types.ts — discarding changes"
+    },
+    {
+      "seq": 1361,
+      "ts": 1784881914,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/types.ts: MAC did not improve (0 → 0)"
+    },
+    {
+      "seq": 1362,
+      "ts": 1784881914,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1363,
+      "ts": 1784881914,
+      "stage": "done",
+      "msg": "run finished: done; 0 PR(s)"
+    }
+  ],
+  "ranAt": "2026-07-24T08:31:57.445Z"
+}

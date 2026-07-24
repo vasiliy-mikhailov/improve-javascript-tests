@@ -1,0 +1,295 @@
+{
+  "name": "pathe",
+  "config": {
+    "repoUrl": "https://github.com/unjs/pathe",
+    "repoBranch": "main",
+    "scopeGlob": "src/**/*.ts",
+    "scopeLimit": 1,
+    "maxIterations": 2,
+    "prMode": "local"
+  },
+  "finishedStatus": "done",
+  "stage": "done",
+  "durationSec": 340,
+  "baseline": {
+    "coveragePct": 98.24,
+    "mutationPct": 78.65,
+    "mac": 77.27
+  },
+  "result": {
+    "coveragePct": 98.24,
+    "mutationPct": 86.84,
+    "mac": 85.31
+  },
+  "targetedFiles": [
+    {
+      "path": "src/_internal.ts",
+      "status": "improved",
+      "coverageBefore": 100,
+      "coverageAfter": 100,
+      "mutationBefore": 78.95,
+      "mutationAfter": 86.84,
+      "macBefore": 78.95,
+      "macAfter": 86.84,
+      "prUrl": null,
+      "prPatch": "/data/prs/tests-improve-src-internal.patch"
+    },
+    {
+      "path": "src/utils.ts",
+      "status": "candidate",
+      "coverageBefore": 100,
+      "coverageAfter": 100,
+      "mutationBefore": 78.65,
+      "mutationAfter": 78.65,
+      "macBefore": 78.65,
+      "macAfter": 78.65,
+      "prUrl": null,
+      "prPatch": null
+    }
+  ],
+  "prs": [
+    {
+      "file": "src/_internal.ts",
+      "branch": "tests/improve-src-internal",
+      "title": "test: improve mutation coverage for src/_internal",
+      "body": "## Summary\n\nThis PR improves the automated test suite for `src/_internal.ts` by adding targeted mutation tests. This increases the confidence in the code's correctness by ensuring that more logical branches are covered by tests.\n\n## Changes\n\n- Added new mutation test cases in `test/_internal.mac-mut.test.ts`.\n- Updated `.ijst-stryker.config.json` to ensure proper configuration for the new tests.\n- Updated test reports.\n\n## Metrics\n\n| Metric | Before | After | Change |\n| :--- | :--- | :--- | :--- |\n| Coverage | 100% | 100% | 0% |\n| Mutation Score | 78.95% | 86.84% | +7.89% |\n| MAC | 78.95 | 86.84 | +7.89 |\n\n## Checklist\n\n- [x] Tests added/updated\n- [x] No breaking changes",
+      "labels": [
+        "test",
+        "improvement"
+      ],
+      "mode": "local",
+      "createdAt": 1784876847424,
+      "url": null,
+      "patchPath": "/data/prs/tests-improve-src-internal.patch"
+    }
+  ],
+  "decisions": {
+    "post_clone": {
+      "constraints": [
+        "read AGENTS.md for post-clone behavior rules",
+        "ensure path normalization uses forward slashes",
+        "maintain POSIX-consistent behavior across platforms",
+        "use ESM or TypeScript for implementation",
+        "avoid Node.js dependencies",
+        "provide identical exports to Node.js path module",
+        "handle both slash and backslash inputs correctly",
+        "exclude delimiter constant from POSIX normalization",
+        "import extra utilities from pathe/utils subpath",
+        "follow MIT license requirements"
+      ],
+      "notes": "Pipeline must enforce POSIX path normalization and ESM/TS standards while avoiding Node.js dependencies."
+    },
+    "pre_pick": {
+      "branchTemplate": "tests/improve-{file}",
+      "notes": "Create separate branch per file for test improvement"
+    },
+    "write_test": {
+      "constraints": [
+        "don't use introspection; follow the existing test style"
+      ]
+    },
+    "pick_file": {
+      "file": "src/_internal.ts",
+      "reason": "Pure logic module with 100% coverage but unmeasured mutation score, making it a high-priority candidate for assertion strengthening."
+    },
+    "check_changes": {
+      "approved": true,
+      "reason": "MAC improved and suite is green, satisfying the team rule.",
+      "mechanical": {
+        "testsGreen": true,
+        "macImproved": true
+      }
+    },
+    "make_pr": {
+      "title": "test: improve mutation coverage for src/_internal",
+      "body": "## Summary\n\nThis PR improves the automated test suite for `src/_internal.ts` by adding targeted mutation tests. This increases the confidence in the code's correctness by ensuring that more logical branches are covered by tests.\n\n## Changes\n\n- Added new mutation test cases in `test/_internal.mac-mut.test.ts`.\n- Updated `.ijst-stryker.config.json` to ensure proper configuration for the new tests.\n- Updated test reports.\n\n## Metrics\n\n| Metric | Before | After | Change |\n| :--- | :--- | :--- | :--- |\n| Coverage | 100% | 100% | 0% |\n| Mutation Score | 78.95% | 86.84% | +7.89% |\n| MAC | 78.95 | 86.84 | +7.89 |\n\n## Checklist\n\n- [x] Tests added/updated\n- [x] No breaking changes",
+      "labels": [
+        "test",
+        "improvement"
+      ]
+    }
+  },
+  "lastEvents": [
+    {
+      "seq": 348,
+      "ts": 1784876722,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/utils.ts: MAC did not improve (78.65 → 78.65)"
+    },
+    {
+      "seq": 349,
+      "ts": 1784876722,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 350,
+      "ts": 1784876722,
+      "stage": "picking_file",
+      "msg": "picking a file to mutate"
+    },
+    {
+      "seq": 351,
+      "ts": 1784876724,
+      "stage": "rules",
+      "msg": "applied pick_file rules: {\"file\":\"src/_internal.ts\",\"reason\":\"Pure logic module with 100% coverage but unmeasured mutation score, making it a high-priority candidate for assertion strengthening.\"}"
+    },
+    {
+      "seq": 352,
+      "ts": 1784876724,
+      "stage": "picking_file",
+      "msg": "iteration 2: picked src/_internal.ts"
+    },
+    {
+      "seq": 353,
+      "ts": 1784876724,
+      "stage": "branching",
+      "msg": "working on branch tests/improve-src-internal"
+    },
+    {
+      "seq": 354,
+      "ts": 1784876724,
+      "stage": "improving_mutation",
+      "msg": "mutation testing src/_internal.ts"
+    },
+    {
+      "seq": 355,
+      "ts": 1784876741,
+      "stage": "stryker",
+      "msg": "src/_internal.ts: 38 mutants, 30 killed, 8 survived+nocov, score 78.95%"
+    },
+    {
+      "seq": 356,
+      "ts": 1784876741,
+      "stage": "improving_coverage",
+      "msg": "analysing coverage gaps in src/_internal.ts"
+    },
+    {
+      "seq": 357,
+      "ts": 1784876741,
+      "stage": "improving_mutation",
+      "msg": "writing mutant-killing tests"
+    },
+    {
+      "seq": 358,
+      "ts": 1784876773,
+      "stage": "improving_mutation",
+      "msg": "writing generated tests"
+    },
+    {
+      "seq": 359,
+      "ts": 1784876773,
+      "stage": "improving_mutation",
+      "msg": "wrote test/_internal.mac-mut.test.ts (4419 bytes)"
+    },
+    {
+      "seq": 360,
+      "ts": 1784876773,
+      "stage": "improving_mutation",
+      "msg": "running tests (full suite)"
+    },
+    {
+      "seq": 361,
+      "ts": 1784876775,
+      "stage": "tests",
+      "msg": "full suite: RED (exit 1)"
+    },
+    {
+      "seq": 362,
+      "ts": 1784876775,
+      "stage": "improving_mutation",
+      "msg": "repairing failing generated tests"
+    },
+    {
+      "seq": 363,
+      "ts": 1784876813,
+      "stage": "improving_coverage",
+      "msg": "wrote test/_internal.mac-mut.test.ts (5152 bytes)"
+    },
+    {
+      "seq": 364,
+      "ts": 1784876815,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 365,
+      "ts": 1784876815,
+      "stage": "improving_mac",
+      "msg": "verifying MAC improvement for src/_internal.ts"
+    },
+    {
+      "seq": 366,
+      "ts": 1784876818,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 367,
+      "ts": 1784876821,
+      "stage": "coverage",
+      "msg": "total line coverage 98.24% (suite exit 0)"
+    },
+    {
+      "seq": 368,
+      "ts": 1784876821,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/_internal.ts"
+    },
+    {
+      "seq": 369,
+      "ts": 1784876840,
+      "stage": "stryker",
+      "msg": "src/_internal.ts: 38 mutants, 33 killed, 5 survived+nocov, score 86.84%"
+    },
+    {
+      "seq": 370,
+      "ts": 1784876840,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 371,
+      "ts": 1784876841,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":true,\"reason\":\"MAC improved and suite is green, satisfying the team rule.\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":true}}"
+    },
+    {
+      "seq": 372,
+      "ts": 1784876841,
+      "stage": "preparing_pr",
+      "msg": "composing PR per team rules"
+    },
+    {
+      "seq": 373,
+      "ts": 1784876847,
+      "stage": "rules",
+      "msg": "applied make_pr rules: {\"title\":\"test: improve mutation coverage for src/_internal\",\"body\":\"## Summary\\n\\nThis PR improves the automated test suite for `src/_internal.ts` by adding targeted mutation tests. This increases the confidence in the code's correctness b"
+    },
+    {
+      "seq": 374,
+      "ts": 1784876847,
+      "stage": "preparing_pr",
+      "msg": "preparing PR for src/_internal.ts"
+    },
+    {
+      "seq": 375,
+      "ts": 1784876847,
+      "stage": "preparing_pr",
+      "msg": "PR prepared locally: /data/prs/tests-improve-src-internal.patch"
+    },
+    {
+      "seq": 376,
+      "ts": 1784876847,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 377,
+      "ts": 1784876847,
+      "stage": "done",
+      "msg": "run finished: done; 1 PR(s)"
+    }
+  ],
+  "ranAt": "2026-07-24T07:07:31.970Z"
+}

@@ -1,0 +1,267 @@
+{
+  "name": "immer",
+  "config": {
+    "repoUrl": "https://github.com/immerjs/immer",
+    "repoBranch": "main",
+    "scopeGlob": "src/utils/**/*.ts",
+    "scopeLimit": 1,
+    "maxIterations": 2,
+    "prMode": "local",
+    "rules": {
+      "post_clone": "",
+      "pre_pick": "",
+      "pick_file": "",
+      "write_test": "",
+      "check_changes": "",
+      "make_pr": ""
+    }
+  },
+  "finishedStatus": "done",
+  "stage": "done",
+  "durationSec": 380,
+  "baseline": {
+    "coveragePct": 38.25,
+    "mutationPct": 87.5,
+    "mac": 33.47
+  },
+  "result": {
+    "coveragePct": 38.25,
+    "mutationPct": 80,
+    "mac": 30.6
+  },
+  "targetedFiles": [
+    {
+      "path": "src/utils/errors.ts",
+      "status": "candidate",
+      "coverageBefore": 97.72,
+      "coverageAfter": 97.72,
+      "mutationBefore": 80,
+      "mutationAfter": 80,
+      "macBefore": 78.18,
+      "macAfter": 78.18,
+      "prUrl": null,
+      "prPatch": null
+    },
+    {
+      "path": "src/utils/plugins.ts",
+      "status": "candidate",
+      "coverageBefore": 96.15,
+      "coverageAfter": 96.15,
+      "mutationBefore": 87.5,
+      "mutationAfter": 87.5,
+      "macBefore": 84.13,
+      "macAfter": 84.13,
+      "prUrl": null,
+      "prPatch": null
+    }
+  ],
+  "prs": [],
+  "decisions": {
+    "post_clone": {
+      "constraints": [],
+      "notes": "no post-clone rules configured"
+    },
+    "pre_pick": {
+      "branchTemplate": "tests/improve-{file}",
+      "notes": "default branch naming"
+    },
+    "write_test": {
+      "constraints": []
+    },
+    "pick_file": {
+      "file": "src/utils/errors.ts",
+      "reason": "lowest MAC (mechanical pick)"
+    },
+    "check_changes": {
+      "approved": false,
+      "reason": "MAC did not improve (78.18 → 78.18)",
+      "mechanical": {
+        "testsGreen": true,
+        "macImproved": false
+      }
+    }
+  },
+  "lastEvents": [
+    {
+      "seq": 1013,
+      "ts": 1784879127,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/utils/plugins.ts: MAC did not improve (84.13 → 84.13)"
+    },
+    {
+      "seq": 1014,
+      "ts": 1784879127,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1015,
+      "ts": 1784879127,
+      "stage": "picking_file",
+      "msg": "picking a file to mutate"
+    },
+    {
+      "seq": 1016,
+      "ts": 1784879127,
+      "stage": "rules",
+      "msg": "applied pick_file rules: {\"file\":\"src/utils/errors.ts\",\"reason\":\"lowest MAC (mechanical pick)\"}"
+    },
+    {
+      "seq": 1017,
+      "ts": 1784879127,
+      "stage": "picking_file",
+      "msg": "iteration 2: picked src/utils/errors.ts"
+    },
+    {
+      "seq": 1018,
+      "ts": 1784879127,
+      "stage": "branching",
+      "msg": "working on branch tests/improve-src-utils-errors"
+    },
+    {
+      "seq": 1019,
+      "ts": 1784879127,
+      "stage": "improving_mutation",
+      "msg": "mutation testing src/utils/errors.ts"
+    },
+    {
+      "seq": 1020,
+      "ts": 1784879145,
+      "stage": "stryker",
+      "msg": "src/utils/errors.ts: 35 mutants, 28 killed, 7 survived+nocov, score 80%"
+    },
+    {
+      "seq": 1021,
+      "ts": 1784879145,
+      "stage": "improving_coverage",
+      "msg": "analysing coverage gaps in src/utils/errors.ts"
+    },
+    {
+      "seq": 1022,
+      "ts": 1784879145,
+      "stage": "improving_coverage",
+      "msg": "writing tests for uncovered code"
+    },
+    {
+      "seq": 1023,
+      "ts": 1784879171,
+      "stage": "improving_coverage",
+      "msg": "writing generated tests"
+    },
+    {
+      "seq": 1024,
+      "ts": 1784879171,
+      "stage": "improving_coverage",
+      "msg": "wrote src/utils/errors.mac-cov.test.ts (3413 bytes)"
+    },
+    {
+      "seq": 1025,
+      "ts": 1784879171,
+      "stage": "improving_coverage",
+      "msg": "running tests (full suite)"
+    },
+    {
+      "seq": 1026,
+      "ts": 1784879173,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 1027,
+      "ts": 1784879173,
+      "stage": "improving_mutation",
+      "msg": "writing mutant-killing tests"
+    },
+    {
+      "seq": 1028,
+      "ts": 1784879288,
+      "stage": "improving_mutation",
+      "msg": "writing generated tests"
+    },
+    {
+      "seq": 1029,
+      "ts": 1784879288,
+      "stage": "improving_mutation",
+      "msg": "wrote src/utils/errors.mac-mut.test.ts (19043 bytes)"
+    },
+    {
+      "seq": 1030,
+      "ts": 1784879288,
+      "stage": "improving_mutation",
+      "msg": "running tests (full suite)"
+    },
+    {
+      "seq": 1031,
+      "ts": 1784879290,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 1032,
+      "ts": 1784879290,
+      "stage": "improving_mac",
+      "msg": "verifying MAC improvement for src/utils/errors.ts"
+    },
+    {
+      "seq": 1033,
+      "ts": 1784879291,
+      "stage": "tests",
+      "msg": "full suite: green"
+    },
+    {
+      "seq": 1034,
+      "ts": 1784879293,
+      "stage": "coverage",
+      "msg": "total line coverage 38.25% (suite exit 0)"
+    },
+    {
+      "seq": 1035,
+      "ts": 1784879293,
+      "stage": "improving_mac",
+      "msg": "re-measuring mutation score for src/utils/errors.ts"
+    },
+    {
+      "seq": 1036,
+      "ts": 1784879311,
+      "stage": "stryker",
+      "msg": "src/utils/errors.ts: 35 mutants, 28 killed, 7 survived+nocov, score 80%"
+    },
+    {
+      "seq": 1037,
+      "ts": 1784879311,
+      "stage": "improving_mac",
+      "msg": "checking whether changes are good"
+    },
+    {
+      "seq": 1038,
+      "ts": 1784879311,
+      "stage": "rules",
+      "msg": "applied check_changes rules: {\"approved\":false,\"reason\":\"MAC did not improve (78.18 → 78.18)\",\"mechanical\":{\"testsGreen\":true,\"macImproved\":false}}"
+    },
+    {
+      "seq": 1039,
+      "ts": 1784879311,
+      "stage": "improving_mac",
+      "msg": "no improvement for src/utils/errors.ts — discarding changes"
+    },
+    {
+      "seq": 1040,
+      "ts": 1784879311,
+      "stage": "improving_mac",
+      "msg": "discarded changes for src/utils/errors.ts: MAC did not improve (78.18 → 78.18)"
+    },
+    {
+      "seq": 1041,
+      "ts": 1784879311,
+      "stage": "picking_file",
+      "msg": "evaluating candidate files"
+    },
+    {
+      "seq": 1042,
+      "ts": 1784879311,
+      "stage": "done",
+      "msg": "run finished: done; 0 PR(s)"
+    }
+  ],
+  "ranAt": "2026-07-24T07:48:35.806Z"
+}

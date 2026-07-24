@@ -1,0 +1,17 @@
+# Ralph-loop iteration results
+
+reward = DoD_score × implementation_performance (see RESEARCH.md)
+
+| iter | date | DoD_score | impl_performance | reward | notes |
+|------|------|-----------|------------------|--------|-------|
+
+(appended by each iteration)
+| 1 | 2026-07-24 | 1.00 | 0.504 | **0.504** | First full pass. 13-repo eval set (synth + 12 real: defu destr immer knitwork memoize-one moex-portal ms ohash pathe reselect scule ts-debounce ufo; mitt/match-sorter excluded — mocha/kcd-scripts outside vitest+jest scope). 10 repos improved with PRs incl. real GitHub PR moex-portal#1. Fixes this iteration: pnpm-aware tooling install, stryker-version matching (vitest 1-2 → stryker 8), vitest-4 reporter, related-tests mode (immune to unrelated broken suite parts), test-placement mirroring of dominant convention, commit filter (tests only), no-change improvement guard, fail-fast run marking, SETUP_SCRIPT for build-before-test repos. Weak spots: improvement depth on real repos (avg gap-closed ~0.16; capped by maxMutantsPerFile=5, 2 test files/phase, 2 iterations), immer/knitwork 0-improvement (placement fix landed after their run), reselect suite incompatible with stryker-8 whole-suite dry-run. |
+| 2 | 2026-07-24 | 1.00 | 0.499 | **0.499** | Full re-sweep with survivor prioritization (covered-surviving mutants first), maxMutantsPerFile 5→8, test-placement mirroring active from the start. Net flat vs iter 1 — LLM stochasticity dominates per-repo scores (destr 0.44→0.68, ufo 0.41→0.60, ms 0.45→0.58, ohash 0.48→0.55; defu/pathe/scule regressed to no-improvement rounds). Plateau per RESEARCH.md §5 → loop stopped. Steady-state capability: ~10/13 repos produce a PR in a given run; synth ~0.97 every round; every DoD item holds at 1.0. |
+
+**Conclusion:** reward converged at ≈ 0.50 (DoD 1.00 × impl_perf ≈ 0.50). Remaining head-room is per-file
+improvement depth on real repos (more iterations/mutants per file = linearly more wall-clock + tokens per run)
+and variance from single-shot LLM test generation; both are run-policy knobs (`MAX_ITERATIONS`,
+`MAX_MUTANTS_PER_FILE`, `SCOPE_LIMIT`), not architectural limits.
+| 3 | 2026-07-24 | 1.00 (12 items) | ≈0.50 (carried) | ≈0.50 | Added quality criteria D11 (no reasoning leakage into committed tests) + D12 (no dead-weight tests) per user feedback, with implementation: qwen thinking channel enabled and a verified cleanup pass (strip scratch comments, prune vacuous tests; suite re-run + stryker re-measure, auto-revert if score drops). Validated on synth: fresh patches scan clean, cleanup kept with score preserved. Full-repo run on moex-portal relaunched with the quality pass active (ledger preserves settled files across batches/restarts). |
+| 4 | 2026-07-24 | 1.00 (12 items) | — (full run in progress) | — | Multi-round per-file criterion implemented per user: a round is kept iff ≥1 of coverage/mutation/MAC improves AND none degrades (round committed on the file branch); rounds stop when all three stale or any degrades (that round dropped), bounded by MAX_ROUNDS_PER_FILE=5; one cumulative PR per file. Also: thinking-token headroom (LLM_THINKING_BUDGET) fixing JSON truncation, and a rules-safe pick fallback (refuses mechanical pick when a pick rule exists but LLM output is unusable — prevents rule violations like touching UI). Synth: pricing 0→96.49 (2 rounds, round 3 stale-stop), validator 6.25→96.88 — better than single-round iterations. PROBLEM.md now records the verbatim problem + amendments. Full moex-portal run relaunched with all of this active. |
