@@ -15,7 +15,14 @@ function run(argv, { cwd, env, timeoutMs = 600000, label } = {}) {
     const start = nowSec();
     let stdout = '', stderr = '', lastLine = '(starting)', timedOut = false;
     const child = spawn(argv[0], argv.slice(1), {
-      cwd, env: { ...process.env, CI: 'true', FORCE_COLOR: '0', ...env },
+      cwd,
+      // LLM_API_KEY has no business in a child process: the repo's own install
+      // scripts and test code inherit this environment. GH_TOKEN stays — `gh`
+      // and the git credential helper need it.
+      env: { ...process.env, LLM_API_KEY: undefined, CI: 'true', FORCE_COLOR: '0', ...env },
+      // own process group, so a timeout can kill the whole tree (stryker spawns
+      // test-runner children that would otherwise be orphaned and keep burning CPU)
+      detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const onData = (buf, isErr) => {
@@ -35,7 +42,8 @@ function run(argv, { cwd, env, timeoutMs = 600000, label } = {}) {
     }, 3000);
     const killer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGKILL'); } catch { }
+      try { process.kill(-child.pid, 'SIGKILL'); }   // whole process group
+      catch { try { child.kill('SIGKILL'); } catch { } }
     }, timeoutMs);
     child.on('error', (e) => {
       clearInterval(hb); clearTimeout(killer);

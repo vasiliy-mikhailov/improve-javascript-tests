@@ -4,6 +4,14 @@ set -euo pipefail
 DATA_DIR="${DATA_DIR:-/data}"
 mkdir -p "$DATA_DIR" "$DATA_DIR/repos" "$DATA_DIR/prs" "$DATA_DIR/.n8n"
 
+# keep the eval harness / batch driver in the volume in sync with the image,
+# preserving run artifacts (results/, synth-origin) that only live in /data
+if [[ -d /app/eval ]]; then
+  mkdir -p "$DATA_DIR/eval"
+  cp -f /app/eval/*.mjs /app/eval/*.json "$DATA_DIR/eval/" 2>/dev/null || true
+  cp -rf /app/eval/synth-repo "$DATA_DIR/eval/" 2>/dev/null || true
+fi
+
 gen_secret() { head -c 32 /dev/urandom | base64 | tr -d '/+=' | cut -c1-40; }
 
 # ── persistent secrets ──────────────────────────────────────────────────────
@@ -23,6 +31,12 @@ git config --global user.email "${GIT_USER_EMAIL:-bot@improve-tests.local}"
 git config --global init.defaultBranch main
 git config --global --add safe.directory '*'
 git config --global core.pager cat
+
+# ── GitHub auth via credential helper (never inline tokens in remote URLs) ──
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  gh auth setup-git 2>/dev/null \
+    || git config --global credential.'https://github.com'.helper '!gh auth git-credential'
+fi
 
 # ── import workflows (by fixed id → idempotent re-import on each boot) ──────
 n8n import:workflow --separate --input=/app/n8n/workflows 2>&1 | tail -2 || echo "workflow import failed"
@@ -51,6 +65,7 @@ node /app/sidecar/server.js &
       | grep -i '^set-cookie: n8n-auth=' | sed -E 's/^[Ss]et-[Cc]ookie: n8n-auth=([^;]+).*/\1/')
     if [[ -n "$COOKIE" ]]; then
       printf '%s' "$COOKIE" > "$DATA_DIR/n8n-auth-token.txt"
+      chmod 600 "$DATA_DIR/n8n-auth-token.txt"
       echo "n8n auth token minted → $DATA_DIR/n8n-auth-token.txt"
       break
     fi

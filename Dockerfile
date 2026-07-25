@@ -31,6 +31,9 @@ ENV DATA_DIR=/data \
 
 COPY sidecar /app/sidecar
 COPY n8n /app/n8n
+# eval harness + batch driver ship with the image; entrypoint refreshes the copy
+# in /data on boot so the driver can never lag the deployed code
+COPY eval /app/eval
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh && node /app/n8n/generate-workflows.mjs
 

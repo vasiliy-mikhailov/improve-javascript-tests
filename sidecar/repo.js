@@ -12,13 +12,11 @@ function repoDir() {
   return path.join(DATA_DIR, 'repos', slugify(cfg.repoUrl));
 }
 
-function authUrl(url) {
-  const tok = process.env.GH_TOKEN;
-  if (tok && /^https:\/\/github\.com\//.test(url)) {
-    return url.replace('https://', `https://x-access-token:${tok}@`);
-  }
-  return url;
-}
+// NOTE: credentials are deliberately NOT inlined into the remote URL — git echoes
+// the full URL in many failure messages, which would put the token in the event
+// log and on the dashboard. Auth comes from the gh credential helper that
+// entrypoint.sh installs (`gh auth setup-git`), which reads GH_TOKEN from the env.
+function authUrl(url) { return url; }
 
 async function clone() {
   const cfg = state.run.config;
@@ -26,6 +24,14 @@ async function clone() {
   fs.mkdirSync(path.dirname(dir), { recursive: true });
   if (fs.existsSync(path.join(dir, '.git'))) {
     event('cloning', 'repo exists, fetching latest');
+    // scrub any credentials an older clone left in .git/config — the token
+    // would otherwise surface in git's error output and in the event log
+    const remote = await run(['git', 'remote', 'get-url', 'origin'], { cwd: dir, timeoutMs: 10000 });
+    if (/\/\/[^/@\s]+:[^/@\s]+@/.test(remote.stdout)) {
+      const clean = remote.stdout.trim().replace(/\/\/[^/@\s]+:[^/@\s]+@/, '//');
+      await run(['git', 'remote', 'set-url', 'origin', clean], { cwd: dir, timeoutMs: 10000 });
+      event('cloning', 'removed inlined credentials from the git remote (now using the gh credential helper)');
+    }
     let r = await run(['git', 'fetch', 'origin', cfg.repoBranch], { cwd: dir, timeoutMs: 300000, label: 'git fetch' });
     if (r.code !== 0) throw new Error('git fetch failed: ' + r.stderr.slice(-400));
     await run(['git', 'checkout', '-f', cfg.repoBranch], { cwd: dir, timeoutMs: 60000 });

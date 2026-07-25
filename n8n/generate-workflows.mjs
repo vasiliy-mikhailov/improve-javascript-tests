@@ -99,6 +99,9 @@ Http('Get Candidates', { method: 'GET', path: '/api/files/candidates' });
 IfNum('More Work?', '={{ $json.done ? 0 : 1 }}', 'equal', 1);
 Http('Rules: pick file', { path: '/api/rules/apply', body: `={{ { stage: 'pick_file' } }}` });
 IfNum('File Picked?', `={{ $json.result && $json.result.file ? 1 : 0 }}`, 'equal', 1);
+// pick failed: transient (bad LLM output) → try again; terminal (rule excludes
+// every candidate) → finish. The sidecar caps consecutive transient retries.
+IfNum('Pick Retryable?', `={{ ($json.result && $json.result.retry) ? 1 : 0 }}`, 'equal', 1);
 Http('Start Iteration', { path: '/api/iteration/start', body: `={{ { file: $('Rules: pick file').first().json.result.file } }}` });
 Http('Baseline Mutation', { path: '/api/stryker/run', body: `={{ { file: $('Start Iteration').first().json.file, phase: 'baseline', stage: 'improving_mutation' } }}`, timeout: 2700000 });
 Http('Coverage Gaps', { method: 'GET', urlExpr: `=${API}/api/files/gaps?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}` });
@@ -276,7 +279,9 @@ chain('Rules: make PR', 'Create PR', 'Iteration Done');
 link('Discard Changes', 'Iteration Done');
 link('Iteration Done', 'Next Iteration');
 link('More Work?', 'Finish Run', 1);
-link('File Picked?', 'Finish Run', 1);
+link('File Picked?', 'Pick Retryable?', 1);
+link('Pick Retryable?', 'Next Iteration', 0);   // transient → pick again
+link('Pick Retryable?', 'Finish Run', 1);       // terminal → done
 link('Finish Run', 'End');
 
 // =============================================================================

@@ -1,11 +1,27 @@
 'use strict';
 // Zero-dependency helpers shared by the sidecar.
 
+/**
+ * Split a comma-separated glob list WITHOUT breaking brace groups:
+ * `src/**\/*.{js,ts},lib/*.ts` → ['src/**\/*.{js,ts}', 'lib/*.ts'].
+ * (A naive split on ',' shreds `{js,ts}` into separate globs that match nothing.)
+ */
+function splitGlobList(globCsv) {
+  const out = [];
+  let cur = '', depth = 0;
+  for (const ch of String(globCsv || '**/*')) {
+    if (ch === '{') depth += 1;
+    else if (ch === '}') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map((g) => g.trim()).filter(Boolean);
+}
+
 /** Convert a comma-separated glob list to a matcher fn for repo-relative paths. */
 function globsToMatcher(globCsv) {
-  const globs = String(globCsv || '**/*')
-    .split(',').map((g) => g.trim()).filter(Boolean);
-  const regs = globs.map(globToRegExp);
+  const regs = splitGlobList(globCsv).map(globToRegExp);
   return (p) => regs.some((r) => r.test(p));
 }
 
@@ -60,9 +76,12 @@ function extractJson(text) {
   const s = String(text)
     .replace(/^[\s\S]*?<\/think>/, '') // drop thinking block if present
     .replace(/```(?:json)?/g, '');
-  for (const opener of ['{', '[']) {
+  // try whichever bracket opens FIRST — otherwise a top-level array response
+  // ("[{...}]") yields its first element instead of the array
+  const openers = [['{', s.indexOf('{')], ['[', s.indexOf('[')]]
+    .filter(([, i]) => i !== -1).sort((a, b) => a[1] - b[1]).map(([c]) => c);
+  for (const opener of openers) {
     const start = s.indexOf(opener);
-    if (start === -1) continue;
     const closer = opener === '{' ? '}' : ']';
     let depth = 0, inStr = false, esc = false;
     for (let i = start; i < s.length; i++) {
@@ -85,4 +104,20 @@ function extractJson(text) {
 
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
-module.exports = { globsToMatcher, globToRegExp, slugify, fileSlug, nowSec, round2, mac, extractJson, clamp };
+/**
+ * Strip secrets from anything that reaches the event log, the dashboard or an
+ * HTTP response. Tool output (git, npm, gh) can echo credentials we passed in.
+ */
+function redact(text) {
+  let s = String(text ?? '');
+  for (const secret of [process.env.GH_TOKEN, process.env.LLM_API_KEY]) {
+    if (secret && secret.length >= 8) s = s.split(secret).join('«redacted»');
+  }
+  return s
+    .replace(/\b(gh[pousr]_[A-Za-z0-9]{16,})/g, '«redacted-gh-token»')
+    .replace(/\b(github_pat_[A-Za-z0-9_]{20,})/g, '«redacted-gh-token»')
+    .replace(/\bsk-[A-Za-z0-9-]{16,}/g, '«redacted-api-key»')
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/g, '$1«redacted»@');
+}
+
+module.exports = { globsToMatcher, globToRegExp, splitGlobList, slugify, fileSlug, nowSec, round2, mac, extractJson, clamp, redact };

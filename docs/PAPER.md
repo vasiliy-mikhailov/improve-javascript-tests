@@ -519,6 +519,8 @@ Failure modes met (and fixed) while evaluating against 13 real repos — check t
 | Tests need built artifacts (self-referencing imports) | Set `SETUP_SCRIPT=build` (any npm script) to run after install. |
 | LLM output empty / JSON parse failures with thinking on | Reasoning ate the completion budget — raise `LLM_THINKING_BUDGET`. |
 | Component test fails with `Failed to resolve import` | The repo imports via an alias (e.g. `@/components/…`). The pipeline shows the LLM a sibling test as style reference so aliases are used; if your repo has *no* component tests at all, add one seed test or state the import style in `RULES_WRITE_TEST`. |
+| `no remaining candidate files` immediately, 0 files in scope | Check `SCOPE_GLOB` against `git ls-files`. Brace groups (`{js,ts}`) and comma-separated lists both work and can be combined. |
+| `409 a run is already active` | Another execution owns the worktree. Stop it in n8n (Executions → stop), or pass `force: true` in the webhook body if you know it is dead. The batch driver does this automatically. |
 | Run marked `failed` on the dashboard | Any hard sidecar error aborts that n8n execution and marks the run; the event feed has the cause. Re-trigger — the ledger skips settled files. |
 
 ---

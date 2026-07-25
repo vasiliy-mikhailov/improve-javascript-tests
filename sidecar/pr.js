@@ -10,31 +10,53 @@ const { repoDir } = require('./repo');
 
 async function changedFiles() {
   const dir = repoDir();
-  const r = await run(['git', 'status', '--porcelain'], { cwd: dir, timeoutMs: 30000 });
-  return r.stdout.split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
+  // -z + --porcelain: NUL-separated, unquoted paths (survives spaces); renames
+  // emit "R  new\0old\0" — we keep the new path and skip the old one.
+  const r = await run(['git', 'status', '--porcelain', '-z'], { cwd: dir, timeoutMs: 30000 });
+  const parts = r.stdout.split('\0');
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    const rec = parts[i];
+    if (!rec) continue;
+    const xy = rec.slice(0, 2);
+    out.push(rec.slice(3));
+    if (xy[0] === 'R' || xy[0] === 'C') i += 1; // consume the source path
+  }
+  return out.filter(Boolean);
+}
+
+/** Test files this branch touched — committed rounds AND uncommitted edits. */
+async function changedTestFiles() {
+  const dir = repoDir();
+  const base = state.run.config.prBase;
+  const committed = await run(['git', 'diff', '--name-only', `${base}...HEAD`], { cwd: dir, timeoutMs: 30000 });
+  const all = new Set([
+    ...committed.stdout.split('\n').map((s) => s.trim()),
+    ...(await changedFiles()),
+  ].filter(Boolean));
+  return [...all].filter(isCommittableTest);
 }
 
 async function diffAgainstBase() {
   const dir = repoDir();
   const base = state.run.config.prBase;
   // intent-to-add new test files so they show up in the diff
-  const changed = await changedFiles();
-  const newTests = changed.filter((p) => TEST_PATH_RE.test(p)
-    && !/(^|\/)(node_modules|coverage|reports|\.stryker-tmp)\//.test(p));
+  const newTests = (await changedFiles()).filter(isCommittableTest);
   if (newTests.length) await run(['git', 'add', '-N', '--', ...newTests], { cwd: dir, timeoutMs: 30000 });
   const r = await run(['git', 'diff', base, '--', ':!node_modules', ':!coverage', ':!reports', ':!.stryker-tmp', ':!.ijst-stryker.config.json'], { cwd: dir, timeoutMs: 60000 });
   return r.stdout;
 }
 
 const TEST_PATH_RE = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/;
+const ARTIFACT_RE = /(^|\/)(node_modules|coverage|reports|\.stryker-tmp)\//;
+const isCommittableTest = (p) => TEST_PATH_RE.test(p) && !ARTIFACT_RE.test(p);
 
 async function commit(message) {
   const dir = repoDir();
   // Commit ONLY test files — never pipeline artifacts (.ijst-*, reports/, coverage/,
   // .stryker-tmp) and never node_modules; committing those poisons the base branch.
   const changed = await changedFiles();
-  const testish = changed.filter((p) => TEST_PATH_RE.test(p)
-    && !/(^|\/)(node_modules|coverage|reports|\.stryker-tmp)\//.test(p));
+  const testish = changed.filter(isCommittableTest);
   if (!testish.length) {
     // rounds may already be committed on this branch — that's fine for PR creation
     const ahead = await run(['git', 'rev-list', '--count', `${state.run.config.prBase}..HEAD`], { cwd: dir, timeoutMs: 30000 });
@@ -96,4 +118,4 @@ async function createPr({ file, branch, title, body, labels = [] }) {
   return record;
 }
 
-module.exports = { commit, createPr, changedFiles, diffAgainstBase };
+module.exports = { commit, createPr, changedFiles, changedTestFiles, diffAgainstBase };

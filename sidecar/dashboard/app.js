@@ -71,7 +71,8 @@ function render(m) {
 
   const tb = $('files').querySelector('tbody');
   const files = (m.files || []).filter((f) => f.status !== 'candidate' || f.coverage != null).slice(0, 200);
-  $('files-count').textContent = `(${(m.files || []).length} in scope)`;
+  const inScope = m.work?.totalFiles ?? (m.files || []).length;
+  $('files-count').textContent = `(${inScope} in scope${inScope > files.length ? `, showing ${files.length}` : ''})`;
   tb.innerHTML = files.map((f) => {
     // before = frozen at pick time (falls back to live measurement for candidates);
     // after = frozen at verify/PR time; live values never overwrite these columns

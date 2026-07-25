@@ -80,12 +80,27 @@ async function applyPickFile(ruleText, { candidates = [] }) {
     json: true, maxTokens: 800,
   });
   const j = r.json;
-  if (j && j.file === null) return { file: null, reason: j.reason || 'all candidates excluded by rule' };
-  if (j?.file && candidates.some((c) => c.path === j.file)) return { file: j.file, reason: j.reason || 'LLM pick' };
-  // A team rule exists but the LLM pick is unusable: refusing a blind mechanical
-  // pick — it could select a file the rule excludes (e.g. "don't touch ui").
-  event('picking_file', 'pick rule could not be applied (LLM output invalid after retries) — stopping instead of risking a rule violation');
-  return { file: null, reason: 'pick rule could not be applied reliably; refusing mechanical pick that might violate team rules' };
+  if (j && j.file === null) {
+    // the rule itself excludes everything — terminal, no point retrying
+    state.pickFailures = 0;
+    return { file: null, retry: false, reason: j.reason || 'all candidates excluded by rule' };
+  }
+  if (j?.file && candidates.some((c) => c.path === j.file)) {
+    state.pickFailures = 0;
+    return { file: j.file, reason: j.reason || 'LLM pick' };
+  }
+  // A team rule exists but the LLM pick is unusable: refuse a blind mechanical
+  // pick (it could select a file the rule excludes, e.g. "don't touch ui").
+  // This is usually a transient model hiccup, so ask the workflow to retry —
+  // but give up after a few consecutive failures instead of spinning.
+  state.pickFailures = (state.pickFailures || 0) + 1;
+  const retry = state.pickFailures < 3;
+  event('picking_file', `pick rule could not be applied (invalid LLM output, ${state.pickFailures}/3) — `
+    + (retry ? 'retrying with a fresh pick' : 'giving up on this batch'));
+  return {
+    file: null, retry,
+    reason: 'pick rule could not be applied reliably; refusing a mechanical pick that might violate team rules',
+  };
 }
 
 async function applyCheckChanges(ruleText, ctx) {

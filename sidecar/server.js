@@ -28,7 +28,10 @@ function json(res, code, obj) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 20e6) req.destroy(); });
+    req.on('data', (c) => {
+      data += c;
+      if (data.length > 20e6) { req.destroy(); reject(new Error('request body too large')); }
+    });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(new Error('bad JSON body')); } });
     req.on('error', reject);
   });
@@ -56,7 +59,12 @@ function metricsPayload() {
   const now = Math.floor(Date.now() / 1000);
   const humanMin = files.reduce((s, f) => s + (f.timesheet?.totalMin || 0), 0);
   let machineSec = files.reduce((s, f) => s + (f.spentSec || 0), 0);
-  for (const f of files) if (f.attemptStartedAt) machineSec += now - f.attemptStartedAt;
+  // only the file currently being worked on has a live stopwatch; a crashed
+  // attempt must not keep accruing time forever
+  for (const f of files) if (f.attemptStartedAt && f.status === 'picked') machineSec += now - f.attemptStartedAt;
+  // clone + install + baseline measurement are real machine time too, and they
+  // dominate short batches — without them the FTE ratio flatters the pipeline
+  machineSec += state.overheadLedger?.[slugify(state.run?.config?.repoUrl || '')] || 0;
   const timedSettled = settled.filter((f) => f.spentSec > 0);
   const remaining = files.filter((f) => f.status === 'candidate' || f.status === 'picked').length;
   const avgSecPerFile = timedSettled.length
@@ -84,7 +92,22 @@ function metricsPayload() {
       avgMacBefore: avg(targeted.map((f) => f.macBefore).filter((x) => x != null)),
       avgMacAfter: avg(targeted.map((f) => f.macAfter ?? f.macBefore).filter((x) => x != null)),
     },
-    files,
+    // project only what the dashboard renders, and only as many rows as it shows:
+    // full records for ~500 files made this a ~130 KB poll every 2 s. Files the
+    // pipeline has touched always win a slot; untouched candidates fill the rest.
+    files: [...files.filter((f) => f.status !== 'candidate'),
+      ...files.filter((f) => f.status === 'candidate')].slice(0, 250).map((f) => ({
+      path: f.path, status: f.status, attempts: f.attempts, rounds: f.rounds || 0,
+      coverage: f.coverage, mutation: f.mutation, mac: f.mac,
+      coverageBefore: f.coverageBefore, mutationBefore: f.mutationBefore, macBefore: f.macBefore,
+      coverageAfter: f.coverageAfter, mutationAfter: f.mutationAfter, macAfter: f.macAfter,
+      prUrl: f.prUrl, prPatch: f.prPatch,
+      timesheet: f.timesheet && {
+        hours: f.timesheet.hours, totalMin: f.timesheet.totalMin,
+        analysisMin: f.timesheet.analysisMin, testsMin: f.timesheet.testsMin,
+        mutationMin: f.timesheet.mutationMin, verifyMin: f.timesheet.verifyMin,
+      },
+    })),
     prs: state.prs,
     decisions: state.decisions,
     events: state.events.slice(-60),
@@ -126,10 +149,25 @@ const routes = {
   },
 
   'POST /api/run/start': async (q, body) => {
+    // one git worktree + one run state: overlapping executions would corrupt both.
+    // `force` (used by the batch driver, which owns execution lifecycle) and a
+    // staleness window let a genuinely dead run be taken over.
+    // 'interrupted' means the sidecar restarted: whatever execution owned that
+    // run is gone, so it can never be a real concurrency conflict.
+    const active = state.run && state.run.status === 'running' && state.stage?.name !== 'interrupted';
+    const idleSec = Math.floor(Date.now() / 1000) - (state.stage?.since || 0);
+    if (active && !body.force && idleSec < 900) {
+      const err = new Error(`a run is already active (${state.run.id}, stage ${state.stage.name}, `
+        + `${idleSec}s since last stage change) — stop it first or pass force:true`);
+      err.statusCode = 409;
+      throw err;
+    }
+    if (active) S.event('starting', `taking over stale/forced run ${state.run.id} (idle ${idleSec}s)`);
     state.run = S.freshRun(body);
     state.files = {};
     state.decisions = {};
     state.prs = [];
+    state.pickFailures = 0;
     if (body.clearLedger) delete state.improvedLedger[slugify(state.run.config.repoUrl)];
     S.setStage('starting', `run ${state.run.id} on ${state.run.config.repoUrl}#${state.run.config.repoBranch}`);
     S.save();
@@ -208,6 +246,16 @@ const routes = {
     needRun();
     const file = body.file;
     if (!file || !state.files[file]) throw new Error('unknown file: ' + file);
+    if (state.run.iteration === 0) {
+      // first pick of this batch: everything before it was setup overhead
+      const slug = slugify(state.run.config.repoUrl);
+      state.overheadLedger[slug] = (state.overheadLedger[slug] || 0)
+        + Math.max(0, Math.floor(Date.now() / 1000) - state.run.startedAt);
+    }
+    // close any stopwatch left running by a previous, abandoned attempt
+    for (const other of Object.values(state.files)) {
+      if (other.attemptStartedAt && other.path !== file) accrueSpent(other.path);
+    }
     state.run.iteration += 1;
     const template = state.decisions.pre_pick?.result?.branchTemplate || 'tests/improve-{file}';
     const branch = template.replace('{file}', fileSlug(file));
@@ -347,8 +395,10 @@ const routes = {
     const file = body.file;
     const f = state.files[file] || {};
     S.setStage('preparing_pr', `cleaning up generated tests for ${file}`);
-    const TESTISH = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/;
-    const changed = (await pr.changedFiles()).filter((p) => TESTISH.test(p));
+    // Accepted rounds are already COMMITTED, so the working tree is usually clean
+    // here — select against the base branch, not `git status`.
+    const changed = await pr.changedTestFiles();
+    if (!changed.length) S.event('preparing_pr', `cleanup: no generated test files found for ${file}`);
     const results = [];
     for (const p of changed.slice(0, 5)) {
       const original = repo.readFileSafe(p, 100000);
@@ -391,6 +441,9 @@ const routes = {
     }
     const cov = f.coverageAfter ?? f.coverage;
     S.upsertFile(file, { mutation: newScore, mutationAfter: newScore, mac: mac(cov, newScore), macAfter: mac(cov, newScore) });
+    // cleaned files are edits on top of committed rounds — commit them so the PR carries them
+    try { await pr.commit(`test: tidy generated tests for ${file}`); }
+    catch (e) { S.event('preparing_pr', 'cleanup commit note: ' + e.message.slice(0, 160)); }
     S.event('preparing_pr', 'cleanup kept: ' + touched.map((t) => `${t.path} ${t.bytesBefore}→${t.bytesAfter}B`).join(', '));
     return { ok: true, cleaned: touched.length, mutationAfter: newScore, results: publicResults };
   },
@@ -476,10 +529,14 @@ const routes = {
     // drop the last (stale/degraded) round: uncommitted changes only
     await repo.discardUncommitted();
     const rb = f.roundBase || { coverage: f.coverageBefore, mutation: f.mutationBefore, mac: f.macBefore };
-    S.upsertFile(file, {
-      coverage: rb.coverage, mutation: rb.mutation, mac: rb.mac,
-      coverageAfter: rb.coverage, mutationAfter: rb.mutation, macAfter: rb.mac,
-    });
+    const keptRounds = (f.rounds || 0) > 0;
+    S.upsertFile(file, keptRounds
+      ? { coverage: rb.coverage, mutation: rb.mutation, mac: rb.mac,
+        coverageAfter: rb.coverage, mutationAfter: rb.mutation, macAfter: rb.mac }
+      // nothing was kept: leave the "after" columns empty rather than echoing
+      // "before" values, which read as a measured (null) improvement
+      : { coverage: rb.coverage, mutation: rb.mutation, mac: rb.mac,
+        coverageAfter: null, mutationAfter: null, macAfter: null });
     const diff = await pr.diffAgainstBase();
     const changed = diff.match(/^\+\+\+ b\/(.+)$/gm)?.map((l) => l.slice(6)) || [];
     const improved = (f.rounds || 0) > 0 && (rb.mac ?? 0) > (f.macBefore ?? 0);
@@ -603,13 +660,15 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(req, res, rel);
   } catch (e) {
     S.event('error', `${key}: ${e.message}`);
+    // a rejected concurrent start is a guard, not a run failure
+    if (e.statusCode === 409) return json(res, 409, { ok: false, error: e.message });
     // a hard error aborts the n8n execution → the run is dead; reflect that
     if (state.run && state.run.status === 'running' && req.method === 'POST') {
       state.run.status = 'failed';
       state.run.finishedAt = Math.floor(Date.now() / 1000);
       S.setStage('failed', e.message.slice(0, 200));
     }
-    return json(res, 500, { ok: false, error: e.message });
+    return json(res, 500, { ok: false, error: require('./util').redact(e.message) });
   }
 });
 

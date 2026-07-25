@@ -28,17 +28,25 @@ async function stopLingering() {
   } catch (e) { log('execution cleanup skipped: ' + e.message); }
 }
 
-function ledgerSize(state) {
-  const slugs = Object.keys(state.improvedLedger || {});
-  let n = 0;
-  for (const s of slugs) n += Object.keys(state.improvedLedger[s]).length;
-  return n;
-}
+// same slug rule as the sidecar (sidecar/util.js) — the ledger is per repo
+const slugify = (s) => String(s).toLowerCase().replace(/^https?:\/\//, '').replace(/\.git$/, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 
-for (let batch = 1; batch <= 100; batch++) {
+/** Ledger entries for THIS repo only (mixing repos made the counts meaningless). */
+function ledgerEntries(state) {
+  const url = state.run?.config?.repoUrl || overrides.repoUrl || '';
+  const entries = state.improvedLedger?.[slugify(url)];
+  return entries ? Object.values(entries) : [];
+}
+const ledgerSize = (state) => ledgerEntries(state).length;
+
+let deadBatches = 0;
+for (let batch = 1; batch <= 200; batch++) {
   await stopLingering();
   const before = ledgerSize(await api('/api/state'));
-  const body = { scopeLimit: BATCH_FILES, maxIterations: BATCH_MAX_ITER, ...overrides };
+  // force: the previous execution may have been stopped mid-run, leaving the
+  // sidecar's run marked active — the driver is the owner here
+  const body = { scopeLimit: BATCH_FILES, maxIterations: BATCH_MAX_ITER, force: true, ...overrides };
   log(`batch ${batch}: triggering (${JSON.stringify(body)}), ledger=${before}`);
   const trig = await fetch(`${N8N}/webhook/improve-run`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -58,11 +66,25 @@ for (let batch = 1; batch <= 100; batch++) {
   }
 
   const st = await api('/api/state');
+  const mt = await api('/api/metrics').catch(() => ({ work: {} }));
   const after = ledgerSize(st);
   const total = Object.keys(st.files || {}).length;
-  const improved = Object.values(st.improvedLedger || {}).flatMap((r) => Object.values(r)).filter((x) => x.state === 'improved').length;
-  log(`batch ${batch} done: run=${st.run?.status}, ledger ${before}→${after} of ${total} files, ${improved} improved total`);
-  if (after >= total && total > 0) { log('ALL FILES SETTLED — full run complete'); break; }
-  if (after === before) { log('no progress in this batch — stopping to avoid a loop'); break; }
+  const iterations = st.run?.iteration || 0;
+  const remaining = mt.work?.remaining ?? null;
+  const improved = ledgerEntries(st).filter((x) => x.state === 'improved').length;
+  log(`batch ${batch} done: run=${st.run?.status}, ledger ${before}→${after} of ${total} files, `
+    + `${improved} improved total, ${iterations} pick(s) this batch, ${remaining ?? '?'} remaining`);
+
+  if (remaining === 0 || (after >= total && total > 0)) { log('ALL FILES SETTLED — full run complete'); break; }
+  // A batch can legitimately settle nothing: files that fail an attempt go back to
+  // the pool for another try (MAX_ATTEMPTS_PER_FILE). Only a batch that picked
+  // NOTHING is evidence of a dead end — and even then, give it a second chance.
+  if (after === before && iterations === 0) {
+    deadBatches += 1;
+    log(`batch made no picks (${deadBatches}/2)`);
+    if (deadBatches >= 2) { log('two consecutive batches picked nothing — stopping'); break; }
+  } else {
+    deadBatches = 0;
+  }
 }
 log('driver exiting');

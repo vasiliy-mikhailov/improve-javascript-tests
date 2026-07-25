@@ -2,7 +2,7 @@
 // JSON-file-backed state store. Single-process, in-memory with debounced flush.
 const fs = require('node:fs');
 const path = require('node:path');
-const { nowSec } = require('./util');
+const { nowSec, redact } = require('./util');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -76,6 +76,9 @@ const state = {
   // batched full-repo runs and crash-restart without redoing finished files.
   // { [repoSlug]: { [path]: {state: 'improved'|'exhausted'|'failed', prUrl?, ts} } }
   improvedLedger: {},
+  // per-repo cumulative clone/install/baseline seconds, so the FTE ratio counts
+  // run overhead and not just per-file work
+  overheadLedger: {},
 };
 
 function load() {
@@ -105,7 +108,7 @@ function save() {
 
 function event(stage, msg) {
   state.seq += 1;
-  const entry = { seq: state.seq, ts: nowSec(), stage, msg: String(msg).slice(0, 500) };
+  const entry = { seq: state.seq, ts: nowSec(), stage, msg: redact(msg).slice(0, 500) };
   state.events.push(entry);
   if (state.events.length > MAX_EVENTS_IN_STATE) state.events.splice(0, state.events.length - MAX_EVENTS_IN_STATE);
   try { fs.appendFileSync(EVENTS_FILE, JSON.stringify(entry) + '\n'); } catch { }
@@ -113,7 +116,8 @@ function event(stage, msg) {
   console.log(`[${stage}] ${msg}`);
 }
 
-function setStage(name, detail = '') {
+function setStage(name, rawDetail = '') {
+  const detail = redact(rawDetail);
   if (state.stage.name !== name || state.stage.detail !== detail) {
     state.stage = { name, detail, since: nowSec(), progress: null };
     event(name, detail || name);
@@ -122,7 +126,8 @@ function setStage(name, detail = '') {
 }
 
 function setProgress(line, elapsed) {
-  state.stage.progress = { line: String(line || '').slice(0, 200), elapsed, ts: nowSec() };
+  // child-process output: may echo credentials we passed in
+  state.stage.progress = { line: redact(line).slice(0, 200), elapsed, ts: nowSec() };
   save();
 }
 
