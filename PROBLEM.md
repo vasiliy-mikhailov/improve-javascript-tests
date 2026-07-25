@@ -36,4 +36,11 @@
   `.jsx`/`.tsx` files: render + assert on visible behavior via accessible queries, exercise
   props/variants/handlers, no snapshots, no internals.
 
+- 2026-07-25 (iteration 6): **collect human-equivalent timesheets** — for every improved file,
+  estimate the developer time the delivered test work would have taken a human (itemized:
+  module analysis, test-case writing, mutation analysis, verification/review), and **show it on
+  the dashboard per file and cumulatively** — plus **machine time spent, ETA to repo completion,
+  and the human-FTE equivalent** (human-equivalent hours ÷ machine hours: how many engineers
+  working in parallel the pipeline replaces).
+
 See RESEARCH.md for the derived DoD and reward formula, eval/RESULTS.md for iteration history.

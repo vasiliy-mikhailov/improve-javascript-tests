@@ -417,7 +417,23 @@ aliases like `@/components/…`, setup files, naming) are followed from the firs
 end-to-end: moex-portal's `ChartCard.tsx` went 0 → 100 MAC with a real PR
 (accessible-query tests covering every prop branch).
 
-### 3.7 Access model
+### 3.7 Human-equivalent timesheets, machine time, ETA, FTE
+
+For every improved file the pipeline computes a **human-equivalent timesheet** — a
+deterministic, itemized estimate of what the delivered test work would have cost a mid-level
+developer: module analysis (30 min base + 1 min per 20 source lines, capped at 90), test-case
+writing (12 min per committed test case), mutation analysis (10 min per mutant killed),
+verification/review (15 min + 5 min per improvement round). Rates live in
+`sidecar/timesheet.js`; every estimate stores its inputs, so it is auditable.
+
+The dashboard shows, per file, the human-equivalent hours (hover for the itemization), and
+cumulatively: **run progress** (settled/total with a bar), **human-equivalent work**,
+**machine time** (wall-clock actually spent per file, summed), the **human-FTE equivalent**
+(human-equivalent hours ÷ machine hours — how many engineers working in parallel the pipeline
+replaces), and the **ETA** to full-repo completion (average machine time per settled file ×
+files remaining). All of it survives restarts via the ledger.
+
+### 3.8 Access model
 
 Caddy terminates TLS and enforces basic-auth for both UIs. n8n's own login never appears: at
 boot the container creates the owner account and logs in once with

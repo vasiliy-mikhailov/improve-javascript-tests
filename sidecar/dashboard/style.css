@@ -24,6 +24,9 @@ h2 { font-size: 15px; margin: 26px 0 10px; color: #c9d1d9; }
 .card .k { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
 .card .v { font-size: 26px; font-weight: 700; margin: 2px 0; }
 .card .d { font-size: 11px; color: #8b949e; }
+.card.wide { grid-column: span 2; }
+.progressbar { height: 8px; background: #21262d; border-radius: 6px; margin: 6px 0 4px; overflow: hidden; }
+.progressbar > div { height: 100%; width: 0; background: linear-gradient(90deg, #1f6feb, #3fb950); border-radius: 6px; transition: width .6s ease; }
 
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }

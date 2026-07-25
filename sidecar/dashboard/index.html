@@ -27,10 +27,21 @@
     <div class="card"><div class="k">PRs</div><div class="v" id="c-prs">0</div><div class="d" id="c-prs-d"></div></div>
   </section>
 
+  <section class="cards">
+    <div class="card wide"><div class="k">Run progress</div>
+      <div class="v" id="c-prog">–</div>
+      <div class="progressbar"><div id="c-prog-bar"></div></div>
+      <div class="d" id="c-prog-d"></div></div>
+    <div class="card"><div class="k">Human-equivalent work</div><div class="v" id="c-human">–</div><div class="d">itemized timesheets, improved files</div></div>
+    <div class="card"><div class="k">Machine time</div><div class="v" id="c-machine">–</div><div class="d">wall-clock spent on files</div></div>
+    <div class="card"><div class="k">Human FTE equivalent</div><div class="v" id="c-fte">–</div><div class="d">human-eq hours ÷ machine hours</div></div>
+    <div class="card"><div class="k">ETA</div><div class="v" id="c-eta">–</div><div class="d" id="c-eta-d"></div></div>
+  </section>
+
   <section>
     <h2>Files <span class="muted" id="files-count"></span></h2>
     <div class="tablewrap"><table id="files">
-      <thead><tr><th>file</th><th>cov before</th><th>mut before</th><th>MAC before</th><th>cov after</th><th>mut after</th><th>MAC after</th><th>status</th><th>PR</th></tr></thead>
+      <thead><tr><th>file</th><th>cov before</th><th>mut before</th><th>MAC before</th><th>cov after</th><th>mut after</th><th>MAC after</th><th>human-eq</th><th>status</th><th>PR</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>

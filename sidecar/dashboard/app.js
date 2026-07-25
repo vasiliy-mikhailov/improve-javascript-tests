@@ -16,6 +16,11 @@ const ACTIVE = ['starting', 'cloning', 'applying_rules', 'installing', 'measurin
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (x, suf = '%') => (x == null ? '–' : (Math.round(x * 100) / 100) + suf);
+const fmtHours = (h) => h >= 8 ? `${Math.round(h / 8 * 10) / 10} d (${Math.round(h * 10) / 10} h)` : `${Math.round(h * 10) / 10} h`;
+const fmtDur = (sec) => {
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+};
 
 async function tick() {
   let m;
@@ -53,6 +58,17 @@ function render(m) {
   $('c-prs').textContent = (m.prs || []).length;
   $('c-prs-d').textContent = `${m.totals?.improvedFiles ?? 0} file(s) improved`;
 
+  const w = m.work || {};
+  const pct = w.totalFiles ? Math.round((w.settled / w.totalFiles) * 100) : 0;
+  $('c-prog').textContent = w.totalFiles ? `${w.settled} / ${w.totalFiles} files (${pct}%)` : '–';
+  $('c-prog-bar').style.width = pct + '%';
+  $('c-prog-d').textContent = w.totalFiles ? `${w.improved} improved · ${w.settled - w.improved} no-improvement/failed · ${w.remaining} remaining` : '';
+  $('c-human').textContent = w.humanHours != null ? fmtHours(w.humanHours) : '–';
+  $('c-machine').textContent = w.machineHours != null ? fmtHours(w.machineHours) : '–';
+  $('c-fte').textContent = w.fte != null ? w.fte + '×' : '–';
+  $('c-eta').textContent = w.etaSec != null ? fmtDur(w.etaSec) : '–';
+  $('c-eta-d').textContent = w.etaSec != null ? `at current pace, ${w.remaining} file(s) left` : 'measuring pace…';
+
   const tb = $('files').querySelector('tbody');
   const files = (m.files || []).filter((f) => f.status !== 'candidate' || f.coverage != null).slice(0, 200);
   $('files-count').textContent = `(${(m.files || []).length} in scope)`;
@@ -69,6 +85,7 @@ function render(m) {
     <td>${hasAfter ? `<b>${fmt(f.coverageAfter)}</b>` : '–'}</td>
     <td>${hasAfter ? `<b>${fmt(f.mutationAfter)}</b>` : '–'}</td>
     <td>${hasAfter ? `<b>${fmt(f.macAfter, '')}</b>` : '–'}</td>
+    <td title="${f.timesheet ? esc(`analysis ${f.timesheet.analysisMin}m · writing ${f.timesheet.testsMin}m · mutation ${f.timesheet.mutationMin}m · verify ${f.timesheet.verifyMin}m`) : ''}">${f.timesheet ? fmtHours(f.timesheet.hours) : '–'}</td>
     <td><span class="badge b-${esc(f.status)}">${esc(f.status)}</span></td>
     <td>${f.prUrl ? `<a href="${esc(f.prUrl)}" target="_blank">PR ↗</a>` : (f.prPatch ? 'patch' : '')}</td>
   </tr>`;

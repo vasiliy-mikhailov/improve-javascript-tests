@@ -12,6 +12,7 @@ const tests = require('./tests');
 const rulesMod = require('./rules');
 const pr = require('./pr');
 const llm = require('./llm');
+const timesheet = require('./timesheet');
 const { run } = require('./exec');
 const { mac, fileSlug, round2, clamp, slugify } = require('./util');
 
@@ -37,12 +38,41 @@ function ledger() {
   const slug = slugify(state.run.config.repoUrl);
   return (state.improvedLedger[slug] ||= {});
 }
+/** Close the current attempt's stopwatch into the file's cumulative machine time. */
+function accrueSpent(file) {
+  const f = state.files[file];
+  if (!f || !f.attemptStartedAt) return f?.spentSec || 0;
+  const spent = (f.spentSec || 0) + (Math.floor(Date.now() / 1000) - f.attemptStartedAt);
+  S.upsertFile(file, { spentSec: spent, attemptStartedAt: null });
+  return spent;
+}
 
 function metricsPayload() {
   const files = Object.values(state.files).sort((a, b) => (a.mac ?? 999) - (b.mac ?? 999));
   const targeted = files.filter((f) => f.macBefore != null);
   const avg = (xs) => xs.length ? round2(xs.reduce((s, x) => s + x, 0) / xs.length) : null;
+  // work accounting: human-equivalent hours, machine time, ETA, FTE, progress
+  const settled = files.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status));
+  const now = Math.floor(Date.now() / 1000);
+  const humanMin = files.reduce((s, f) => s + (f.timesheet?.totalMin || 0), 0);
+  let machineSec = files.reduce((s, f) => s + (f.spentSec || 0), 0);
+  for (const f of files) if (f.attemptStartedAt) machineSec += now - f.attemptStartedAt;
+  const timedSettled = settled.filter((f) => f.spentSec > 0);
+  const remaining = files.filter((f) => f.status === 'candidate' || f.status === 'picked').length;
+  const avgSecPerFile = timedSettled.length
+    ? timedSettled.reduce((s, f) => s + f.spentSec, 0) / timedSettled.length : null;
+  const work = {
+    humanHours: round2(humanMin / 60),
+    machineHours: round2(machineSec / 3600),
+    fte: machineSec > 600 ? round2((humanMin * 60) / machineSec) : null,
+    etaSec: avgSecPerFile != null ? Math.round(remaining * avgSecPerFile) : null,
+    settled: settled.length,
+    improved: settled.filter((f) => f.status === 'improved').length,
+    totalFiles: files.length,
+    remaining,
+  };
   return {
+    work,
     stage: state.stage,
     run: state.run,
     runner: state.runner,
@@ -132,7 +162,7 @@ const routes = {
       if (!state.files[p]) continue;
       S.upsertFile(p, rec.state === 'improved'
         ? { status: 'improved', fromLedger: true, prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
-        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 3 });
+        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 3, ...(rec.metrics || {}) });
       replayed += 1;
     }
     if (replayed) S.event('installing', `ledger: ${replayed} file(s) already settled in previous runs — skipping them`);
@@ -186,6 +216,7 @@ const routes = {
     S.upsertFile(file, {
       status: 'picked', branch, attempts: state.files[file].attempts + 1,
       rounds: 0, roundBase: null, lastSurvived: null,
+      attemptStartedAt: Math.floor(Date.now() / 1000),
     });
     S.save();
     return { ok: true, file, branch, iteration: state.run.iteration };
@@ -203,8 +234,9 @@ const routes = {
       if (body.phase === 'baseline') {
         // one broken file must not sink a full-repo run: record and move on
         S.event('improving_mutation', `stryker failed on ${file} — marking file failed: ${e.message.slice(0, 250)}`);
+        const spentSec = accrueSpent(file);
         S.upsertFile(file, { status: 'failed' });
-        ledger()[file] = { state: 'failed', ts: Date.now() };
+        ledger()[file] = { state: 'failed', ts: Date.now(), metrics: { spentSec } };
         S.save();
         return { ok: false, failed: true, score: 0, survived: [], totalMutants: 0, error: e.message.slice(0, 500) };
       }
@@ -212,7 +244,7 @@ const routes = {
     }
     const f = state.files[file] || S.upsertFile(file, {});
     const fileMac = mac(f.coverage, r.score);
-    S.upsertFile(file, { mutation: r.score, mac: fileMac, lastSurvived: (r.survived || []).slice(0, 10) });
+    S.upsertFile(file, { mutation: r.score, mac: fileMac, totalMutants: r.totalMutants, lastSurvived: (r.survived || []).slice(0, 10) });
     if (body.phase === 'baseline') {
       S.upsertFile(file, {
         macBefore: fileMac, coverageBefore: f.coverage, mutationBefore: r.score,
@@ -469,6 +501,23 @@ const routes = {
     const f = state.files[file];
     if (!f) throw new Error('unknown file: ' + file);
     S.setStage('preparing_pr', `preparing PR for ${file}`);
+    // human-equivalent timesheet from the cumulative diff (before commit resets nothing:
+    // diff is vs base and includes committed rounds)
+    let ts = null;
+    try {
+      const diffText = await pr.diffAgainstBase();
+      const stats = timesheet.diffStats(diffText);
+      const src = repo.readFileSafe(file, 500000);
+      const mutantsKilled = (f.totalMutants && f.mutationAfter != null && f.mutationBefore != null)
+        ? Math.max(0, Math.round((f.mutationAfter - f.mutationBefore) * f.totalMutants / 100))
+        : Math.ceil(stats.testCases / 2);
+      ts = timesheet.estimate({
+        sourceLines: src ? src.split('\n').length : 0,
+        testCases: stats.testCases, addedTestLines: stats.addedTestLines,
+        mutantsKilled, rounds: f.rounds || 1,
+      });
+      S.event('preparing_pr', `human-equivalent timesheet for ${file}: ${ts.hours} h (analysis ${ts.analysisMin}m + writing ${ts.testsMin}m + mutation ${ts.mutationMin}m + verify ${ts.verifyMin}m)`);
+    } catch (e) { S.event('preparing_pr', 'timesheet estimate skipped: ' + e.message.slice(0, 120)); }
     try {
       await pr.commit(body.title || `test: improve MAC of ${file}`);
     } catch (e) {
@@ -483,13 +532,15 @@ const routes = {
     const rec = await pr.createPr({
       file, branch: f.branch, title: body.title, body: body.body || '', labels: body.labels || [],
     });
-    S.upsertFile(file, { status: 'improved', prUrl: rec.url, prPatch: rec.patchPath });
+    const spentSec = accrueSpent(file);
+    S.upsertFile(file, { status: 'improved', prUrl: rec.url, prPatch: rec.patchPath, timesheet: ts });
     ledger()[file] = {
       state: 'improved', prUrl: rec.url, patchPath: rec.patchPath, branch: f.branch, ts: Date.now(),
       metrics: {
         coverageBefore: f.coverageBefore, coverageAfter: f.coverageAfter,
         mutationBefore: f.mutationBefore, mutationAfter: f.mutationAfter,
         macBefore: f.macBefore, macAfter: f.macAfter,
+        timesheet: ts, spentSec,
       },
     };
     S.save();
@@ -504,10 +555,11 @@ const routes = {
     await repo.resetToBase();
     if (file && state.files[file]) {
       const f = state.files[file];
+      const spentSec = accrueSpent(file);
       if (f.status !== 'failed') {
         const maxAttempts = state.run.config.maxAttemptsPerFile || 3;
         S.upsertFile(file, { status: f.attempts >= maxAttempts ? 'no_improvement' : 'candidate' });
-        if (f.attempts >= maxAttempts) { ledger()[file] = { state: 'exhausted', ts: Date.now() }; S.save(); }
+        if (f.attempts >= maxAttempts) { ledger()[file] = { state: 'exhausted', ts: Date.now(), metrics: { spentSec } }; S.save(); }
       }
     }
     S.event('improving_mac', `discarded changes for ${file}: ${body.reason || 'no MAC improvement'}`);
