@@ -79,6 +79,13 @@ const state = {
   // per-repo cumulative clone/install/baseline seconds, so the FTE ratio counts
   // run overhead and not just per-file work
   overheadLedger: {},
+  // per-repo measurements for EVERY file we ever measured, improved or not:
+  // baseline coverage/mutation/MAC plus what the best attempt reached. Kept
+  // separate from improvedLedger because these entries say nothing about
+  // whether a file is settled — they exist so the numbers survive batches.
+  // { [repoSlug]: { [path]: {coverageBefore, mutationBefore, macBefore,
+  //                          attemptCoverage, attemptMutation, attemptMac, ts} } }
+  measureLedger: {},
 };
 
 function load() {

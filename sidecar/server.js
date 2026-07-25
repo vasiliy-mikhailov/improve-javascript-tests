@@ -41,6 +41,17 @@ function ledger() {
   const slug = slugify(state.run.config.repoUrl);
   return (state.improvedLedger[slug] ||= {});
 }
+/** Per-repo record of every measurement taken, regardless of outcome. */
+function measured() {
+  const slug = slugify(state.run.config.repoUrl);
+  return (state.measureLedger[slug] ||= {});
+}
+function recordMeasurement(file, patch) {
+  const m = measured();
+  m[file] = { ...(m[file] || {}), ...patch, ts: Date.now() };
+  S.save();
+}
+
 /** Close the current attempt's stopwatch into the file's cumulative machine time. */
 function accrueSpent(file) {
   const f = state.files[file];
@@ -69,10 +80,17 @@ function metricsPayload() {
   const remaining = files.filter((f) => f.status === 'candidate' || f.status === 'picked').length;
   const avgSecPerFile = timedSettled.length
     ? timedSettled.reduce((s, f) => s + f.spentSec, 0) / timedSettled.length : null;
+  // FTE must compare like with like: only files whose machine time we actually
+  // measured. (Files improved before the stopwatch existed carry human-equivalent
+  // hours but no machine time, and would inflate the ratio.)
+  const comparable = files.filter((f) => f.timesheet?.totalMin > 0 && f.spentSec > 0);
+  const comparableHumanMin = comparable.reduce((s, f) => s + f.timesheet.totalMin, 0);
+  const comparableMachineSec = comparable.reduce((s, f) => s + f.spentSec, 0);
   const work = {
     humanHours: round2(humanMin / 60),
     machineHours: round2(machineSec / 3600),
-    fte: machineSec > 600 ? round2((humanMin * 60) / machineSec) : null,
+    fte: comparableMachineSec > 600 ? round2((comparableHumanMin * 60) / comparableMachineSec) : null,
+    fteBasis: comparable.length,
     etaSec: avgSecPerFile != null ? Math.round(remaining * avgSecPerFile) : null,
     settled: settled.length,
     improved: settled.filter((f) => f.status === 'improved').length,
@@ -101,6 +119,9 @@ function metricsPayload() {
       coverage: f.coverage, mutation: f.mutation, mac: f.mac,
       coverageBefore: f.coverageBefore, mutationBefore: f.mutationBefore, macBefore: f.macBefore,
       coverageAfter: f.coverageAfter, mutationAfter: f.mutationAfter, macAfter: f.macAfter,
+      // what the best attempt reached even when the result was not kept
+      attemptCoverage: f.attemptCoverage, attemptMutation: f.attemptMutation, attemptMac: f.attemptMac,
+      failure: f.failure,
       prUrl: f.prUrl, prPatch: f.prPatch,
       timesheet: f.timesheet && {
         hours: f.timesheet.hours, totalMin: f.timesheet.totalMin,
@@ -194,6 +215,18 @@ const routes = {
     S.setStage('installing', 'installing dependencies + tooling');
     const det = await repo.install();
     const files = await repo.listScopeFiles();
+    // replay measurements first: every file we ever measured keeps its numbers,
+    // whether or not it was ever improved (status is untouched here)
+    let remeasured = 0;
+    for (const [p, m] of Object.entries(measured())) {
+      if (!state.files[p]) continue;
+      S.upsertFile(p, {
+        coverageBefore: m.coverageBefore, mutationBefore: m.mutationBefore, macBefore: m.macBefore,
+        attemptCoverage: m.attemptCoverage, attemptMutation: m.attemptMutation, attemptMac: m.attemptMac,
+        failure: m.failure,
+      });
+      remeasured += 1;
+    }
     // replay the persistent ledger so finished files are not re-picked
     let replayed = 0;
     for (const [p, rec] of Object.entries(ledger())) {
@@ -203,8 +236,11 @@ const routes = {
         : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 3, ...(rec.metrics || {}) });
       replayed += 1;
     }
-    if (replayed) S.event('installing', `ledger: ${replayed} file(s) already settled in previous runs — skipping them`);
-    return { ok: true, runner: det, scopeFiles: files.length, settledFromLedger: replayed };
+    if (replayed || remeasured) {
+      S.event('installing', `ledger: ${replayed} file(s) already settled in previous runs — skipping them; `
+        + `${remeasured} file(s) restored earlier measurements`);
+    }
+    return { ok: true, runner: det, scopeFiles: files.length, settledFromLedger: replayed, measurementsRestored: remeasured };
   },
 
   'POST /api/coverage/run': async (q, body) => {
@@ -283,8 +319,13 @@ const routes = {
         // one broken file must not sink a full-repo run: record and move on
         S.event('improving_mutation', `stryker failed on ${file} — marking file failed: ${e.message.slice(0, 250)}`);
         const spentSec = accrueSpent(file);
-        S.upsertFile(file, { status: 'failed' });
-        ledger()[file] = { state: 'failed', ts: Date.now(), metrics: { spentSec } };
+        const cov = state.files[file]?.coverage ?? null;
+        S.upsertFile(file, { status: 'failed', coverageBefore: cov, failure: e.message.slice(0, 200) });
+        recordMeasurement(file, { coverageBefore: cov, failure: e.message.slice(0, 200) });
+        ledger()[file] = {
+          state: 'failed', ts: Date.now(),
+          metrics: { spentSec, coverageBefore: cov, failure: e.message.slice(0, 200) },
+        };
         S.save();
         return { ok: false, failed: true, score: 0, survived: [], totalMutants: 0, error: e.message.slice(0, 500) };
       }
@@ -297,6 +338,8 @@ const routes = {
       S.upsertFile(file, {
         macBefore: fileMac, coverageBefore: f.coverage, mutationBefore: r.score,
       });
+      // survives batches even if this file is never improved
+      recordMeasurement(file, { coverageBefore: f.coverage, mutationBefore: r.score, macBefore: fileMac });
       if (state.run.baseline.mutationPct == null) state.run.baseline.mutationPct = r.score;
       state.run.baseline.mac = mac(state.run.baseline.coveragePct, state.run.baseline.mutationPct);
       S.save();
@@ -482,6 +525,12 @@ const routes = {
         || (st.score ?? 0) < (rb.mutation ?? 0) || (macAfter ?? 0) < (rb.mac ?? 0);
       // no changed files → any measured delta is stryker flakiness, not improvement
       const improved = (macAfter ?? 0) > (f.macBefore ?? 0) && changed.length > 0;
+      // remember the best result any attempt reached, even if it is not kept —
+      // "we tried and got this far" is information worth showing
+      const prev = measured()[file] || {};
+      if ((macAfter ?? 0) >= (prev.attemptMac ?? -1)) {
+        recordMeasurement(file, { attemptCoverage: coverageAfter, attemptMutation: st.score, attemptMac: macAfter });
+      }
       S.event('improving_mac', `round ${(f.rounds || 0) + 1} of ${file}: cov ${rb.coverage}→${coverageAfter}, mut ${rb.mutation}→${st.score}, mac ${rb.mac}→${macAfter} — ${improvedAny && !degradedAny ? 'PROGRESS (another round)' : degradedAny ? 'DEGRADED (stop, drop round)' : 'STALE (stop)'}`);
       return {
         ok: true, file, testsGreen: true,
@@ -616,7 +665,21 @@ const routes = {
       if (f.status !== 'failed') {
         const maxAttempts = state.run.config.maxAttemptsPerFile || 3;
         S.upsertFile(file, { status: f.attempts >= maxAttempts ? 'no_improvement' : 'candidate' });
-        if (f.attempts >= maxAttempts) { ledger()[file] = { state: 'exhausted', ts: Date.now(), metrics: { spentSec } }; S.save(); }
+        if (f.attempts >= maxAttempts) {
+          // keep the numbers: a file we could not improve is still a file we measured
+          const m = measured()[file] || {};
+          ledger()[file] = {
+            state: 'exhausted', ts: Date.now(),
+            metrics: {
+              spentSec, attempts: f.attempts,
+              coverageBefore: f.coverageBefore ?? m.coverageBefore,
+              mutationBefore: f.mutationBefore ?? m.mutationBefore,
+              macBefore: f.macBefore ?? m.macBefore,
+              attemptCoverage: m.attemptCoverage, attemptMutation: m.attemptMutation, attemptMac: m.attemptMac,
+            },
+          };
+          S.save();
+        }
       }
     }
     S.event('improving_mac', `discarded changes for ${file}: ${body.reason || 'no MAC improvement'}`);

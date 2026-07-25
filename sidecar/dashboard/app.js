@@ -66,6 +66,12 @@ function render(m) {
   $('c-human').textContent = w.humanHours != null ? fmtHours(w.humanHours) : '–';
   $('c-machine').textContent = w.machineHours != null ? fmtHours(w.machineHours) : '–';
   $('c-fte').textContent = w.fte != null ? w.fte + '×' : '–';
+  const fteCard = $('c-fte').parentElement.querySelector('.d');
+  if (fteCard) {
+    fteCard.textContent = w.fte != null
+      ? `over ${w.fteBasis} file(s) with measured machine time`
+      : 'measuring…';
+  }
   $('c-eta').textContent = w.etaSec != null ? fmtDur(w.etaSec) : '–';
   $('c-eta-d').textContent = w.etaSec != null ? `at current pace, ${w.remaining} file(s) left` : 'measuring pace…';
 
@@ -80,12 +86,18 @@ function render(m) {
     const mutB = f.mutationBefore ?? (f.macBefore != null ? f.mutation : null);
     const macB = f.macBefore ?? (f.mac != null && f.macAfter == null ? f.mac : null);
     const hasAfter = f.macAfter != null;
-    return `<tr class="st-${esc(f.status)}">
+    // not improved, but we did measure what the attempt reached — show it muted
+    // rather than dropping the information on the floor
+    const tried = !hasAfter && (f.attemptMac != null || f.attemptMutation != null);
+    const cell = (kept, attempt, suffix = '%') => hasAfter ? `<b>${fmt(kept, suffix)}</b>`
+      : tried ? `<span class="attempt" title="best attempt — not kept (no net MAC gain)">${fmt(attempt, suffix)}</span>`
+        : '–';
+    return `<tr class="st-${esc(f.status)}"${f.failure ? ` title="${esc(f.failure)}"` : ''}>
     <td class="path">${esc(f.path)}</td>
     <td>${fmt(covB)}</td><td>${fmt(mutB)}</td><td>${fmt(macB, '')}</td>
-    <td>${hasAfter ? `<b>${fmt(f.coverageAfter)}</b>` : '–'}</td>
-    <td>${hasAfter ? `<b>${fmt(f.mutationAfter)}</b>` : '–'}</td>
-    <td>${hasAfter ? `<b>${fmt(f.macAfter, '')}</b>` : '–'}</td>
+    <td>${cell(f.coverageAfter, f.attemptCoverage)}</td>
+    <td>${cell(f.mutationAfter, f.attemptMutation)}</td>
+    <td>${cell(f.macAfter, f.attemptMac, '')}</td>
     <td title="${f.timesheet ? esc(`analysis ${f.timesheet.analysisMin}m · writing ${f.timesheet.testsMin}m · mutation ${f.timesheet.mutationMin}m · verify ${f.timesheet.verifyMin}m`) : ''}">${f.timesheet ? fmtHours(f.timesheet.hours) : '–'}</td>
     <td><span class="badge b-${esc(f.status)}">${esc(f.status)}</span></td>
     <td>${f.prUrl ? `<a href="${esc(f.prUrl)}" target="_blank">PR ↗</a>` : (f.prPatch ? 'patch' : '')}</td>

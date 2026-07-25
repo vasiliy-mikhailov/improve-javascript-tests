@@ -36,6 +36,8 @@ td.path { font-family: ui-monospace, monospace; font-size: 12px; max-width: 420p
 tr.st-picked { background: #1f6feb14; }
 tr.st-improved { background: #3fb95014; }
 
+.attempt { color: #8b949e; font-style: italic; }
+.attempt::after { content: ' ~'; font-style: normal; }
 .badge { border-radius: 20px; padding: 1px 9px; font-size: 11px; background: #30363d; }
 .b-improved { background: #23863633; color: #3fb950; }
 .b-picked { background: #1f6feb33; color: #58a6ff; }
