@@ -63,14 +63,15 @@ function metricsPayload() {
 
 function candidates() {
   const cfg = state.run.config;
+  const maxAttempts = cfg.maxAttemptsPerFile || 3;
   const all = Object.values(state.files);
   const processed = all.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status)).length;
   const list = all
-    .filter((f) => f.status === 'candidate' && f.attempts < 2)
+    .filter((f) => f.status === 'candidate' && f.attempts < maxAttempts)
     .map((f) => ({ path: f.path, coverage: f.coverage, mutation: f.mutation, mac: f.mac, attempts: f.attempts }))
     .sort((a, b) => (a.mac ?? (a.coverage ?? 0) / 2) - (b.mac ?? (b.coverage ?? 0) / 2));
   let done = false, reason = '';
-  if (state.run.iteration >= cfg.maxIterations) { done = true; reason = `max iterations (${cfg.maxIterations}) reached`; }
+  if (cfg.maxIterations > 0 && state.run.iteration >= cfg.maxIterations) { done = true; reason = `max iterations (${cfg.maxIterations}) reached`; }
   else if (cfg.scopeLimit > 0 && processed >= cfg.scopeLimit) { done = true; reason = `scope limit (${cfg.scopeLimit} files) reached`; }
   else if (!list.length) { done = true; reason = 'no remaining candidate files'; }
   return { done, reason, iteration: state.run.iteration, processed, candidates: list.slice(0, 100) };
@@ -129,7 +130,7 @@ const routes = {
       if (!state.files[p]) continue;
       S.upsertFile(p, rec.state === 'improved'
         ? { status: 'improved', prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
-        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', attempts: 2 });
+        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', attempts: state.run.config.maxAttemptsPerFile || 3 });
       replayed += 1;
     }
     if (replayed) S.event('installing', `ledger: ${replayed} file(s) already settled in previous runs — skipping them`);
@@ -502,8 +503,9 @@ const routes = {
     if (file && state.files[file]) {
       const f = state.files[file];
       if (f.status !== 'failed') {
-        S.upsertFile(file, { status: f.attempts >= 2 ? 'no_improvement' : 'candidate' });
-        if (f.attempts >= 2) { ledger()[file] = { state: 'exhausted', ts: Date.now() }; S.save(); }
+        const maxAttempts = state.run.config.maxAttemptsPerFile || 3;
+        S.upsertFile(file, { status: f.attempts >= maxAttempts ? 'no_improvement' : 'candidate' });
+        if (f.attempts >= maxAttempts) { ledger()[file] = { state: 'exhausted', ts: Date.now() }; S.save(); }
       }
     }
     S.event('improving_mac', `discarded changes for ${file}: ${body.reason || 'no MAC improvement'}`);

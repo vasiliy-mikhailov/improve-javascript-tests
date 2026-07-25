@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 const N8N = 'http://127.0.0.1:5678';
 const API = 'http://127.0.0.1:3000';
 const BATCH_FILES = 25;
-const BATCH_MAX_ITER = 60;
+const BATCH_MAX_ITER = 0; // unlimited picks within a batch; scopeLimit bounds it
 const BATCH_TIMEOUT_MS = 12 * 3600e3;
 
 const overrides = process.argv[2] ? JSON.parse(process.argv[2]) : {};

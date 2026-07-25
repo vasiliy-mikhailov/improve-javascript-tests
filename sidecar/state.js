@@ -16,9 +16,10 @@ function envConfig() {
     repoBranch: e.REPO_BRANCH || 'main',
     scopeGlob: e.SCOPE_GLOB || '**/*.{js,ts,jsx,tsx}',
     scopeLimit: parseInt(e.SCOPE_LIMIT || '0', 10),
-    maxIterations: parseInt(e.MAX_ITERATIONS || '10', 10),
+    maxIterations: parseInt(e.MAX_ITERATIONS || '0', 10), // 0 = unlimited
     maxMutantsPerFile: parseInt(e.MAX_MUTANTS_PER_FILE || '5', 10),
     maxRoundsPerFile: parseInt(e.MAX_ROUNDS_PER_FILE || '5', 10),
+    maxAttemptsPerFile: parseInt(e.MAX_ATTEMPTS_PER_FILE || '3', 10),
     prMode: e.PR_MODE || 'github', // github | local
     prBase: e.PR_BASE || '',       // defaults to repoBranch
     setupScript: e.SETUP_SCRIPT || '', // npm script to run after install (e.g. a build)
@@ -38,15 +39,17 @@ function freshRun(overrides = {}) {
   const cfg = envConfig();
   const o = overrides && typeof overrides === 'object' ? overrides : {};
   for (const k of ['repoUrl', 'repoBranch', 'scopeGlob', 'scopeLimit', 'maxIterations',
-    'maxMutantsPerFile', 'maxRoundsPerFile', 'prMode', 'prBase', 'dryRun', 'setupScript']) {
+    'maxMutantsPerFile', 'maxRoundsPerFile', 'maxAttemptsPerFile', 'prMode', 'prBase', 'dryRun', 'setupScript']) {
     if (o[k] !== undefined && o[k] !== null && o[k] !== '') cfg[k] = o[k];
   }
   if (o.rules && typeof o.rules === 'object') {
     for (const k of Object.keys(cfg.rules)) if (o.rules[k] !== undefined) cfg.rules[k] = o.rules[k];
   }
   cfg.scopeLimit = parseInt(cfg.scopeLimit, 10) || 0;
-  cfg.maxIterations = parseInt(cfg.maxIterations, 10) || 10;
+  cfg.maxIterations = Math.max(0, parseInt(cfg.maxIterations, 10) || 0); // 0 = unlimited
   cfg.maxMutantsPerFile = parseInt(cfg.maxMutantsPerFile, 10) || 5;
+  cfg.maxRoundsPerFile = parseInt(cfg.maxRoundsPerFile, 10) || 5;
+  cfg.maxAttemptsPerFile = parseInt(cfg.maxAttemptsPerFile, 10) || 3;
   if (!cfg.prBase) cfg.prBase = cfg.repoBranch;
   return {
     id: 'run-' + Date.now(),
