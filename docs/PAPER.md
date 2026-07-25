@@ -516,9 +516,10 @@ Failure modes met (and fixed) while evaluating against 13 real repos — check t
 | `REPO_URL` / `REPO_BRANCH` | — | target repository and base branch |
 | `SCOPE_GLOB` | `**/*.{js,ts,jsx,tsx}` | comma-separated globs of eligible source files |
 | `SCOPE_LIMIT` | `0` | stop after N files settled (0 = no cap) |
-| `MAX_ITERATIONS` | `10` | max file picks per execution |
+| `MAX_ITERATIONS` | `0` | max file picks per execution (0 = no limit for the repo) |
 | `MAX_MUTANTS_PER_FILE` | `5` | surviving mutants targeted per round |
 | `MAX_ROUNDS_PER_FILE` | `5` | improvement rounds per file (see §2.4) |
+| `MAX_ATTEMPTS_PER_FILE` | `3` | pick attempts per file before it settles as no-improvement |
 | `PR_MODE` | `github` | `github` (real PRs) or `local` (branch + patch artifact) |
 | `PR_BASE` | = `REPO_BRANCH` | PR base branch |
 | `SETUP_SCRIPT` | — | npm script to run after install (e.g. `build`) |
