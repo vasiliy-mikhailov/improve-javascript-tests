@@ -65,7 +65,9 @@ function candidates() {
   const cfg = state.run.config;
   const maxAttempts = cfg.maxAttemptsPerFile || 3;
   const all = Object.values(state.files);
-  const processed = all.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status)).length;
+  // ledger-replayed files were settled in PREVIOUS batches — they must not
+  // consume this batch's scopeLimit quota
+  const processed = all.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status) && !f.fromLedger).length;
   const list = all
     .filter((f) => f.status === 'candidate' && f.attempts < maxAttempts)
     .map((f) => ({ path: f.path, coverage: f.coverage, mutation: f.mutation, mac: f.mac, attempts: f.attempts }))
@@ -129,8 +131,8 @@ const routes = {
     for (const [p, rec] of Object.entries(ledger())) {
       if (!state.files[p]) continue;
       S.upsertFile(p, rec.state === 'improved'
-        ? { status: 'improved', prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
-        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', attempts: state.run.config.maxAttemptsPerFile || 3 });
+        ? { status: 'improved', fromLedger: true, prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
+        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 3 });
       replayed += 1;
     }
     if (replayed) S.event('installing', `ledger: ${replayed} file(s) already settled in previous runs — skipping them`);
