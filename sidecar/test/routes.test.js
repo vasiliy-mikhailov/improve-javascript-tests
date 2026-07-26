@@ -222,36 +222,33 @@ test('stryker/run fails one file softly at baseline instead of sinking the run',
   assert.equal(sb.file(FILE).status, 'failed');
   assert.match(sb.file(FILE).failure, /no report/);
   assert.equal(sb.file(FILE).coverageBefore, 80, 'the coverage we did measure is kept');
-  assert.equal(S.state.improvedLedger[sb.repoSlug][FILE].state, 'failed',
-    'a failed file is settled in the ledger so the next batch does not retry it');
+  assert.equal(S.state.improvedLedger[sb.repoSlug]?.[FILE], undefined,
+    'ONE crash must not settle the file — the ledger is replayed in every later batch, '
+    + 'so a timeout would blacklist it forever');
+  assert.equal(S.state.measureLedger[sb.repoSlug][FILE].baselineCrashes, 1,
+    'but the crash is counted, so a file that always crashes still settles');
   assert.match(S.state.measureLedger[sb.repoSlug][FILE].failure, /no report/);
   assert.equal(S.state.run.status, 'running', 'one broken file must not end the run');
 }));
 
-test('a soft baseline failure un-picks the file, and nothing downstream notices', () => withSandbox(async (sb) => {
-  // REPORTED, NOT FIXED. The soft fail marks the file `failed` — which also means
-  // pickedFile() now finds nobody. The workflow chains Baseline Mutation →
-  // Coverage Gaps unconditionally (no IF on `failed`), so a full generation cycle
-  // is still spent on this file, and every token of it is attributed to no file
-  // at all (state.recordTokens / recordDialog both key off the picked file). The
-  // ledger entry below was written before that spend and never learns about it.
+test('a soft baseline failure un-picks the file, so the workflow must route around it', () => withSandbox(async (sb) => {
+  // The soft fail marks the file `failed`, which also means pickedFile() finds
+  // nobody. Everything downstream keys off the picked file — recordTokens,
+  // recordDialog, the stale-survivors flag — so continuing into the coverage and
+  // mutant phases would spend model time on work attributed to no file at all and
+  // evaluated against no baseline. "Baseline OK?" is the IF that routes around it;
+  // this test pins the state that condition reads.
   const w = await started(sb, { coverageWithTests: 80, existingTest: 'test/a.test.ts', mutants: [{ line: 10 }] });
   await sb.post('/api/coverage/run', { phase: 'baseline' });
   await sb.post('/api/iteration/start', { file: FILE });
   w.failNext('stryker', new Error('stryker produced no report (exit 1)'));
-  await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+
+  const r = await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+
+  assert.equal(r.failed, true, 'the flag the Baseline OK? condition branches on');
   assert.equal(sb.file(FILE).status, 'failed');
-
-  // the coverage phase runs on regardless, and its bootstrap marks nothing stale
-  const r = await sb.post('/api/test/write-many', {
-    stage: 'improving_coverage',
-    tests: [{ path: KILL_TEST, content: w.testSource({ target: FILE }) }],
-  });
-
-  assert.deepEqual(r.written, [KILL_TEST], 'the tests are written anyway');
-  assert.equal(sb.file(FILE).survivorsStale, undefined, 'but no file is "picked", so nothing is flagged');
-  assert.equal(S.state.improvedLedger[sb.repoSlug][FILE].metrics.tokens, undefined,
-    'and the settled ledger entry records no cost for work that is still to come');
+  assert.equal(sb.file(FILE).failedKind, 'measurement',
+    'a measurement crash is tagged, so it does not spend the scope quota meant for improvements');
 }));
 
 test('stryker/run outside the baseline phase lets the error through', () => withSandbox(async (sb) => {
@@ -657,11 +654,14 @@ test('mutant/verify treats an unverifiable kill as no kill', () => withSandbox(a
   assert.equal(r.killed, false);
   assert.match(r.reason, /mutation re-run failed/);
   assert.equal(w.exists(KILL_TEST), false, 'an unverified test is discarded, not committed on faith');
-  assert.equal(sb.file(FILE).mutantFailures, 1);
+  // the test goes, but the MUTANT is not judged: Stryker crashing says nothing
+  // about whether that mutant is killable, so it keeps its one shot
+  assert.equal(sb.file(FILE).mutantFailures || 0, 0, 'an infrastructure failure spends no budget');
+  assert.deepEqual(sb.file(FILE).mutantAttempts || {}, {}, 'and retires nothing');
   assert.equal(sb.file(FILE).mutation, 0, 'the last known-good measurement is left alone');
 }));
 
-test('mutant/verify charges an attempt when the model produced no test at all', () => withSandbox(async (sb) => {
+test('mutant/verify does NOT charge an attempt when the model produced no test at all', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
   const next = await sb.get('/api/mutant/next', { path: FILE });
   const suiteRuns = w.calls.tests.length;
@@ -672,8 +672,12 @@ test('mutant/verify charges an attempt when the model produced no test at all', 
   assert.equal(r.reason, 'no test was written');
   assert.equal(w.calls.tests.length, suiteRuns, 'nothing changed, so nothing is run');
   const f = sb.file(FILE);
-  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], 1);
-  assert.equal(f.mutantFailures, 1);
+  // A mutant's one shot is spent by EVIDENCE — a test was written and it survived.
+  // An empty answer is evidence of nothing, and the failure budget exists to stop
+  // wasted tests, not to let a truncated reply end the loop.
+  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], undefined);
+  assert.equal(f.mutantFailures || 0, 0);
+  assert.equal(f.mutantGenFailures, 1, 'it is counted separately, with its own ceiling');
 }));
 
 test('BUG-3 REGRESSION: a target past the 100-survivor cap is not reported as killed', () => withSandbox(async (sb) => {
@@ -983,7 +987,7 @@ test('test/cleanup reverts a tidy-up that drops the mutation score', () => withS
   assert.equal(r.reverted, true);
   assert.equal(w.read(KILL_TEST), original, 'the original test is put back byte for byte');
   assert.equal(sb.file(FILE).mutationAfter, 50, 'and the recorded score is untouched');
-  assert.match(log(sb), /cleanup reverted: mutation score dropped to 0/);
+  assert.match(log(sb), /cleanup reverted: mutation 50→0/);
 }));
 
 test('test/cleanup ignores an implausible answer without touching the suite', () => withSandbox(async (sb) => {

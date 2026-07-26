@@ -1,4 +1,4 @@
-// The 10 IF conditions, keyed by node name.
+// The 11 IF conditions, keyed by node name.
 //
 // An n8n IF node evaluates its own expression — it cannot call our code — so unlike
 // the Code nodes these stay as expression STRINGS. They live here anyway so that the
@@ -15,6 +15,11 @@ export const CONDITIONS = {
   // pick failed: transient (bad LLM output) → try again; terminal (rule excludes
   // every candidate) → finish. The sidecar caps consecutive transient retries.
   'Pick Retryable?': '={{ ($json.result && $json.result.retry) ? 1 : 0 }}',
+  // A crashed baseline measurement means there is nothing to improve AGAINST: with no
+  // survivor list and no score, every later phase would spend model time producing
+  // work that cannot be evaluated — and the sidecar has already un-picked the file,
+  // so the tokens would be attributed to nobody.
+  'Baseline OK?': '={{ $json.failed ? 0 : 1 }}',
   'Cov: Has Work?': '={{ $json.skip ? 0 : 1 }}',
   'Cov: Green?': '={{ $json.passed ? 1 : 0 }}',
   // nothing was written, so there is nothing to repair — skip straight to Done
@@ -33,6 +38,7 @@ export const COMPARISONS = {
   'More Work?': { operation: 'equal', value2: 1 },
   'File Picked?': { operation: 'equal', value2: 1 },
   'Pick Retryable?': { operation: 'equal', value2: 1 },
+  'Baseline OK?': { operation: 'equal', value2: 1 },
   'Cov: Has Work?': { operation: 'equal', value2: 1 },
   'Cov: Green?': { operation: 'equal', value2: 1 },
   'Cov: Wrote Any?': { operation: 'larger', value2: 0 },

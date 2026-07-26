@@ -71,6 +71,7 @@ const BRANCHES = {
   'More Work?': ['Rules: pick file', 'Finish Run'],
   'File Picked?': ['Start Iteration', 'Pick Retryable?'],
   'Pick Retryable?': ['Next Iteration', 'Finish Run'],
+  'Baseline OK?': ['Coverage Gaps', 'Iteration Done'],
   'Cov: Has Work?': ['Cov: LLM Write Tests', 'Cov: Done'],
   'Cov: Green?': ['Cov: Done', 'Cov: Wrote Any?'],
   'Cov: Wrote Any?': ['Cov: Build Repair', 'Cov: Done'],
@@ -107,8 +108,8 @@ test('the evaluator refuses what it cannot resolve', () => {
   assert.equal(evaluate('={{ $json.done ? 0 : 1 }}', { json: {} }), 1);
 });
 
-test('condition() is the single source for all 10 IF nodes', () => {
-  assert.equal(Object.keys(CONDITIONS).length, 10);
+test('condition() is the single source for all 11 IF nodes', () => {
+  assert.equal(Object.keys(CONDITIONS).length, 11);
   assert.deepEqual(Object.keys(COMPARISONS).sort(), Object.keys(CONDITIONS).sort());
   assert.deepEqual(Object.keys(BRANCHES).sort(), Object.keys(CONDITIONS).sort());
   assert.throws(() => condition('Wrote Any?'), /no condition registered/);   // near-miss name
@@ -119,7 +120,7 @@ test('condition() is the single source for all 10 IF nodes', () => {
 // the generated workflow must agree with the module the tables below exercise
 // =============================================================================
 test('every IF node in the workflow carries exactly the registered condition', () => {
-  assert.equal(ifNodes.length, 10, 'workflow has a different number of IF nodes than conditions.js knows');
+  assert.equal(ifNodes.length, 11, 'workflow has a different number of IF nodes than conditions.js knows');
   for (const n of ifNodes) {
     assert.deepEqual(n.parameters.conditions.number, [condition(n.name)], `${n.name}: expression drifted from conditions.js`);
     assert.equal(n.typeVersion, 1, `${n.name}: IF v2+ uses a different parameter shape than this test models`);
@@ -367,11 +368,22 @@ test('no condition throws on an empty response from its own node', () => {
   for (const name of Object.keys(CONDITIONS)) {
     const idx = branchOf(name, { json: {}, nodes });
     assert.ok(idx === 0 || idx === 1, `${name} produced ${idx}`);
-    // Exactly two conditions fail OPEN on an empty response — More Work? (keep
-    // iterating) and Cov: Has Work? (write tests anyway). Both cost an LLM call but
-    // are self-limiting: the pick fails, or the prompt is nonsense and gets deleted.
+    // Three conditions fail OPEN on an empty response — More Work? (keep iterating),
+    // Cov: Has Work? (write tests anyway) and Baseline OK? (an absent `failed` flag
+    // means the run did not crash). All three are self-limiting: the pick fails, the
+    // prompt is nonsense and gets deleted, or the empty survivor list ends the loop.
     // The other eight fail CLOSED: no repair, no kill, no extra round, no PR.
-    const expected = name === 'More Work?' || name === 'Cov: Has Work?' ? 0 : 1;
+    const expected = ['More Work?', 'Cov: Has Work?', 'Baseline OK?'].includes(name) ? 0 : 1;
     assert.equal(idx, expected, `${name}: empty input changed which way it fails`);
   }
+});
+
+test('Baseline OK? routes a file whose baseline could not be measured to the next iteration', () => {
+  // /api/stryker/run answers { ok: false, failed: true, ... } when the baseline
+  // crashes, and a normal run never carries `failed` at all.
+  assert.equal(branchOf('Baseline OK?', { json: { ok: false, failed: true, score: 0, survived: [] } }), 1,
+    'a crashed baseline takes the false branch, straight to Iteration Done');
+  assert.equal(branchOf('Baseline OK?', { json: { ok: true, score: 42, survived: [], totalMutants: 10 } }), 0);
+  assert.equal(branchOf('Baseline OK?', { json: { ok: true, score: 0, survived: [], noTests: true } }), 0,
+    'a file with no tests yet is NOT a failure — that is what the coverage bootstrap is for');
 });

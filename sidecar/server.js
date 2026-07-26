@@ -160,7 +160,8 @@ function candidates() {
   const all = Object.values(state.files);
   // ledger-replayed files were settled in PREVIOUS batches — they must not
   // consume this batch's scopeLimit quota
-  const processed = all.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status) && !f.fromLedger).length;
+  const processed = all.filter((f) => ['improved', 'no_improvement', 'failed'].includes(f.status)
+    && !f.fromLedger && f.failedKind !== 'measurement').length;
   const list = all
     .filter((f) => f.status === 'candidate' && f.attempts < maxAttempts)
     .map((f) => ({ path: f.path, coverage: f.coverage, mutation: f.mutation, mac: f.mac, attempts: f.attempts }))
@@ -327,6 +328,7 @@ const routes = {
       status: 'picked', branch, attempts: state.files[file].attempts + 1,
       rounds: 0, roundBase: null, lastSurvived: null,
       mutantAttempts: {}, mutantAttemptCount: 0, mutantFailures: 0, mutantsKilled: 0,
+      mutantNoOutput: {}, mutantGenFailures: 0,
       attemptStartedAt: Math.floor(Date.now() / 1000),
     });
     S.save();
@@ -347,12 +349,21 @@ const routes = {
         S.event('improving_mutation', `stryker failed on ${file} — marking file failed: ${e.message.slice(0, 250)}`);
         const spentSec = accrueSpent(file);
         const cov = state.files[file]?.coverage ?? null;
-        S.upsertFile(file, { status: 'failed', coverageBefore: cov, failure: e.message.slice(0, 200) });
-        recordMeasurement(file, { coverageBefore: cov, failure: e.message.slice(0, 200) });
-        ledger()[file] = {
-          state: 'failed', ts: Date.now(),
-          metrics: { spentSec, tokens: state.files[file]?.tokens, coverageBefore: cov, failure: e.message.slice(0, 200) },
-        };
+        // Settling it in the ledger is PERMANENT — replayed in every later batch — so
+        // one timeout or OOM would blacklist a file forever. Let it come back until
+        // it has failed as often as any other file is allowed to be attempted.
+        const crashes = (measured()[file]?.baselineCrashes || 0) + 1;
+        const settled = crashes >= (state.run.config.maxAttemptsPerFile || 3);
+        S.upsertFile(file, {
+          status: 'failed', failedKind: 'measurement', coverageBefore: cov, failure: e.message.slice(0, 200),
+        });
+        recordMeasurement(file, { coverageBefore: cov, failure: e.message.slice(0, 200), baselineCrashes: crashes });
+        if (settled) {
+          ledger()[file] = {
+            state: 'failed', ts: Date.now(),
+            metrics: { spentSec, tokens: state.files[file]?.tokens, coverageBefore: cov, failure: e.message.slice(0, 200) },
+          };
+        }
         S.save();
         return { ok: false, failed: true, score: 0, survived: [], totalMutants: 0, error: e.message.slice(0, 500) };
       }
@@ -512,23 +523,39 @@ const routes = {
     const touched = results.filter((r) => r.kept === 'cleaned');
     const publicResults = results.map(({ _original, ...r }) => r);
     if (!touched.length) return { ok: true, cleaned: 0, results: publicResults };
-    // verified cleanup: suite must stay green AND mutation score must not drop
-    const suite = await tests.runTests(null);
-    let newScore = null, scoreOk = false;
-    if (suite.passed) {
+    // Verified cleanup: the suite stays green and NEITHER HALF of MAC may drop.
+    // Checking the mutation score alone let cleanup delete the bootstrap coverage
+    // test — which is exactly the "vacuous" shape it is told to remove — for free:
+    // deleting a test moves its mutants from `survived` to `nocoverage`, and both
+    // sit in the score's denominator, so the score does not move while coverage
+    // collapses. The PR body, written before cleanup, would then advertise coverage
+    // the branch no longer delivers.
+    const covBase = f.coverageAfter ?? f.coverage ?? 0;   // snapshot first: runCoverage overwrites it
+    const mutBase = f.mutationAfter ?? f.mutation ?? 0;
+    let newScore = null, newCov = null, ok = false, why = '';
+    const cr = await coverage.runCoverage();              // this runs the whole suite too
+    if (cr.exitCode !== 0) why = 'suite went red';
+    else {
+      newCov = state.files[file]?.coverage ?? null;
       try {
         const st = await stryker.runStryker(file);
         newScore = st.score;
-        scoreOk = newScore >= (f.mutationAfter ?? f.mutation ?? 0);
-      } catch { scoreOk = false; }
+        ok = newScore >= mutBase && (newCov ?? 0) >= covBase;
+        if (!ok) why = `mutation ${mutBase}→${newScore}, coverage ${covBase}→${newCov}`;
+      } catch (e) { why = 'could not re-measure: ' + e.message.slice(0, 120); }
     }
-    if (!suite.passed || !scoreOk) {
+    if (!ok) {
       for (const t of touched) repo.writeTestFile(t.path, t._original);
-      S.event('preparing_pr', `cleanup reverted: ${!suite.passed ? 'suite went red' : 'mutation score dropped to ' + newScore}`);
+      // runCoverage already wrote the post-cleanup number into state — put it back
+      S.upsertFile(file, { coverage: covBase, coverageAfter: covBase });
+      S.event('preparing_pr', `cleanup reverted: ${why}`);
       return { ok: true, cleaned: 0, reverted: true, results: publicResults };
     }
-    const cov = f.coverageAfter ?? f.coverage;
-    S.upsertFile(file, { mutation: newScore, mutationAfter: newScore, mac: mac(cov, newScore), macAfter: mac(cov, newScore) });
+    const cov = newCov ?? covBase;
+    S.upsertFile(file, {
+      coverage: cov, coverageAfter: cov,
+      mutation: newScore, mutationAfter: newScore, mac: mac(cov, newScore), macAfter: mac(cov, newScore),
+    });
     // cleaned files are edits on top of committed rounds — commit them so the PR carries them
     try { await pr.commit(`test: tidy generated tests for ${file}`); }
     catch (e) { S.event('preparing_pr', 'cleanup commit note: ' + e.message.slice(0, 160)); }
@@ -556,6 +583,14 @@ const routes = {
     if (spent >= hardCeiling) {
       return { ok: true, mutant: null, done: true, reason: `hard attempt ceiling ${hardCeiling} reached (${f.mutantsKilled || 0} killed)` };
     }
+    // Generation failures do not retire mutants, so they need their own stop: without
+    // one, an unhealthy endpoint would keep the loop cycling the same survivors.
+    if ((f.mutantGenFailures || 0) >= budget * 3) {
+      return {
+        ok: true, mutant: null, done: true,
+        reason: `no usable test was generated ${f.mutantGenFailures} times — the model endpoint looks unhealthy`,
+      };
+    }
     // A stale list is not evidence of "nothing left to kill". Re-measure before
     // giving up: the coverage bootstrap just made the file executable, so mutants
     // that were unreachable (or invisible, when the baseline run found no tests at
@@ -576,7 +611,11 @@ const routes = {
       }
     }
     const cur = state.files[p];
-    const candidates = mutantsMod.shortlist(cur.lastSurvived || [], { attempts: cur.mutantAttempts || {} });
+    // a mutant we could not write a test for a few times running is parked, so one
+    // pathological target cannot pin the loop to itself
+    const misses = cur.mutantNoOutput || {};
+    const writable = (cur.lastSurvived || []).filter((m) => (misses[mutantsMod.mutantKey(m)] || 0) < 3);
+    const candidates = mutantsMod.shortlist(writable, { attempts: cur.mutantAttempts || {} });
     if (!candidates.length) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
 
     const source = repo.readFileSafe(p, 24000);
@@ -669,8 +708,27 @@ const routes = {
       });
     };
     const drop = () => { for (const p of testPaths) repo.deleteTestFile(p); };
+    // A mutant's one shot is spent by EVIDENCE — a test was written and the mutant
+    // survived it. "The model returned nothing" and "the verification run crashed"
+    // are evidence of nothing: retiring the target there discards a killable mutant
+    // that was never attacked, and charging the failure budget lets a broken
+    // generator or a flaky Stryker end the loop while the file is still improvable.
+    const miss = (why) => {
+      const misses = { ...(f.mutantNoOutput || {}) };
+      misses[key] = (misses[key] || 0) + 1;
+      S.upsertFile(file, {
+        mutantNoOutput: misses,
+        mutantAttemptCount: (f.mutantAttemptCount || 0) + 1,
+        mutantGenFailures: (f.mutantGenFailures || 0) + 1,
+      });
+      S.event('improving_mutation', `${why} for ${mutant.mutator} at line ${mutant.line} `
+        + `— the target stays on the queue (miss ${misses[key]})`);
+    };
 
-    if (!testPaths.length) { bump(false, false); return { ok: true, killed: false, reason: 'no test was written' }; }
+    if (!testPaths.length) {
+      miss('no usable test was generated');
+      return { ok: true, killed: false, noTest: true, reason: 'no test was written' };
+    }
 
     // 1. the suite must stay green — a test that breaks the build is never worth keeping
     S.setStage('improving_mutation', `checking suite after targeting ${mutant.mutator} at line ${mutant.line}`);
@@ -713,6 +771,11 @@ const routes = {
     // improvement even when the chosen target turns out to be equivalent.
     // three independent signals, any of which means the test did real work:
     // the target died, the survivor count fell, or the score rose.
+    if (note) {
+      drop();
+      miss(note);
+      return { ok: true, killed: false, killedCount: 0, reason: note, testPaths };
+    }
     const worthKeeping = killedTarget || killedCount > 0 || scoreRose;
     // The TARGET is retired unless it actually died — one shot per mutant, whatever
     // else the test achieved. The failure budget, by contrast, is only charged when

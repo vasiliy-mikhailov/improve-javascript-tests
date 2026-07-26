@@ -107,7 +107,9 @@ chain('Start Run', 'Clone Repo', 'Rules: post-clone', 'Install & Detect', 'Basel
 link('More Work?', 'Rules: pick file', 0);
 link('Rules: pick file', 'File Picked?');
 link('File Picked?', 'Start Iteration', 0);
-chain('Start Iteration', 'Baseline Mutation', 'Coverage Gaps');
+IfNum('Baseline OK?');
+chain('Start Iteration', 'Baseline Mutation', 'Baseline OK?');
+link('Baseline OK?', 'Coverage Gaps', 0);
 
 // =============================================================================
 // IMPROVEMENT PHASE (generic: coverage / mutation)
@@ -240,6 +242,8 @@ link('Cleanup Tests', 'Rules: make PR');
 link('Approved?', 'Discard Changes', 1);
 chain('Rules: make PR', 'Create PR', 'Iteration Done');
 link('Discard Changes', 'Iteration Done');
+// a file whose baseline could not be measured goes straight to the next one
+link('Baseline OK?', 'Iteration Done', 1);
 link('Iteration Done', 'Next Iteration');
 link('More Work?', 'Finish Run', 1);
 link('File Picked?', 'Pick Retryable?', 1);
