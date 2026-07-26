@@ -640,6 +640,24 @@ const routes = {
       const seen = (r.totalMutants || 0) > 0;
       killed = seen && !stillAlive;
       if (!seen) note = 'target not present in the range run — treating as not killed';
+
+      // Prune the survivor list with what this range run just proved. Without this
+      // the loop re-picks a mutant it already killed (the list is only rebuilt by
+      // FULL runs) and commits a duplicate test for a corpse. Mutants outside the
+      // verified range are left untouched — we learned nothing about them.
+      if (seen) {
+        const aliveInRange = new Set((r.survived || []).map(mutantsMod.mutantKey));
+        const before = (f.lastSurvived || []).length;
+        const pruned = (f.lastSurvived || []).filter((s) => {
+          const inRange = s.line >= range.from && s.line <= range.to;
+          return inRange ? aliveInRange.has(mutantsMod.mutantKey(s)) : true;
+        });
+        if (pruned.length !== before) {
+          S.upsertFile(file, { lastSurvived: pruned });
+          S.event('improving_mutation', `survivor list: ${before - pruned.length} mutant(s) in lines `
+            + `${range.from}-${range.to} confirmed dead and removed from the queue`);
+        }
+      }
     } catch (e) { note = 'kill check failed: ' + e.message.slice(0, 160); }
 
     if (!killed) {
