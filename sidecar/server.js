@@ -875,7 +875,18 @@ const routes = {
         totalMutants: r.totalMutants,
         mac: mac(f.coverageAfter ?? f.coverage, r.score),
       });
-      recordMeasurement(file, { attemptMutation: r.score, attemptMac: mac(f.coverageAfter ?? f.coverage, r.score) });
+      // Both places, deliberately. recordMeasurement writes the per-repo ledger, which
+      // outlives the run; the file record is what /api/metrics reads and the dashboard
+      // renders. Writing only the ledger meant a file three hours into a round with 85
+      // mutants dead rendered as a blank row — the progress was recorded where nothing
+      // displays it, so the pipeline looked stuck while it was working.
+      const attemptCov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
+      const attemptMac = mac(attemptCov, r.score);
+      recordMeasurement(file, { attemptMutation: r.score, attemptMac });
+      const prevBest = state.files[file]?.attemptMac ?? -1;
+      if ((attemptMac ?? 0) >= prevBest) {
+        S.upsertFile(file, { attemptCoverage: attemptCov, attemptMutation: r.score, attemptMac });
+      }
     } catch (e) {
       note = note || ('mutation re-run failed: ' + e.message.slice(0, 160));
     }

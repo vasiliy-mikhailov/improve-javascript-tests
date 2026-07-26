@@ -172,3 +172,30 @@ test('progress counts every settled disposition, not just the wins', () => withS
   assert.equal(m.work.remaining, 2, 'a picked file is still remaining — it has not landed yet');
   assert.equal(m.work.totalFiles, 5);
 }));
+
+test('a kill mid-round shows up on the dashboard before the round ends', () => withSandbox(async (sb) => {
+  // The dashboard's "after" columns render coverageAfter/mutationAfter/macAfter, which
+  // /api/verify writes at the END of a round, and fall back to attemptCoverage/
+  // attemptMutation/attemptMac — the best any attempt reached. Those three ARE recorded
+  // on every kill, but into the measure LEDGER, while metricsPayload reads them off the
+  // file record. The two never meet during a run, so a file three hours into a round
+  // with 85 mutants dead renders as a blank row and looks stuck.
+  const w = installFakes(sb);
+  await sb.start();
+  // an existing test, or the baseline mutation run reports "no tests executed" and the
+  // loop has no survivors to pick from
+  w.addFile({ path: 'src/a.ts', existingTest: 'test/a.test.ts', coverageWithTests: 80,
+    mutants: [{ line: 10 }, { line: 20 }, { line: 30 }, { line: 40 }] });
+  await sb.post('/api/coverage/run', { phase: 'baseline' });
+  await sb.post('/api/iteration/start', { file: 'src/a.ts' });
+  await sb.post('/api/stryker/run', { file: 'src/a.ts', phase: 'baseline' });
+  const target = (await sb.get('/api/mutant/next', { path: 'src/a.ts' })).mutant;
+  w.writeTest('test/a-kill.test.ts', { target: 'src/a.ts', kills: [target.line] });
+
+  await sb.post('/api/mutant/verify', { file: 'src/a.ts', mutant: target, testPaths: ['test/a-kill.test.ts'], phase: 'thinking' });
+
+  const row = (await sb.get('/api/metrics')).files.find((f) => f.path === 'src/a.ts');
+  assert.ok((row.attemptMutation ?? 0) > 0,
+    `the row must show the score this attempt reached — got ${JSON.stringify(row.attemptMutation)}`);
+  assert.ok((row.attemptMac ?? 0) > 0, 'and the MAC that follows from it');
+}));
