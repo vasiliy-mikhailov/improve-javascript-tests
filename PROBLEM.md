@@ -43,4 +43,8 @@
   and the human-FTE equivalent** (human-equivalent hours ÷ machine hours: how many engineers
   working in parallel the pipeline replaces).
 
+- 2026-07-25 (iteration 7): **measure LLM token usage** — count input (prompt) and output
+  (completion) tokens for every model call, attribute them to the file being worked on, and show
+  them per file and cumulatively on the dashboard alongside the time accounting.
+
 See RESEARCH.md for the derived DoD and reward formula, eval/RESULTS.md for iteration history.

@@ -2,7 +2,8 @@
 // JSON-file-backed state store. Single-process, in-memory with debounced flush.
 const fs = require('node:fs');
 const path = require('node:path');
-const { nowSec, redact } = require('./util');
+const { nowSec, redact, slugify } = require('./util');
+const { addUsage } = require('./tokens');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -86,7 +87,23 @@ const state = {
   // { [repoSlug]: { [path]: {coverageBefore, mutationBefore, macBefore,
   //                          attemptCoverage, attemptMutation, attemptMac, ts} } }
   measureLedger: {},
+  // per-repo cumulative LLM spend { in, out, calls }, survives run/start
+  tokenLedger: {},
 };
+
+/**
+ * Count one model response. Attributed three ways: to the file currently being
+ * worked on (so a PR can say what it cost), to the run, and to a per-repo
+ * accumulator that outlives batches.
+ */
+function recordTokens(usage) {
+  const slug = slugify(state.run?.config?.repoUrl || '');
+  state.tokenLedger[slug] = addUsage(state.tokenLedger[slug], usage);
+  if (state.run) state.run.tokens = addUsage(state.run.tokens, usage);
+  const picked = Object.values(state.files).find((f) => f.status === 'picked');
+  if (picked) picked.tokens = addUsage(picked.tokens, usage);
+  save();
+}
 
 function load() {
   try {
@@ -150,4 +167,7 @@ function upsertFile(p, patch) {
   return f;
 }
 
-module.exports = { state, load, save, event, setStage, setProgress, upsertFile, freshRun, envConfig, DATA_DIR };
+module.exports = {
+  state, load, save, event, setStage, setProgress, upsertFile, recordTokens,
+  freshRun, envConfig, DATA_DIR,
+};

@@ -86,7 +86,12 @@ function metricsPayload() {
   const comparable = files.filter((f) => f.timesheet?.totalMin > 0 && f.spentSec > 0);
   const comparableHumanMin = comparable.reduce((s, f) => s + f.timesheet.totalMin, 0);
   const comparableMachineSec = comparable.reduce((s, f) => s + f.spentSec, 0);
+  const tok = state.tokenLedger?.[slugify(state.run?.config?.repoUrl || '')] || { in: 0, out: 0, calls: 0 };
   const work = {
+    tokensIn: tok.in || 0,
+    tokensOut: tok.out || 0,
+    llmCalls: tok.calls || 0,
+    tokensPerImprovedFile: null,   // filled below once `improved` is known
     humanHours: round2(humanMin / 60),
     machineHours: round2(machineSec / 3600),
     fte: comparableMachineSec > 600 ? round2((comparableHumanMin * 60) / comparableMachineSec) : null,
@@ -97,6 +102,12 @@ function metricsPayload() {
     totalFiles: files.length,
     remaining,
   };
+  // like-for-like again: only files that were improved AND have token data
+  const tokenedImproved = files.filter((f) => f.status === 'improved' && f.tokens?.calls > 0);
+  const tokenedSum = tokenedImproved.reduce((s2, f) => s2 + (f.tokens.in || 0) + (f.tokens.out || 0), 0);
+  work.tokensPerImprovedFile = tokenedImproved.length
+    ? Math.round(tokenedSum / tokenedImproved.length) : null;
+  work.tokensBasis = tokenedImproved.length;
   return {
     work,
     stage: state.stage,
@@ -122,6 +133,7 @@ function metricsPayload() {
       // what the best attempt reached even when the result was not kept
       attemptCoverage: f.attemptCoverage, attemptMutation: f.attemptMutation, attemptMac: f.attemptMac,
       failure: f.failure,
+      tokens: f.tokens,
       prUrl: f.prUrl, prPatch: f.prPatch,
       timesheet: f.timesheet && {
         hours: f.timesheet.hours, totalMin: f.timesheet.totalMin,
@@ -324,7 +336,7 @@ const routes = {
         recordMeasurement(file, { coverageBefore: cov, failure: e.message.slice(0, 200) });
         ledger()[file] = {
           state: 'failed', ts: Date.now(),
-          metrics: { spentSec, coverageBefore: cov, failure: e.message.slice(0, 200) },
+          metrics: { spentSec, tokens: state.files[file]?.tokens, coverageBefore: cov, failure: e.message.slice(0, 200) },
         };
         S.save();
         return { ok: false, failed: true, score: 0, survived: [], totalMutants: 0, error: e.message.slice(0, 500) };
@@ -595,6 +607,7 @@ const routes = {
       mutationBefore: f.mutationBefore, mutationAfter: rb.mutation,
       macBefore: f.macBefore, macAfter: rb.mac,
       improved, rounds: f.rounds || 0,
+      tokens: f.tokens,
       changedFiles: changed,
       diff: diff.slice(0, 30000),
       branch: f.branch,
@@ -646,7 +659,7 @@ const routes = {
         coverageBefore: f.coverageBefore, coverageAfter: f.coverageAfter,
         mutationBefore: f.mutationBefore, mutationAfter: f.mutationAfter,
         macBefore: f.macBefore, macAfter: f.macAfter,
-        timesheet: ts, spentSec,
+        timesheet: ts, spentSec, tokens: f.tokens,
       },
     };
     S.save();
@@ -671,7 +684,7 @@ const routes = {
           ledger()[file] = {
             state: 'exhausted', ts: Date.now(),
             metrics: {
-              spentSec, attempts: f.attempts,
+              spentSec, attempts: f.attempts, tokens: f.tokens,
               coverageBefore: f.coverageBefore ?? m.coverageBefore,
               mutationBefore: f.mutationBefore ?? m.mutationBefore,
               macBefore: f.macBefore ?? m.macBefore,

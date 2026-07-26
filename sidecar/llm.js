@@ -1,7 +1,7 @@
 'use strict';
 // OpenAI-compatible chat client for the vLLM endpoint (qwen), zero-dep via global fetch.
 const { extractJson } = require('./util');
-const { event } = require('./state');
+const { event, recordTokens } = require('./state');
 
 const BASE = (process.env.LLM_BASE_URL || '').replace(/\/$/, '');
 const KEY = process.env.LLM_API_KEY || '';
@@ -59,6 +59,9 @@ async function post(body, attempt = 0) {
       throw new Error(`LLM HTTP ${res.status}: ${errText}`);
     }
     const data = await res.json();
+    // every call is counted, including the JSON-repair retry below: that is real
+    // spend, and hiding it would understate the cost of a flaky response
+    recordTokens(data.usage);
     return data.choices?.[0]?.message?.content || '';
   } catch (e) {
     if (attempt < 2 && /abort|network|fetch failed|ECONN/i.test(String(e.message))) {

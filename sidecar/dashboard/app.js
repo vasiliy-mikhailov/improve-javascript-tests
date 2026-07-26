@@ -17,6 +17,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (x, suf = '%') => (x == null ? '–' : (Math.round(x * 100) / 100) + suf);
 const fmtHours = (h) => h >= 8 ? `${Math.round(h / 8 * 10) / 10} d (${Math.round(h * 10) / 10} h)` : `${Math.round(h * 10) / 10} h`;
+const fmtTok = (n) => {
+  const v = Number(n) || 0;
+  if (v >= 1e6) return (Math.round(v / 1e5) / 10) + 'M';
+  if (v >= 1e3) return (Math.round(v / 1e2) / 10) + 'k';
+  return String(v);
+};
 const fmtDur = (sec) => {
   const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
@@ -54,7 +60,7 @@ function render(m) {
   $('c-mac').textContent = fmt(m.totals?.avgMacAfter, '');
   $('c-mac-d').textContent = m.totals?.avgMacBefore != null ? `before ${fmt(m.totals.avgMacBefore, '')} (targeted files)` : '';
   $('c-iter').textContent = m.run ? m.run.iteration : '–';
-  $('c-iter-d').textContent = cfg ? `of max ${cfg.maxIterations}` : '';
+  $('c-iter-d').textContent = cfg ? (cfg.maxIterations > 0 ? `of max ${cfg.maxIterations}` : 'no limit — whole repo') : '';
   $('c-prs').textContent = (m.prs || []).length;
   $('c-prs-d').textContent = `${m.totals?.improvedFiles ?? 0} file(s) improved`;
 
@@ -74,6 +80,13 @@ function render(m) {
   }
   $('c-eta').textContent = w.etaSec != null ? fmtDur(w.etaSec) : '–';
   $('c-eta-d').textContent = w.etaSec != null ? `at current pace, ${w.remaining} file(s) left` : 'measuring pace…';
+  $('c-tok').textContent = (w.tokensIn || w.tokensOut)
+    ? `${fmtTok(w.tokensIn)} in · ${fmtTok(w.tokensOut)} out` : '–';
+  $('c-tok-d').textContent = w.llmCalls
+    ? `${w.llmCalls} call(s)`
+      + (w.tokensPerImprovedFile && w.tokensBasis
+        ? ` · ${fmtTok(w.tokensPerImprovedFile)} avg over ${w.tokensBasis} improved file(s)` : '')
+    : 'no model calls yet';
 
   const tb = $('files').querySelector('tbody');
   const files = (m.files || []).filter((f) => f.status !== 'candidate' || f.coverage != null).slice(0, 200);
@@ -99,6 +112,7 @@ function render(m) {
     <td>${cell(f.mutationAfter, f.attemptMutation)}</td>
     <td>${cell(f.macAfter, f.attemptMac, '')}</td>
     <td title="${f.timesheet ? esc(`analysis ${f.timesheet.analysisMin}m · writing ${f.timesheet.testsMin}m · mutation ${f.timesheet.mutationMin}m · verify ${f.timesheet.verifyMin}m`) : ''}">${f.timesheet ? fmtHours(f.timesheet.hours) : '–'}</td>
+    <td${f.tokens ? ` title="${esc(f.tokens.calls + ' model call(s)')}"` : ''}>${f.tokens ? `${fmtTok(f.tokens.in)} / ${fmtTok(f.tokens.out)}` : '–'}</td>
     <td><span class="badge b-${esc(f.status)}">${esc(f.status)}</span></td>
     <td>${f.prUrl ? `<a href="${esc(f.prUrl)}" target="_blank">PR ↗</a>` : (f.prPatch ? 'patch' : '')}</td>
   </tr>`;
