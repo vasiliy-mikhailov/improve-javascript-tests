@@ -10,9 +10,10 @@ One container. Two processes. A hard split between orchestration and execution:
 ```
 ┌─ ijst-n8n ─────────────────────────────────────────────────────────────┐
 │                                                                        │
-│  n8n :5678 — workflow "Improve JS Tests", 55 nodes                     │
+│  n8n :5678 — workflow "Improve JS Tests", 62 nodes                     │
 │    node types: manualTrigger, webhook, httpRequest, code, if, noOp      │
-│    Code nodes are pure data transforms: no child_process, no fs         │
+│    Code-node logic lives in n8n/nodes/*.js, inlined by SOURCE at build   │
+│    time — one copy, unit-testable; no child_process, no fs in a node     │
 │         │                                                              │
 │         │  every OS-touching operation is an HTTP call                 │
 │         ▼                                                              │
