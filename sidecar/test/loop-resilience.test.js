@@ -230,3 +230,51 @@ test('verify short-circuits a round that changed nothing', () => withSandbox(asy
   assert.match(sb.events().join('\n'), /nothing to verify|no changes/i,
     'and it says why, so an empty round is visible rather than silent');
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  the per-attempt suite check
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured on the live repo: the full suite takes 52-59s, and running only the
+// generated test file takes 1s (459ms of work plus startup). The mutant loop pays
+// that 50s on EVERY attempt — fifteen times per file — to answer "does this new test
+// pass?". The whole-suite question is still asked, once per round, by /api/verify,
+// and nothing reaches a PR without it: a round whose full suite is red is dropped
+// entirely, while already-committed rounds were each full-suite verified when they
+// were accepted.
+
+test('a kill attempt checks its own test file, not the whole suite', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+
+  await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath] });
+
+  const scopes = w.calls.tests;
+  assert.ok(scopes.length >= 1, 'the test is still run');
+  assert.ok(scopes.every((s) => s !== null),
+    `the attempt must not run the full suite — scopes seen: ${JSON.stringify(scopes)}`);
+  assert.ok(JSON.stringify(scopes[scopes.length - 1]).includes(testPath),
+    'and the scope is the file just written');
+}));
+
+test('a generated test that fails is still deleted, and its scope is what was checked', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line], red: true });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath] });
+
+  assert.equal(r.killed, false);
+  assert.equal(r.reason, 'suite red');
+  assert.equal(w.exists(testPath), false, 'a red test never survives its own attempt');
+  // A test that fails on the REAL code is a broken test, not proof that the mutant
+  // resists testing — the same distinction as an empty answer. It is capped by the
+  // per-target miss limit instead of spending the mutant's one shot.
+  const f = sb.file(FILE);
+  assert.deepEqual(f.mutantAttempts || {}, {}, 'the target keeps its shot');
+  assert.equal(f.mutantFailures || 0, 0, 'and the failure budget is untouched');
+  assert.equal(f.mutantGenFailures, 1, 'it is counted as a generation miss');
+}));

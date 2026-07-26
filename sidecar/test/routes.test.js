@@ -551,7 +551,7 @@ test('mutant/next tells the picker what already resisted a targeted test', () =>
 //  mutant/verify
 // ═══════════════════════════════════════════════════════════════════════════
 
-test('mutant/verify deletes a test that turns the suite red, and charges the budget', () => withSandbox(async (sb) => {
+test('mutant/verify deletes a test that fails, without spending the mutant\'s one shot', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
   const next = await sb.get('/api/mutant/next', { path: FILE });
   w.writeTest(KILL_TEST, { target: FILE, kills: [10], red: true });
@@ -566,9 +566,14 @@ test('mutant/verify deletes a test that turns the suite red, and charges the bud
   assert.equal(w.calls.stryker.length, strykerRuns, 'no point measuring mutants against a red suite');
 
   const f = sb.file(FILE);
-  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], 1, 'the target had its one shot');
+  // A test that fails against the UNMUTATED code is a broken test. That says nothing
+  // about whether the mutant can be killed, so it is counted as a generation miss —
+  // capped per target and by its own ceiling — rather than retiring the target and
+  // charging the budget that exists to stop wasted tests.
+  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], undefined, 'the target keeps its shot');
   assert.equal(f.mutantAttemptCount, 1);
-  assert.equal(f.mutantFailures, 1);
+  assert.equal(f.mutantFailures || 0, 0);
+  assert.equal(f.mutantGenFailures, 1);
   assert.equal(f.mutantsKilled, 0);
 }));
 

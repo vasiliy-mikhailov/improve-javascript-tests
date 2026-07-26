@@ -10,7 +10,7 @@
         220,
         0
       ],
-      "id": "9997c066-515c-4d5d-ba94-91ce04f7449f",
+      "id": "f48b9213-70c0-4913-b0d5-99458f71adc8",
       "name": "Start (manual)"
     },
     {
@@ -26,7 +26,7 @@
         440,
         0
       ],
-      "id": "df4abbd7-7508-48b1-98a7-cde4d798f1d9",
+      "id": "2917ebf9-3a75-4bc0-9e42-f98419e0c7ea",
       "name": "Start (webhook)",
       "webhookId": "aa11bb22-ijst-4run-9000-improverun001"
     },
@@ -50,7 +50,7 @@
         660,
         0
       ],
-      "id": "cffdb689-9532-4ab2-ae52-3bac91fb406d",
+      "id": "7a6bc581-c821-42bf-aa2b-7d1567c961cd",
       "name": "Start Run"
     },
     {
@@ -73,7 +73,7 @@
         880,
         0
       ],
-      "id": "85090b2d-c5b1-4db5-af76-b7f3e5ac637c",
+      "id": "12817c81-3b45-4be6-b77e-20486363b3f5",
       "name": "Clone Repo"
     },
     {
@@ -96,7 +96,7 @@
         1100,
         0
       ],
-      "id": "bcaa4ada-dd2c-40cb-b8fe-e191401639a1",
+      "id": "92ddc231-0629-41f4-9c88-fb09e1ab7b32",
       "name": "Rules: post-clone"
     },
     {
@@ -119,7 +119,7 @@
         1320,
         0
       ],
-      "id": "a9ef3f53-cf79-4c14-aeed-4cb662305b93",
+      "id": "535a5a2a-833c-4807-be27-d1b44232cd6a",
       "name": "Install & Detect"
     },
     {
@@ -142,7 +142,7 @@
         1540,
         0
       ],
-      "id": "ac13e3e8-8e0d-443e-a726-ae99a833e913",
+      "id": "0c704ab3-c13d-494f-88d9-9dc08746861c",
       "name": "Baseline Coverage"
     },
     {
@@ -165,7 +165,7 @@
         1760,
         0
       ],
-      "id": "6def4053-7699-414c-b4fc-93cc336a9fa5",
+      "id": "528e0fff-98ad-4f24-87ef-d353885e776a",
       "name": "Rules: pre-pick"
     },
     {
@@ -188,7 +188,7 @@
         1980,
         0
       ],
-      "id": "45120c17-d15d-4d51-93d4-f71014388b29",
+      "id": "dec69629-18e4-495b-b098-c42e89e54032",
       "name": "Rules: write-test"
     },
     {
@@ -199,7 +199,7 @@
         2200,
         0
       ],
-      "id": "333f52af-5309-42f1-a821-353f85e96236",
+      "id": "87220ecf-e525-410a-85b5-10b0379f4739",
       "name": "Next Iteration"
     },
     {
@@ -219,7 +219,7 @@
         2420,
         0
       ],
-      "id": "4fe8d2a1-b50a-4bcb-aea0-f8dc64c0be2b",
+      "id": "2f3e0285-a560-4cf8-9faf-8bcf70a43e86",
       "name": "Get Candidates"
     },
     {
@@ -240,7 +240,7 @@
         2640,
         0
       ],
-      "id": "65cea392-2307-40e8-8b68-c1ce9d4cc83a",
+      "id": "879757b6-35b9-471d-a71f-73544a889e12",
       "name": "More Work?"
     },
     {
@@ -263,7 +263,7 @@
         2860,
         0
       ],
-      "id": "63ff50a2-7143-423a-bd8a-2569844f29c1",
+      "id": "8ca21a4b-fa94-4174-a310-5da9ecd429c0",
       "name": "Rules: pick file"
     },
     {
@@ -284,7 +284,7 @@
         3080,
         0
       ],
-      "id": "30db66e9-3447-4fb5-9e31-7e0aa3a18a90",
+      "id": "19cea839-f9b1-4c73-86e5-c4f5e443fe75",
       "name": "File Picked?"
     },
     {
@@ -305,7 +305,7 @@
         3300,
         0
       ],
-      "id": "ba98534d-ae28-4ebc-b14c-c68738019716",
+      "id": "6bc7439e-28cc-4baa-8326-517784aefa93",
       "name": "Pick Retryable?"
     },
     {
@@ -328,7 +328,7 @@
         3520,
         0
       ],
-      "id": "a54c04df-7f67-41ab-8d26-c79ab4d973da",
+      "id": "59d2d9de-5945-48ec-a2f2-60c48726e91a",
       "name": "Start Iteration"
     },
     {
@@ -351,7 +351,7 @@
         220,
         200
       ],
-      "id": "f06ae827-6168-4264-9df4-909ef4ed4f0d",
+      "id": "22c9679f-f2af-4607-a740-490e9a75787c",
       "name": "Baseline Mutation"
     },
     {
@@ -371,7 +371,7 @@
         440,
         200
       ],
-      "id": "39b2f906-e0ab-4926-9531-845dafcd9366",
+      "id": "35e89ca8-f22f-4cb1-a247-ed0aeb057548",
       "name": "Coverage Gaps"
     },
     {
@@ -392,12 +392,12 @@
         660,
         200
       ],
-      "id": "ddf9edf1-5972-4578-8d10-d22e0a81bd61",
+      "id": "c1e728d7-9b60-493d-b176-3a307dbea785",
       "name": "Baseline OK?"
     },
     {
       "parameters": {
-        "jsCode": "function uiGuidance(file, gaps) {\n  const isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+[\"'](react|vue|svelte|preact)[\"']/.test(String(gaps.source || '').slice(0, 2000)));\n  return (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (gaps.ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (gaps.ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction covBuildPrompt(gaps, file) {\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const u = gaps.uncovered || {};\n  const fullyUncovered = u.lines === 'all';\n  const nothingToCover = !gaps.needsBootstrap\n    || (!fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length));\n  const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\n  const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;\n  if (nothingToCover) return { skip: true, reason: gaps.needsBootstrap ? 'file fully covered' : 'already executed by tests — mutant loop takes it from here', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n  const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\n  const ui = uiGuidance(file, gaps);\n  const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:' + commonTestRules()\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n    + String(gaps.source || '').slice(0, 14000)\n    + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :\n        'lines ' + JSON.stringify((u.lines || []).slice(0, 120))\n        + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))\n        + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))\n    + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n    + String(gaps.existingTest || '(none)').slice(0, 6000)\n    + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';\n  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n}\nreturn [{ json: covBuildPrompt($json, $('Start Iteration').first().json.file) }];",
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction covBuildPrompt(gaps, file) {\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const u = gaps.uncovered || {};\n  const fullyUncovered = u.lines === 'all';\n  const nothingToCover = !gaps.needsBootstrap\n    || (!fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length));\n  const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\n  const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;\n  if (nothingToCover) return { skip: true, reason: gaps.needsBootstrap ? 'file fully covered' : 'already executed by tests — mutant loop takes it from here', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n  const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\n  const ui = uiGuidance(file, gaps);\n  const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:' + commonTestRules()\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n    + String(gaps.source || '').slice(0, 14000)\n    + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :\n        'lines ' + JSON.stringify((u.lines || []).slice(0, 120))\n        + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))\n        + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))\n    + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n    + String(gaps.existingTest || '(none)').slice(0, 6000)\n    + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';\n  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n}\nreturn [{ json: covBuildPrompt($json, $('Start Iteration').first().json.file) }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -406,7 +406,7 @@
         880,
         200
       ],
-      "id": "5ca3a65c-d882-43cb-a84e-90a23898999e",
+      "id": "3d3e3ea3-9132-4ea9-a7be-065b18655976",
       "name": "Cov: Build Prompt"
     },
     {
@@ -427,7 +427,7 @@
         1100,
         200
       ],
-      "id": "5104d8b9-af1b-4f52-a0bc-81721462595d",
+      "id": "74938659-718e-4388-98d9-c5a954ea95eb",
       "name": "Cov: Has Work?"
     },
     {
@@ -450,7 +450,7 @@
         1320,
         200
       ],
-      "id": "e09160e2-74de-45f6-9bf5-c31f07fc61d5",
+      "id": "e9f7081a-d30c-4568-a08b-6ff565ef9d83",
       "name": "Cov: LLM Write Tests"
     },
     {
@@ -464,7 +464,7 @@
         1540,
         200
       ],
-      "id": "bfd44897-0380-47dc-aa82-0ca33d55b517",
+      "id": "19110443-71fb-4d69-b975-56c8b49294db",
       "name": "Cov: Parse Tests"
     },
     {
@@ -487,7 +487,7 @@
         1760,
         200
       ],
-      "id": "11b84069-3e8c-4db9-bcc0-697604b82aa5",
+      "id": "56849ba8-3712-4a7c-9ab9-70a01a8d9650",
       "name": "Cov: Write Tests"
     },
     {
@@ -510,7 +510,7 @@
         1980,
         200
       ],
-      "id": "2a4cdc2a-786c-481b-9cba-ec40ac2fd7d2",
+      "id": "3a5dbd5d-8e00-45df-8bce-b1d59b1efb9c",
       "name": "Cov: Run Tests"
     },
     {
@@ -531,7 +531,7 @@
         2200,
         200
       ],
-      "id": "ee7ae9da-ff5d-4c29-90fb-fb2eee185189",
+      "id": "3798882b-2cf0-4529-ae81-8b645b135f6c",
       "name": "Cov: Green?"
     },
     {
@@ -552,7 +552,7 @@
         2420,
         200
       ],
-      "id": "1f684d8f-faca-4d47-a749-fd1335a2c841",
+      "id": "fba71de2-e776-41ff-b819-1a8938f1e51f",
       "name": "Cov: Wrote Any?"
     },
     {
@@ -566,7 +566,7 @@
         2640,
         200
       ],
-      "id": "cf54a97c-22e6-40de-bdea-72898075609e",
+      "id": "a0f79e29-8cb6-44b1-b8de-89598f72eb12",
       "name": "Cov: Build Repair"
     },
     {
@@ -589,7 +589,7 @@
         2860,
         200
       ],
-      "id": "6adece6e-f7f7-430b-a96e-9b7bd2a00149",
+      "id": "4a33cb71-1d2a-4b69-b79a-ef3bf971c30f",
       "name": "Cov: LLM Repair"
     },
     {
@@ -603,7 +603,7 @@
         3080,
         200
       ],
-      "id": "febd83ed-b895-4995-af87-5e79914d8419",
+      "id": "9981c768-1c32-46da-a005-d0bdf165dcbd",
       "name": "Cov: Parse Repair"
     },
     {
@@ -626,7 +626,7 @@
         3300,
         200
       ],
-      "id": "7ad557a4-88ff-4803-88ef-73295774e77f",
+      "id": "77814c48-e2ed-406a-96e7-f1016c4e3c97",
       "name": "Cov: Write Repair"
     },
     {
@@ -649,7 +649,7 @@
         3520,
         200
       ],
-      "id": "7e300f70-cd30-4c0f-b074-7aca78b83463",
+      "id": "863a8a56-f83a-4ed3-a33d-6957993272fc",
       "name": "Cov: Re-run Tests"
     },
     {
@@ -670,7 +670,7 @@
         220,
         400
       ],
-      "id": "17563708-000e-4d59-a005-fa83d2cbaf02",
+      "id": "3a1c4c45-d822-4cdc-94ef-9670408a545d",
       "name": "Cov: Green After Repair?"
     },
     {
@@ -693,7 +693,7 @@
         440,
         400
       ],
-      "id": "76900c91-bbce-473a-a2e2-c9a23c5651a5",
+      "id": "73826ee4-e164-4cfd-839c-bd31cc052458",
       "name": "Cov: Delete Broken Tests"
     },
     {
@@ -704,7 +704,7 @@
         660,
         400
       ],
-      "id": "3fa27b90-8e39-4aa1-8977-5ddf9b15a2b7",
+      "id": "09ededcc-32d2-4df1-b053-026519aee0ba",
       "name": "Cov: Done"
     },
     {
@@ -724,7 +724,7 @@
         880,
         400
       ],
-      "id": "8edbbe2d-acad-4653-a1b8-4896cbcf5889",
+      "id": "e13d2512-a048-4396-9266-142d3ab837c7",
       "name": "Next Mutant"
     },
     {
@@ -745,12 +745,12 @@
         1100,
         400
       ],
-      "id": "127bc32f-0af0-473f-a5dd-dbfe6cba0c13",
+      "id": "f69cd7f3-047d-4124-bb1f-90a9bac661a0",
       "name": "Mutant To Kill?"
     },
     {
       "parameters": {
-        "jsCode": "function uiGuidance(file, gaps) {\n  const isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+[\"'](react|vue|svelte|preact)[\"']/.test(String(gaps.source || '').slice(0, 2000)));\n  return (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (gaps.ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (gaps.ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildPrompt(t) {\n  const m = t.mutant;\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  // One file per target — but the NAME has to carry the whole mutant identity, not\n  // just line + mutator. Stryker emits several distinct mutants in one place\n  // (ConditionalExpression gives a `true` and a `false` variant; `a === 1 && b === 2`\n  // gives two EqualityOperator mutants), and sidecar/mutants.js separates them by\n  // column AND replacement, so the loop attacks each of them in its own round. A name\n  // that ignores column and replacement makes round two overwrite the test that killed\n  // round one's mutant — and delete it outright when round two fails.\n  // djb2, inlined: an n8n Code node has no require().\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  const tag = hash(String(m.mutator) + '|' + m.line + '|' + (m.column ?? '') + '|' + String(m.replacement ?? '').slice(0, 60));\n  const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '-' + tag + '.test' + ext;\n  // A column of 0 is a position, not \"no column\" — so ask whether it is ABSENT.\n  const col = m.column == null || m.column === '' ? '' : ':' + m.column;\n  // What the status actually tells the test writer. This is a lookup and not a\n  // two-way ternary because 'survived' and 'nocoverage' are two members of an open\n  // set: sidecar/stryker.js filters survivors to exactly those two today, but the\n  // moment that filter widens, an \"everything else is nocoverage\" branch would tell\n  // the model its target is unreached — and it would then write a test that merely\n  // executes the code instead of one that discriminates the mutation.\n  // Stryker's own enum is PascalCase and the sidecar lower-cases it; do not depend on\n  // that having happened.\n  // null prototype: the status comes from a JSON report, and a plain object would\n  // answer 'constructor' or '__proto__' with a prototype member that then gets\n  // concatenated into the prompt as text.\n  const statusBrief = {\n    __proto__: null,\n    survived: 'covered by existing tests, but nothing asserts the difference',\n    nocoverage: 'not covered at all — your test must reach this code',\n  };\n  const rawStatus = String(m.status ?? '').trim().toLowerCase();\n  // The fallback claims only what is known: the label, and that coverage is unknown.\n  const status = statusBrief[rawStatus]\n    || (rawStatus ? 'Stryker reports this mutant as \"' + rawStatus + '\"' : 'unreported by Stryker')\n      + ' — whether any existing test reaches this code is unknown, so your test must both execute it and assert the difference';\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '\n    + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '\n    + 'Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:' + commonTestRules(1)\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nTARGET MUTANT — kill this one:\\n'\n    + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + col + '\\n'\n    + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'\n    + '  status: ' + status + '\\n'\n    + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')\n    + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + '\\n\\nWrite the single test file that kills this mutant. JSON only.';\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    stage: 'improving_mutation', stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line,\n    // the parser needs to know which path belongs to the repo, or it cannot refuse it\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };\n}\nreturn [{ json: killBuildPrompt($json) }];",
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildPrompt(t) {\n  const m = t.mutant;\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  // One file per target — but the NAME has to carry the whole mutant identity, not\n  // just line + mutator. Stryker emits several distinct mutants in one place\n  // (ConditionalExpression gives a `true` and a `false` variant; `a === 1 && b === 2`\n  // gives two EqualityOperator mutants), and sidecar/mutants.js separates them by\n  // column AND replacement, so the loop attacks each of them in its own round. A name\n  // that ignores column and replacement makes round two overwrite the test that killed\n  // round one's mutant — and delete it outright when round two fails.\n  // djb2, inlined: an n8n Code node has no require().\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  const tag = hash(String(m.mutator) + '|' + m.line + '|' + (m.column ?? '') + '|' + String(m.replacement ?? '').slice(0, 60));\n  const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '-' + tag + '.test' + ext;\n  // A column of 0 is a position, not \"no column\" — so ask whether it is ABSENT.\n  const col = m.column == null || m.column === '' ? '' : ':' + m.column;\n  // What the status actually tells the test writer. This is a lookup and not a\n  // two-way ternary because 'survived' and 'nocoverage' are two members of an open\n  // set: sidecar/stryker.js filters survivors to exactly those two today, but the\n  // moment that filter widens, an \"everything else is nocoverage\" branch would tell\n  // the model its target is unreached — and it would then write a test that merely\n  // executes the code instead of one that discriminates the mutation.\n  // Stryker's own enum is PascalCase and the sidecar lower-cases it; do not depend on\n  // that having happened.\n  // null prototype: the status comes from a JSON report, and a plain object would\n  // answer 'constructor' or '__proto__' with a prototype member that then gets\n  // concatenated into the prompt as text.\n  const statusBrief = {\n    __proto__: null,\n    survived: 'covered by existing tests, but nothing asserts the difference',\n    nocoverage: 'not covered at all — your test must reach this code',\n  };\n  const rawStatus = String(m.status ?? '').trim().toLowerCase();\n  // The fallback claims only what is known: the label, and that coverage is unknown.\n  const status = statusBrief[rawStatus]\n    || (rawStatus ? 'Stryker reports this mutant as \"' + rawStatus + '\"' : 'unreported by Stryker')\n      + ' — whether any existing test reaches this code is unknown, so your test must both execute it and assert the difference';\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '\n    + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '\n    + 'Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:' + commonTestRules(1)\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nTARGET MUTANT — kill this one:\\n'\n    + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + col + '\\n'\n    + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'\n    + '  status: ' + status + '\\n'\n    + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')\n    + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + '\\n\\nWrite the single test file that kills this mutant. JSON only.';\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    stage: 'improving_mutation', stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line,\n    // the parser needs to know which path belongs to the repo, or it cannot refuse it\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };\n}\nreturn [{ json: killBuildPrompt($json) }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -759,7 +759,7 @@
         1320,
         400
       ],
-      "id": "9b390a3f-ebb7-4e14-958f-8f5eab7cccef",
+      "id": "26a822ef-dadf-4cfc-98e7-3f0cf5c4f703",
       "name": "Kill: Build Prompt"
     },
     {
@@ -782,7 +782,7 @@
         1540,
         400
       ],
-      "id": "0d2f212a-9f69-41b6-961d-67f478f41285",
+      "id": "b5a869ae-a973-47ae-9ec0-88d8a5fed0d2",
       "name": "Kill: LLM"
     },
     {
@@ -796,7 +796,7 @@
         1760,
         400
       ],
-      "id": "7bdeff2f-d9f0-45bf-b51c-8f648dc7c8ea",
+      "id": "051dd0ee-0248-4dea-b1df-9def8931ee2d",
       "name": "Kill: Parse Test"
     },
     {
@@ -819,7 +819,7 @@
         1980,
         400
       ],
-      "id": "b53b9015-f96f-4cc6-b456-c9569e306c87",
+      "id": "c2424d3a-d3d3-4f3b-a198-54261d2498a6",
       "name": "Kill: Write Test"
     },
     {
@@ -842,7 +842,7 @@
         2200,
         400
       ],
-      "id": "598decd4-9e41-4d01-9732-c6faa062074b",
+      "id": "01f7121d-ddfe-4ca6-a543-3756a5a759f8",
       "name": "Kill: Verify"
     },
     {
@@ -853,7 +853,7 @@
         2420,
         400
       ],
-      "id": "d90bb2ca-0375-49e6-9079-b366256069b7",
+      "id": "56a96bff-7520-450b-abea-7b703d021dbc",
       "name": "Mutant Loop Done"
     },
     {
@@ -876,7 +876,7 @@
         2640,
         400
       ],
-      "id": "29259d36-ba54-4e15-a7eb-77607b1121f7",
+      "id": "6db78b83-03d4-4cc3-9abc-01b7ab8971b6",
       "name": "Verify"
     },
     {
@@ -897,7 +897,7 @@
         2860,
         400
       ],
-      "id": "349eb87e-04ca-4af2-b4af-cb619aae282c",
+      "id": "0d5002cf-e0c6-4aef-8005-d5a10d03e6ce",
       "name": "Another Round?"
     },
     {
@@ -920,7 +920,7 @@
         3080,
         400
       ],
-      "id": "adbb703f-106b-4671-a0da-380d23d8825a",
+      "id": "91c3019e-b575-4925-b147-37db23de88cc",
       "name": "Accept Round"
     },
     {
@@ -943,7 +943,7 @@
         3300,
         400
       ],
-      "id": "43e244d2-bdd9-4987-9690-7fd24d1a9707",
+      "id": "57a3781f-ac67-4f3e-9bf6-99725a7564cf",
       "name": "Drop Last Round"
     },
     {
@@ -966,7 +966,7 @@
         3520,
         400
       ],
-      "id": "eac9f75a-01a0-4941-8c03-273963ef3114",
+      "id": "04e0c899-8af4-4615-907c-f06071895571",
       "name": "Cleanup Tests"
     },
     {
@@ -989,7 +989,7 @@
         220,
         600
       ],
-      "id": "94d6cacb-7dee-42cd-b269-8f70c5d3aa57",
+      "id": "25796d17-d8fa-410a-bf80-d1e71ec17946",
       "name": "Rules: check changes"
     },
     {
@@ -1010,7 +1010,7 @@
         440,
         600
       ],
-      "id": "4dd70b16-55df-4a12-8c6e-575f58a29481",
+      "id": "ed891c1b-a85c-43ae-9175-2653273521fe",
       "name": "Approved?"
     },
     {
@@ -1033,7 +1033,7 @@
         660,
         600
       ],
-      "id": "f18434d5-6feb-4223-a33e-40dfc5dc2152",
+      "id": "9abf1830-ab6d-4f1f-be7a-610b64a05452",
       "name": "Rules: make PR"
     },
     {
@@ -1056,7 +1056,7 @@
         880,
         600
       ],
-      "id": "ff63f42f-b175-4eab-b8f5-a2fc90b89c03",
+      "id": "4eb9436d-394d-4182-8f07-f602364846b2",
       "name": "Create PR"
     },
     {
@@ -1079,7 +1079,7 @@
         1100,
         600
       ],
-      "id": "0cd22463-68be-4ec0-b85e-f03900e7025a",
+      "id": "7f405fe9-aaae-4d4c-a5d8-39d1473128fe",
       "name": "Discard Changes"
     },
     {
@@ -1090,7 +1090,7 @@
         1320,
         600
       ],
-      "id": "fe3d6efc-73c2-4d44-b0bd-1bf2bb2fea0c",
+      "id": "1e0d97e0-2119-4497-a6e2-9b3a03e4699a",
       "name": "Iteration Done"
     },
     {
@@ -1113,7 +1113,7 @@
         1540,
         600
       ],
-      "id": "6ccd3235-6411-456a-a573-a1e1afe1171a",
+      "id": "8ac9307c-e6fb-40c1-83fe-4d68e1f43de5",
       "name": "Finish Run"
     },
     {
@@ -1124,7 +1124,7 @@
         1760,
         600
       ],
-      "id": "fdd02378-e53b-4ccb-a73c-33279cf2d646",
+      "id": "050315f1-0e65-4b1c-9edf-71056eb4c5a8",
       "name": "End"
     }
   ],

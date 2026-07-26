@@ -29,25 +29,35 @@ process.env.LLM_THINKING_BUDGET = '3000';
 process.on('exit', () => { try { fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }); } catch { } });
 
 const llm = require('../llm');
+const S = require('../state');
+const events = () => S.state.events.map((e) => e.msg);
 
-/** Replace global.fetch with a scripted queue; returns the recorded request bodies. */
+/**
+ * Replace global.fetch with a scripted queue. Each reply is either a plain string
+ * (wrapped in a normal envelope) or a whole response envelope, so a test can use a
+ * real captured one.
+ */
 function scriptFetch(replies) {
   const seen = [];
   const real = global.fetch;
   global.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
     seen.push(body);
-    const content = replies[seen.length - 1];
-    if (content === undefined) throw new Error('fetch called more times than scripted');
-    return {
-      ok: true,
-      async json() {
-        return { choices: [{ message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 5 } };
-      },
-    };
+    const reply = replies[seen.length - 1];
+    if (reply === undefined) throw new Error('fetch called more times than scripted');
+    const envelope = typeof reply === 'string'
+      ? { choices: [{ finish_reason: 'stop', message: { content: reply } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }
+      : reply;
+    return { ok: true, async json() { return envelope; } };
   };
   return { seen, restore() { global.fetch = real; } };
 }
+
+// A REAL reply from the qwen endpoint, captured by replaying the exact
+// coverage-bootstrap call that failed twice in the live run (see the fixture's
+// _captured note). finish_reason "length", content null, and the whole answer
+// stranded in the reasoning channel.
+const TRUNCATED = require('./fixtures/qwen-thinking-truncated.json');
 
 const GOOD = '{"tests":[{"path":"test/a.test.ts","content":"it(\'x\', () => {});"}]}';
 
@@ -99,5 +109,83 @@ test('a free-form call is never repaired — there is nothing to parse', async (
     const r = await llm.chat({ prompt: 'summarise', maxTokens: 500 });
     assert.equal(f.seen.length, 1);
     assert.equal(r.text, 'just prose');
+  } finally { f.restore(); }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  the reply that actually failed in production
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Replaying the live call proved the mechanism: the model drafts the whole test file
+// INSIDE the reasoning channel, runs out of completion budget there, and returns
+// finish_reason "length" with content null. Nothing malformed was ever parsed —
+// there was nothing to parse.
+
+test('the captured reply is exactly the shape the run received', () => {
+  const ch = TRUNCATED.choices[0];
+  assert.equal(ch.finish_reason, 'length');
+  assert.equal(ch.message.content, null, 'content is null, not even an empty string');
+  assert.ok(ch.message.reasoning.length > 1000, 'the answer was being written in the reasoning channel');
+  assert.equal(TRUNCATED.usage.completion_tokens, 2000, 'every completion token went to reasoning');
+});
+
+test('an empty completion is reported as such, not as bad JSON', async () => {
+  const f = scriptFetch([TRUNCATED, GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    const msgs = events();
+    assert.ok(msgs.some((m) => /no content|empty/i.test(m)),
+      `the log must say the model returned nothing — got: ${JSON.stringify(msgs)}`);
+    assert.ok(msgs.some((m) => /length/.test(m)),
+      'and name finish_reason, which is the whole diagnosis');
+  } finally { f.restore(); }
+});
+
+test('a complete JSON answer stranded in the reasoning channel is salvaged, not re-asked', async () => {
+  // The captured reply was cut mid-test, but the model frequently finishes the JSON
+  // inside its reasoning and is then cut before repeating it as content. Paying for
+  // a second 200-second call to re-obtain an answer we already have is pure waste.
+  const stranded = {
+    choices: [{
+      finish_reason: 'length',
+      message: { content: null, reasoning: 'Let me write it.\n\n' + GOOD + '\n\nThat covers the branch.' },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2000 },
+  };
+  const f = scriptFetch([stranded]);
+  try {
+    const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    assert.equal(f.seen.length, 1, 'no second call — the answer was already paid for');
+    assert.equal(r.json.tests[0].path, 'test/a.test.ts');
+  } finally { f.restore(); }
+});
+
+test('an INCOMPLETE answer in the reasoning channel is not salvaged', async () => {
+  // The real capture ends mid-expression, and its reasoning also QUOTES the prompt's
+  // uncovered-lines array — [9,11,12,…]. A salvage that takes "the first JSON-looking
+  // thing" returns that array and calls the call a success, so the caller sees
+  // resp.json.tests === undefined and silently writes nothing.
+  const f = scriptFetch([TRUNCATED, GOOD]);
+  try {
+    const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    assert.equal(f.seen.length, 2, 'this one does need re-asking');
+    assert.equal(r.json.tests[0].path, 'test/a.test.ts');
+  } finally { f.restore(); }
+});
+
+test('salvage never returns a stray array quoted from the prompt', async () => {
+  const quoted = {
+    choices: [{
+      finish_reason: 'length',
+      message: { content: null, reasoning: 'Uncovered lines: [9,11,12,104,105]. I will start by mocking prisma…' },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2000 },
+  };
+  const f = scriptFetch([quoted, GOOD]);
+  try {
+    const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    assert.equal(f.seen.length, 2, 'an array of line numbers is not an answer');
+    assert.deepEqual(r.json, JSON.parse(GOOD));
   } finally { f.restore(); }
 });

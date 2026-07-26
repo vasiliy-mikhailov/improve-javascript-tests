@@ -1,6 +1,6 @@
 'use strict';
 // OpenAI-compatible chat client for the vLLM endpoint (qwen), zero-dep via global fetch.
-const { extractJson } = require('./util');
+const { extractJson, extractLastJsonObject } = require('./util');
 const { event, recordTokens, recordDialog } = require('./state');
 
 const BASE = (process.env.LLM_BASE_URL || '').replace(/\/$/, '');
@@ -39,7 +39,8 @@ async function chat(opts) {
   };
   if (structured) body.response_format = { type: 'json_object' };
   const startedAt = Date.now();
-  const text = await post(body);
+  const first = await post(body);
+  const text = first.content;
   recordDialog({
     kind: structured ? 'decision' : 'generation',
     thinking, model: MODEL,
@@ -48,9 +49,23 @@ async function chat(opts) {
     response: text,
     durationMs: Date.now() - startedAt,
     maxTokens: body.max_tokens,
+    finishReason: first.finishReason,
+    reasoningChars: first.reasoning.length,
   });
   if (!opts.json) return { text };
   let parsed = extractJson(text);
+  // The model drafts its answer inside the reasoning channel and then repeats it as
+  // content. When the budget runs out in between, the finished answer is sitting in
+  // `reasoning` and we have already paid for it — re-asking costs another ~200s for
+  // something we hold. Only a COMPLETE object is taken: half a test file would be
+  // written to disk and fail to parse as JavaScript.
+  if (parsed == null && first.reasoning) {
+    const salvaged = extractLastJsonObject(first.reasoning);
+    if (salvaged != null) {
+      event('llm', `model emitted no content (finish_reason=${first.finishReason}) but a complete answer was in its reasoning — salvaged, no retry`);
+      return { text: first.reasoning, json: salvaged };
+    }
+  }
   if (parsed == null) {
     // The recorded failures are not verbose answers, they are EMPTY ones: the
     // reasoning channel spends the completion budget before any visible output, so
@@ -58,17 +73,21 @@ async function chat(opts) {
     // that same configuration is a long gamble on the same dice. The repair turn
     // therefore thinks NOT AT ALL: it has the previous attempt and an explicit
     // instruction, which is what the reasoning was for.
-    event('llm', `JSON parse failed (${text.length} chars returned), retrying without thinking`);
+    event('llm', text.length === 0
+      ? `model returned NO CONTENT (finish_reason=${first.finishReason}, ${first.reasoning.length} chars of reasoning, `
+        + `${body.max_tokens} token budget) — the answer never left the reasoning channel; retrying without thinking`
+      : `JSON parse failed (${text.length} chars returned, finish_reason=${first.finishReason}), retrying without thinking`);
     messages.push({ role: 'assistant', content: text.slice(0, 4000) });
     messages.push({ role: 'user', content: 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.' });
     const t0 = Date.now();
-    const retry = await post({
+    const retryRes = await post({
       ...body,
       messages,
       temperature: 0.1,
       max_tokens: opts.maxTokens || 4096,
       chat_template_kwargs: { enable_thinking: false },
     });
+    const retry = retryRes.content;
     recordDialog({
       kind: 'json-repair', thinking: false, model: MODEL,
       system: '(repair nudge — the previous answer was not valid JSON)',
@@ -114,7 +133,15 @@ async function post(body, attempt = 0) {
     // every call is counted, including the JSON-repair retry below: that is real
     // spend, and hiding it would understate the cost of a flaky response
     recordTokens(data.usage);
-    return data.choices?.[0]?.message?.content || '';
+    const choice = data.choices?.[0] || {};
+    // finish_reason and the reasoning channel are the whole diagnosis when content
+    // comes back empty, and both used to be discarded here — leaving "JSON parse
+    // failed" as the only symptom of a model that never emitted an answer at all.
+    return {
+      content: choice.message?.content || '',
+      finishReason: choice.finish_reason || '',
+      reasoning: choice.message?.reasoning || choice.message?.reasoning_content || '',
+    };
   } catch (e) {
     if (attempt < 2 && /abort|network|fetch failed|ECONN/i.test(String(e.message))) {
       await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));

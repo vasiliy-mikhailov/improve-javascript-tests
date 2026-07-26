@@ -1,0 +1,24 @@
+{
+ "id": "chatcmpl-captured",
+ "object": "chat.completion",
+ "model": "qwen-3.6-27b-fp8",
+ "choices": [
+  {
+   "index": 0,
+   "finish_reason": "length",
+   "message": {
+    "role": "assistant",
+    "content": null,
+    "refusal": null,
+    "reasoning": "The user wants me to write vitest tests to increase line coverage for `lib/admin-page-data.ts`.\nLooking at the uncovered lines: [9,11,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,28,104,105,106,107]\nAnd branches: many conditional expressions inside `Promise.all` and the `can()` calls.\n\nThe function `getAdminPageData` takes `requiredPermissions: PermissionCode[]`.\nIt calls `requirePagePermission(requiredPermissions)` which returns `{ perms }`.\nThen it calls `can(perms, \"ADMIN_USERS\")`, etc.\nBased on these booleans, it conditionally fetches data from prisma or returns empty arrays.\n\nTo cover all branches, I need to mock:\n- `requirePagePermission`\n- `can`\n- `prisma.user.findMany`, `prisma.rolePreset.findMany`, `prisma.employee.findMany`, `prisma.ssoGroupMapping.findMany`, `prisma.userDelegation.findMany`\n- `getCompatiblePermissionWhere`\n- `serialize`\n\nLet's look at the existing test style. It's simple vitest tests.\nI'll need to use `vi.mock` to mock the dependencies.\n\nDependencies to mock:\n- `@/lib/access` -> `can`\n- `@/lib/db` -> `prisma`\n- `@/lib/auth/compatible-permissions` -> `getCompatiblePermissionWhere`\n- `@/lib/page-auth` -> `requirePagePermission`\n- `@/lib/serialize` -> `seri\n\n[... 4866 characters of reasoning elided for the fixture ...]\n\n.ssoGroupMapping.findMany).not.toHaveBeenCalled();\n  });\n\n  it(\"fetches roles when canManageRoles is true\", async () => {\n    vi.mocked(access.can).mockImplementation((_, code) => code === \"ADMIN_ROLES\");\n    const mockRoles = [{ id: 1 }];\n    vi.mocked(db.prisma.rolePreset.findMany).mockResolvedValue(mockRoles);\n\n    const result = await getAdminPageData([\"ADMIN_ROLES\"]);\n    \n    expect(result.canManageRoles).toBe(true);\n    expect(result.canAdminUsers).toBe(false);\n    expect(result.roles).toEqual(mockRoles);\n    expect(db.prisma.rolePreset.findMany).toHaveBeenCalled();\n    expect(db.prisma.user.findMany).not.toHaveBeenCalled();\n  });\n\n  it(\"fetches sso mappings when canManageSsoMapping is true\", async () => {\n    vi.mocked(access.can).mockImplementation((_, code) => code === \"ADMIN_SSO_MAPPING\");\n    const mockSso = [{ id: 1 }];\n    vi.mocked(db.prisma.ssoGroupMapping.findMany).mockResolvedValue(mockSso);\n\n    const result = await getAdminPageData([\"ADMIN_SSO_MAPPING\"]);\n    \n    expect(result.canManageSsoMapping).toBe(true);\n    expect(result.initialSsoMappings).toEqual(mockSso);\n    expect(db.prisma.ssoGroupMapping.findMany).toHaveBeenCalled();\n    expect(db.prisma.rolePreset"
+   }
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 1874,
+  "total_tokens": 3874,
+  "completion_tokens": 2000,
+  "prompt_tokens_details": null
+ },
+ "_captured": "Real reply from the qwen endpoint for the coverage-bootstrap prompt of lib/admin-page-data.ts, max_tokens 2000, enable_thinking true. The full-size version of this same reply (max_tokens 9000) is what two rounds of the live run received."
+}

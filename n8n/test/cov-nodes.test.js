@@ -240,17 +240,26 @@ test('Build Prompt: UI guidance appears only for components in a repo that has a
   assert.ok(!jsxInPlainRepo.system.includes('UI COMPONENT'), 'no framework in the repo, no component rules');
 });
 
-test('Build Prompt: every UI framework import form the regex covers is recognised', () => {
+test('Build Prompt: every UI framework, and every import form, reaches the guidance', () => {
   for (const fw of ['react', 'vue', 'svelte', 'preact']) {
     const out = covBuildPrompt(gaps({ ui: { framework: fw }, source: `import x from '${fw}';\n` }), 'src/widget.ts');
     assert.match(out.system, new RegExp(`UI COMPONENT \\(${fw}\\)`), fw);
   }
-  // Documented limit of the detector (see the report): only the `from '…'` form is
-  // matched, and only inside the first 2000 characters of the source.
+  // Both of these USED to be misses, pinned here as characterization: the detector
+  // only understood `from '…'`, and only inside the first 2000 characters. A CommonJS
+  // component was told to write a logic test, and so was any component whose import
+  // sat behind a licence header. Both now detect; the full set of forms — and what is
+  // still deliberately not evidence — lives in n8n/test/ui-guidance.test.js.
   const cjs = covBuildPrompt(gaps({ ui: reactUi, source: "const React = require('react');\n" }), 'src/widget.ts');
-  assert.ok(!cjs.system.includes('UI COMPONENT'), 'require() imports are NOT detected today');
+  assert.match(cjs.system, /UI COMPONENT \(react\)/, 'a require() import is an import');
   const late = covBuildPrompt(gaps({ ui: reactUi, source: '/*' + 'x'.repeat(2100) + "*/\nimport React from 'react';\n" }), 'src/widget.ts');
-  assert.ok(!late.system.includes('UI COMPONENT'), 'an import past char 2000 is NOT detected today');
+  assert.match(late.system, /UI COMPONENT \(react\)/, 'an import past char 2000 is still an import');
+
+  // …and the tightening that came with the widening: a mention is not a use.
+  const mention = covBuildPrompt(gaps({ ui: reactUi, source: "// port of our old react widget\nexport const x = 1;\n" }), 'src/widget.ts');
+  assert.ok(!mention.system.includes('UI COMPONENT'), 'a comment is not an import');
+  const typeOnly = covBuildPrompt(gaps({ ui: reactUi, source: "import type { FC } from 'react';\nexport const x = 1;\n" }), 'src/widget.ts');
+  assert.ok(!typeOnly.system.includes('UI COMPONENT'), 'a type-only import renders nothing');
 });
 
 test('Build Prompt: component guidance adapts to the libraries the repo actually has', () => {

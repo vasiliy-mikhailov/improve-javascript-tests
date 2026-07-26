@@ -118,8 +118,8 @@ eval/**           the e2e harness — it runs against a container, not in this p
 scripts/**        one-off operator scripts
 ```
 
-Leaving the tests in flatters the number badly: counted, the line total reads **86.69 %**;
-excluded, the honest figure for code that ships is **69.88 %**. The helpers are the worst
+Leaving the tests in flatters the number badly: counted, the line total reads **86.84 %**;
+excluded, the honest figure for code that ships is **70.03 %**. The helpers are the worst
 offender — `fakes.js` is ~550 lines at 96 %, and a test helper is always well covered
 because running the tests *is* running the helper. Measuring it proves nothing.
 
@@ -158,7 +158,7 @@ bottom of the table is the reading list.
 | `sidecar/util.js` | 99.19 | 88.71 | 94.44 |
 | `sidecar/state.js` | 90.82 | 60.98 | 71.43 |
 | `sidecar/llm.js` | 85.04 | **40.74** | 62.50 |
-| `sidecar/server.js` | 78.60 | 70.83 | 62.90 |
+| `sidecar/server.js` | 78.90 | 71.56 | 62.90 |
 | `sidecar/repo.js` | 58.48 | 59.76 | 73.33 |
 | `sidecar/tests.js` | 29.63 | 100.00 | 0.00 |
 | `sidecar/exec.js` | 23.33 | 100.00 | 0.00 |
@@ -166,7 +166,7 @@ bottom of the table is the reading list.
 | `sidecar/rules.js` | 17.33 | 37.50 | 22.22 |
 | `sidecar/coverage.js` | 14.85 | 100.00 | 0.00 |
 | `sidecar/stryker.js` | 13.13 | 100.00 | 0.00 |
-| **all files** | **69.88** | **75.39** | **71.09** |
+| **all files** | **70.03** | **75.64** | **71.09** |
 
 Two ways to be misled by that table:
 
@@ -199,6 +199,11 @@ table above, not the aggregate, is what to look at in review.
 
 Raising the bar: run `npm run coverage`, take the three totals, subtract ~2, edit the
 three flags in `package.json`. Nothing else knows about them.
+
+There is **no CI workflow in this repo** — nothing under `.github/`. The gate is
+enforced by `npm run check` (test → coverage gate → regenerate the workflow), which is
+what to run before pushing. If CI is added later, `npm run check` is the one command it
+needs; do not duplicate the thresholds into a YAML file, or they will drift.
 
 ---
 
@@ -553,7 +558,8 @@ touch on the way past, not evidence of anything)
   fallback latch, the 429/5xx retry ladder, the network-abort retry.
 - `state.js` **[91 % lines, 61 % branches]** — `load()` is wholly uncovered, and so are
   `setProgress`'s redaction and the dialog-trim branch.
-- `server.js` **[79 % lines, 63 % functions]** — the HTTP layer itself (`json`,
+- `server.js` **[79 % lines, 63 % functions]** — the HTTP layer around the route table
+  (`json`,
   `readBody`, `serveStatic`, the error funnel), `metricsPayload`, and the routes listed
   below. The route *table* is heavily tested; the server *around* it is not.
 - The dashboard (`sidecar/dashboard/*`), `entrypoint.sh`, `Dockerfile` — excluded from
@@ -600,7 +606,8 @@ part of the coverage report — not the percentages.
    detached group. If the group kill regresses, Stryker's test-runner children are
    orphaned and keep burning CPU for the rest of the container's life — the failure
    mode is a slow machine, not an error.
-8. **`server.js`'s error funnel** (1041-1065). On any thrown error during a POST it
+8. **`server.js`'s error funnel** (the `catch` in `http.createServer`, ~1056-1080 —
+   line numbers move, grep for `run.status = 'failed'`). On any thrown error during a POST it
    marks the whole run `failed`. A spurious throw from a thin route therefore kills a
    run that was fine. `readBody`'s 20 MB guard and `serveStatic`'s traversal check
    (`abs.startsWith(DASH)`) are also unexercised, and the second one is a security

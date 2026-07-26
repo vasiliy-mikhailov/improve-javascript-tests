@@ -730,12 +730,21 @@ const routes = {
       return { ok: true, killed: false, noTest: true, reason: 'no test was written' };
     }
 
-    // 1. the suite must stay green — a test that breaks the build is never worth keeping
-    S.setStage('improving_mutation', `checking suite after targeting ${mutant.mutator} at line ${mutant.line}`);
-    const suite = await tests.runTests(null);
+    // 1. The new test must pass — one that fails is never worth keeping.
+    //    Scoped to the file just written: on a real repo that is ~1s against ~55s for
+    //    the whole suite, on every one of up to fifteen attempts per file. The
+    //    whole-suite question is still asked once per round by /api/verify, and a
+    //    round whose full suite is red is dropped entirely — so a test that passes
+    //    alone but breaks a neighbour costs that round, not a PR. Already-committed
+    //    rounds were each full-suite verified when they were accepted.
+    S.setStage('improving_mutation', `checking the new test for ${mutant.mutator} at line ${mutant.line}`);
+    const suite = await tests.runTests(testPaths);
     if (!suite.passed) {
-      drop(); bump(false, false);
-      S.event('improving_mutation', `discarded: suite went red targeting ${mutant.mutator} at line ${mutant.line}`);
+      // A test that fails against the REAL code is a broken test, not evidence that
+      // this mutant resists testing — the same distinction as an empty answer, and
+      // capped the same way.
+      drop();
+      miss('the generated test failed against the unmutated code');
       return { ok: true, killed: false, reason: 'suite red', summary: suite.summary };
     }
     // 2. Re-run mutation over the WHOLE file. This is the authoritative answer to

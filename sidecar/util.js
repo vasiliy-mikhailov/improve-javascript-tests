@@ -71,6 +71,51 @@ function mac(coveragePct, mutationPct) {
 }
 
 /** Extract the first balanced JSON object or array from LLM output. */
+/**
+ * Find the LAST complete JSON OBJECT in a block of prose. Used to salvage an answer
+ * the model wrote inside its reasoning channel and then had cut off before it could
+ * repeat it as content.
+ *
+ * Stricter than extractJson on purpose. Reasoning text quotes the prompt, so the
+ * first JSON-looking thing in it is routinely something else — in the reply that
+ * prompted this function, an array of uncovered line numbers copied out of the
+ * prompt. Accepting that would report a successful parse of an object the caller
+ * cannot use, and skip the retry that would have produced a real answer.
+ */
+function extractLastJsonObject(text) {
+  if (!text) return null;
+  const s = String(text).replace(/```(?:json)?/g, '');
+  let best = null;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '{') continue;
+    let depth = 0, inStr = false, esc = false;
+    for (let j = i; j < s.length; j++) {
+      const c = s[j];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          try {
+            const v = JSON.parse(s.slice(i, j + 1));
+            // an empty object is not an answer, and neither is an array — the
+            // reasoning quotes the prompt, so arrays in it are usually its input
+            if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length) {
+              best = v;
+              i = j;            // skip past it: braces INSIDE it are not candidates
+            }
+          } catch { }
+          break;
+        }
+      }
+    }
+  }
+  return best;
+}
+
 function extractJson(text) {
   if (!text) return null;
   const s = String(text)
@@ -120,4 +165,5 @@ function redact(text) {
     .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/g, '$1«redacted»@');
 }
 
-module.exports = { globsToMatcher, globToRegExp, splitGlobList, slugify, fileSlug, nowSec, round2, mac, extractJson, clamp, redact };
+module.exports = {
+  extractLastJsonObject, globsToMatcher, globToRegExp, splitGlobList, slugify, fileSlug, nowSec, round2, mac, extractJson, clamp, redact };

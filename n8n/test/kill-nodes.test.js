@@ -297,6 +297,21 @@ test('a non-.tsx module that imports react is still treated as a component', () 
     source: "import { useState } from 'react';\nexport function useThing() {}",
   })).system;
   assert.match(s, /This file is a UI COMPONENT \(react\)/);
+
+  // The mutant loop hand-builds the { ui, source } shape the detector reads, so the
+  // less obvious import forms are worth proving through THIS node and not only
+  // through uiGuidance directly (n8n/test/ui-guidance.test.js owns the full set).
+  const cjs = killBuildPrompt(target({
+    path: 'src/widget.js', testPath: 'test/widget.test.js', ui: reactUi,
+    source: '/* ' + 'licence '.repeat(300) + " */\nconst { useState } = require('react');\n",
+  })).system;
+  assert.match(cjs, /This file is a UI COMPONENT \(react\)/, 'CommonJS, behind a long licence header');
+
+  const mentionOnly = killBuildPrompt(target({
+    path: 'src/pricing.ts', testPath: 'test/pricing.test.ts', ui: reactUi,
+    source: "// the react version of this lived in src/Price.tsx\nexport const x = 1;\n",
+  })).system;
+  assert.ok(!mentionOnly.includes('UI COMPONENT'), 'a comment that names react is not a component');
 });
 
 test('component guidance degrades gracefully when the repo has no testing library', () => {
