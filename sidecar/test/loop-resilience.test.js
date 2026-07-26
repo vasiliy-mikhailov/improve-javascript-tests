@@ -368,3 +368,90 @@ test('a CHEAP attempt that kills is kept exactly like any other', () => withSand
   assert.equal(w.exists(testPath), true);
   assert.equal(sb.file(FILE).mutantsKilled, 1);
 }));
+// ═══════════════════════════════════════════════════════════════════════════
+//  one file per source, not one per mutant
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The loop writes one test file per mutant on purpose: a failed attempt is then
+// trivially droppable, and two mutants can never overwrite each other. That is right
+// for the loop and wrong for the PR. Live, after three attempts on one source file:
+//   registry.kill-L164-objectliteral-1fgc2lh.test.ts   (one `it`)
+//   registry.kill-L165-objectliteral-1eug1z8.test.ts   (one `it`)
+//   registry.kill-L166-objectliteral-1e8e2g7.test.ts   (one `it`)
+//   registry.mac-cov.test.ts
+// A reviewer should get one file with four tests, not four files with one each.
+
+const KILL_A = 'test/a.kill-L10-equalityoperator-aaa.test.ts';
+const KILL_B = 'test/a.kill-L20-booleanliteral-bbb.test.ts';
+
+/** A file with two accepted kill rounds on disk, ready for the PR stage. */
+async function twoKillFiles(sb) {
+  const w = await killReady(sb, { mutants: [{ line: 10 }, { line: 20 }, { line: 30 }] });
+  w.writeTest(KILL_A, { target: FILE, kills: [10], cases: 4 });
+  w.writeTest(KILL_B, { target: FILE, kills: [20], cases: 4 });
+  await sb.post('/api/verify', { file: FILE });
+  await sb.post('/api/round/accept', { file: FILE });
+  return w;
+}
+
+test('cleanup consolidates the per-mutant files into one file for the source', () => withSandbox(async (sb) => {
+  const w = await twoKillFiles(sb);
+  // the tidy pass declines to change either file, then the merge is asked for
+  // route by system prompt rather than by call order: the tidy pass runs once per
+  // changed file, and counting those would make the test fragile. The merged text is
+  // built from the originals, because a real merge KEEPS every test title — the guard
+  // rejects anything that would drop one.
+  w.llm.onCall((o) => {
+    if (!/You merge several generated test files/.test(o.system)) return { text: '' };
+    const bodies = [w.read(KILL_A), w.read(KILL_B)].join('\n');
+    return { text: "import { describe, it, expect } from 'vitest';\n" + bodies };
+  });
+
+  const r = await sb.post('/api/test/cleanup', { file: FILE });
+
+  const left = w.testFiles().map((t) => t.path).filter((p) => p !== 'test/a.test.ts');
+  assert.equal(left.length, 1, `one generated test file should remain, found: ${JSON.stringify(left)}`);
+  assert.equal(r.merged, 2, 'and it reports how many it folded together');
+  assert.equal(w.exists(KILL_A), false);
+  assert.equal(w.exists(KILL_B), false);
+}));
+
+test('a merge that loses a kill is reverted, files and all', () => withSandbox(async (sb) => {
+  const w = await twoKillFiles(sb);
+  // Every test title survives — so the cheap structural guard passes — but the
+  // KILLS marker for line 20 is gone, so the merged file no longer kills what the
+  // originals killed. Only re-measuring can catch that.
+  w.llm.onCall((o) => {
+    if (!/You merge several generated test files/.test(o.system)) return { text: '' };
+    const bodies = [w.read(KILL_A), w.read(KILL_B)].join('\n').replace(/^\s*\/\/\s*KILLS:\s*20\s*$/gm, '');
+    return { text: "import { describe, it, expect } from 'vitest';\n" + bodies };
+  });
+
+  const r = await sb.post('/api/test/cleanup', { file: FILE });
+
+  assert.equal(r.merged, 0);
+  assert.equal(w.exists(KILL_A), true, 'both originals come back');
+  assert.equal(w.exists(KILL_B), true);
+  assert.match(sb.events().join('\n'), /merge reverted/i);
+}));
+
+test('a merge that would drop a test is rejected before anything is re-measured', () => withSandbox(async (sb) => {
+  // The structural check is cheap and the measurement is not: a mutation run on a real
+  // file is minutes. A merge that silently loses a test is also the one failure the
+  // metrics might not notice, since a dropped test can leave the score untouched.
+  const w = await twoKillFiles(sb);
+  const before = { cov: w.calls.coverage.length, stryker: w.calls.stryker.length };
+  w.llm.onCall((o) => {
+    if (!/You merge several generated test files/.test(o.system)) return { text: '' };
+    return { text: "import { describe, it, expect } from 'vitest';\n" + w.read(KILL_A) };   // B is gone
+  });
+
+  const r = await sb.post('/api/test/cleanup', { file: FILE });
+
+  assert.equal(r.merged, 0);
+  assert.equal(w.exists(KILL_A), true, 'nothing was touched');
+  assert.equal(w.exists(KILL_B), true);
+  assert.equal(w.calls.coverage.length, before.cov, 'and no measurement was spent proving it');
+  assert.equal(w.calls.stryker.length, before.stryker);
+  assert.match(sb.events().join('\n'), /merge rejected/i);
+}));

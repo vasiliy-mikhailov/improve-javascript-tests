@@ -173,6 +173,80 @@ function candidates() {
   return { done, reason, iteration: state.run.iteration, processed, candidates: list.slice(0, 100) };
 }
 
+
+/**
+ * One file per SOURCE file, not one per mutant.
+ *
+ * The loop writes a separate file per target on purpose: a failed attempt is trivially
+ * droppable and two mutants cannot overwrite each other. That is right for the loop and
+ * wrong for the PR. Measured on a real branch: ten files, 805 lines, for one source
+ * file — because every file re-declares the same forty lines of module mocks to assert
+ * one thing. A reviewer should get one file with ten tests.
+ *
+ * Verified exactly like the cleanup that precedes it: suite green, and neither half of
+ * MAC may drop. Anything else and the originals come back.
+ */
+async function consolidate(file, covBase, mutBase) {
+  const changed = (await pr.changedTestFiles()).filter((p) => /\.(kill-L\d+-|mac-cov)/.test(p));
+  if (changed.length < 2) return 0;
+  S.setStage('preparing_pr', `folding ${changed.length} generated test files into one for ${file}`);
+  const originals = changed.map((p) => ({ path: p, content: repo.readFileSafe(p, 200000) })).filter((o) => o.content);
+  if (originals.length < 2) return 0;
+  const ext = (file.match(/\.[cm]?[jt]sx?$/) || ['.ts'])[0];
+  const target = originals[0].path.replace(/\.(kill-L\d+-[a-z0-9-]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/, `.mac.test${ext}`);
+  if (target === originals[0].path) return 0;
+
+  let mergedText;
+  try {
+    const r = await llm.chat({
+      system: 'You merge several generated test files for ONE source file into a single file. Keep EVERY test — same names, same assertions, same values. Deduplicate imports and shared mock setup into one block at the top. Do not rename tests, do not weaken or reorder assertions, do not add tests. Reply with ONLY the merged file content: no markdown fences, no explanation.',
+      prompt: originals.map((o) => `=== ${o.path} ===\n${o.content}`).join('\n\n'),
+      maxTokens: 12000, temperature: 0.1,
+    });
+    mergedText = (r.text || '').replace(/^[\s\S]*?<\/think>/, '')
+      .replace(/^```[a-z]*\s*\n?/m, '').replace(/```\s*$/m, '').trim() + '\n';
+  } catch (e) {
+    S.event('preparing_pr', 'merge skipped: ' + e.message.slice(0, 140));
+    return 0;
+  }
+  // every test must still be there: losing one is a silent regression the metrics
+  // might not notice, because a dropped test can leave the score untouched
+  const titles = (t) => (t.match(/\b(it|test)\s*\(\s*['"`]([^'"`]+)/g) || []).map((x) => x.slice(x.indexOf('(') + 1));
+  const before = originals.flatMap((o) => titles(o.content));
+  const after = titles(mergedText);
+  const missing = before.filter((t) => !after.includes(t));
+  if (mergedText.length < 200 || missing.length) {
+    S.event('preparing_pr', `merge rejected: ${missing.length} test(s) would be lost`);
+    return 0;
+  }
+
+  for (const o of originals) repo.deleteTestFile(o.path);
+  repo.writeTestFile(target, mergedText);
+  const cr = await coverage.runCoverage();
+  let ok = false, newCov = null, newScore = null;
+  if (cr.exitCode === 0) {
+    newCov = state.files[file]?.coverage ?? null;
+    try {
+      const st = await stryker.runStryker(file);
+      newScore = st.score;
+      ok = !st.noTests && st.totalMutants != null && newScore >= mutBase && (newCov ?? 0) >= covBase;
+    } catch { ok = false; }
+  }
+  if (!ok) {
+    repo.deleteTestFile(target);
+    for (const o of originals) repo.writeTestFile(o.path, o.content);
+    S.upsertFile(file, { coverage: covBase, coverageAfter: covBase });
+    S.event('preparing_pr', `merge reverted: coverage ${covBase}→${newCov}, mutation ${mutBase}→${newScore}`);
+    return 0;
+  }
+  S.upsertFile(file, { coverage: newCov, coverageAfter: newCov, mutation: newScore, mutationAfter: newScore,
+    mac: mac(newCov, newScore), macAfter: mac(newCov, newScore) });
+  try { await pr.commit(`test: fold generated tests for ${file} into one file`); }
+  catch (e) { S.event('preparing_pr', 'merge commit note: ' + e.message.slice(0, 140)); }
+  S.event('preparing_pr', `merged ${originals.length} files into ${target} (${mergedText.length}B)`);
+  return originals.length;
+}
+
 // ── route table ────────────────────────────────────────────────────────────
 const routes = {
   'GET /api/health': async () => ({ ok: true, service: 'ijst-sidecar', stage: state.stage.name, ts: Date.now() }),
@@ -524,7 +598,10 @@ const routes = {
     }
     const touched = results.filter((r) => r.kept === 'cleaned');
     const publicResults = results.map(({ _original, ...r }) => r);
-    if (!touched.length) return { ok: true, cleaned: 0, results: publicResults };
+    if (!touched.length) {
+      const mergedOnly = await consolidate(file, f.coverageAfter ?? f.coverage ?? 0, f.mutationAfter ?? f.mutation ?? 0);
+      return { ok: true, cleaned: 0, merged: mergedOnly, results: publicResults };
+    }
     // Verified cleanup: the suite stays green and NEITHER HALF of MAC may drop.
     // Checking the mutation score alone let cleanup delete the bootstrap coverage
     // test — which is exactly the "vacuous" shape it is told to remove — for free:
@@ -562,7 +639,8 @@ const routes = {
     try { await pr.commit(`test: tidy generated tests for ${file}`); }
     catch (e) { S.event('preparing_pr', 'cleanup commit note: ' + e.message.slice(0, 160)); }
     S.event('preparing_pr', 'cleanup kept: ' + touched.map((t) => `${t.path} ${t.bytesBefore}→${t.bytesAfter}B`).join(', '));
-    return { ok: true, cleaned: touched.length, mutationAfter: newScore, results: publicResults };
+    const merged = await consolidate(file, covBase, newScore);
+    return { ok: true, cleaned: touched.length, merged, mutationAfter: newScore, results: publicResults };
   },
 
   // ── mutant-driven loop: one target, one test, verified kill ────────────────
