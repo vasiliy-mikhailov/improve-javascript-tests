@@ -10,7 +10,7 @@ const { round2 } = require('./util');
 const CFG_NAME = '.ijst-stryker.config.json';
 const REPORT = path.join('reports', 'mutation', 'mutation.json');
 
-function writeConfig(mutateFile) {
+function writeConfig(mutateSpec) {
   const dir = repoDir();
   const runner = state.runner?.testRunner;
   const cfg = {
@@ -18,7 +18,10 @@ function writeConfig(mutateFile) {
     testRunner: runner,
     // explicit plugin list — auto-discovery fails under pnpm's symlinked node_modules
     plugins: [runner === 'vitest' ? '@stryker-mutator/vitest-runner' : '@stryker-mutator/jest-runner'],
-    mutate: [mutateFile],
+    // may be a plain path or a mutation range "src/foo.ts:120-190" (Stryker 9.x).
+    // A range instruments only those lines, which turns kill-verification from
+    // minutes into seconds. Ranges cannot contain glob magic.
+    mutate: [mutateSpec],
     reporters: ['json', 'progress'],
     coverageAnalysis: 'perTest',
     thresholds: { high: 80, low: 60, break: null },
@@ -46,10 +49,16 @@ function writeConfig(mutateFile) {
   fs.writeFileSync(path.join(dir, CFG_NAME), JSON.stringify(cfg, null, 2));
 }
 
-async function runStryker(file) {
+/**
+ * @param {string} file  repo-relative source path
+ * @param {object} [opts]
+ * @param {{from:number,to:number}} [opts.range]  mutate only these lines (kill verification)
+ */
+async function runStryker(file, opts = {}) {
   const dir = repoDir();
   if (!state.runner?.testRunner) throw new Error('runner not detected — call /api/repo/prepare first');
-  writeConfig(file);
+  const spec = opts.range ? `${file}:${opts.range.from}-${opts.range.to}` : file;
+  writeConfig(spec);
   const reportAbs = path.join(dir, REPORT);
   try { fs.unlinkSync(reportAbs); } catch { }
   const r = await run(['npx', '--no-install', 'stryker', 'run', CFG_NAME],
@@ -64,7 +73,16 @@ async function runStryker(file) {
     throw new Error(`stryker produced no report (exit ${r.code}): ` + out.slice(-800));
   }
   const parsed = parseReport(reportAbs, file);
-  event('stryker', `${file}: ${parsed.totalMutants} mutants, ${parsed.killed} killed, ${parsed.survived.length} survived+nocov, score ${parsed.score}%`);
+  if (opts.range) {
+    // A range run scores ONLY those lines. It answers "did this mutant die?", never
+    // "what is this file's mutation score" — callers must not write it into metrics.
+    parsed.partial = true;
+    parsed.range = opts.range;
+    event('stryker', `${file}:${opts.range.from}-${opts.range.to} (kill check): `
+      + `${parsed.totalMutants} mutant(s) in range, ${parsed.killed} killed, ${parsed.survived.length} still alive`);
+  } else {
+    event('stryker', `${file}: ${parsed.totalMutants} mutants, ${parsed.killed} killed, ${parsed.survived.length} survived+nocov, score ${parsed.score}%`);
+  }
   return parsed;
 }
 

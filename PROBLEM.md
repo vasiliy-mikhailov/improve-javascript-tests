@@ -47,4 +47,13 @@
   (completion) tokens for every model call, attribute them to the file being worked on, and show
   them per file and cumulatively on the dashboard alongside the time accounting.
 
+- 2026-07-26 (iteration 8): **mutant-driven improvement loop, one test at a time.** The coverage
+  phase is only a bootstrap — it runs when a file has no coverage at all (nothing imports it, so
+  mutation testing has nothing to work with). Once any coverage exists, improvement is driven
+  purely by mutants: pick the **most promising surviving mutant**, ask the LLM for a **single**
+  test that kills it, re-run mutation to **verify the kill**, keep the test only if the mutant
+  actually died, and repeat. Killing mutants raises coverage as a side effect, so the separate
+  coverage phase is redundant after bootstrap. Goal: a **small, high-value test model** — every
+  committed test provably kills something — and smaller, more focused prompts.
+
 See RESEARCH.md for the derived DoD and reward formula, eval/RESULTS.md for iteration history.

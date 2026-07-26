@@ -13,6 +13,7 @@ const rulesMod = require('./rules');
 const pr = require('./pr');
 const llm = require('./llm');
 const timesheet = require('./timesheet');
+const mutantsMod = require('./mutants');
 const { run } = require('./exec');
 const { mac, fileSlug, round2, clamp, slugify } = require('./util');
 
@@ -312,6 +313,7 @@ const routes = {
     S.upsertFile(file, {
       status: 'picked', branch, attempts: state.files[file].attempts + 1,
       rounds: 0, roundBase: null, lastSurvived: null,
+      mutantAttempts: {}, mutantAttemptCount: 0, mutantsKilled: 0,
       attemptStartedAt: Math.floor(Date.now() / 1000),
     });
     S.save();
@@ -378,6 +380,10 @@ const routes = {
       uncovered: coverage.uncoveredLines(p),
       rounds: state.files[p]?.rounds || 0,
       survived: state.files[p]?.lastSurvived || [],
+      // the coverage phase is only a BOOTSTRAP: it exists to get a file executed at
+      // all, because mutation testing has nothing to work with otherwise. Once any
+      // coverage exists, killing mutants raises coverage as a side effect.
+      needsBootstrap: (state.files[p]?.coverage ?? 0) <= 0 || coverage.uncoveredLines(p).lines === 'all',
       ui: repo.detectUi(),
       testPath: guess.path, testExists: guess.exists, existingTest,
       runner: state.runner?.testRunner,
@@ -501,6 +507,92 @@ const routes = {
     catch (e) { S.event('preparing_pr', 'cleanup commit note: ' + e.message.slice(0, 160)); }
     S.event('preparing_pr', 'cleanup kept: ' + touched.map((t) => `${t.path} ${t.bytesBefore}→${t.bytesAfter}B`).join(', '));
     return { ok: true, cleaned: touched.length, mutationAfter: newScore, results: publicResults };
+  },
+
+  // ── mutant-driven loop: one target, one test, verified kill ────────────────
+  'GET /api/mutant/next': async (q) => {
+    needRun();
+    const p = q.get('path');
+    const f = p && state.files[p];
+    if (!f) throw new Error('unknown file: ' + p);
+    const budget = state.run.config.maxMutantsPerFile || 5;
+    const spent = f.mutantAttemptCount || 0;
+    if (spent >= budget) {
+      return { ok: true, mutant: null, done: true, reason: `attempt budget (${budget} mutants) spent for this file` };
+    }
+    const next = mutantsMod.pickNext(f.lastSurvived || [], { attempts: f.mutantAttempts || {} });
+    if (!next) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
+
+    const source = repo.readFileSafe(p, 24000);
+    const fileLines = source ? source.split('\n').length : null;
+    const guess = repo.guessTestPath(p);
+    let existingTest = guess.exists ? repo.readFileSafe(guess.path, 8000) : null;
+    if (!existingTest) {
+      const ref = repo.findStyleReference(p);
+      if (ref) existingTest = `// STYLE REFERENCE — an existing test from this repo (${ref.path}).\n${ref.content}`;
+    }
+    S.setStage('improving_mutation', `targeting ${next.mutator} at ${p}:${next.line} (${spent + 1}/${budget})`);
+    S.event('improving_mutation', `next target: ${next.mutator} at line ${next.line} — ${next.why}`);
+    return {
+      ok: true, done: false, path: p, mutant: next,
+      attemptsSpent: spent, budget,
+      verifyRange: mutantsMod.verifyRange(next, { fileLines }),
+      source, sourceLines: fileLines,
+      testPath: guess.path, testExists: guess.exists, existingTest,
+      runner: state.runner?.testRunner, ui: repo.detectUi(),
+      constraints: rulesMod.testWritingConstraints(),
+      packageJson: (repo.readPkg().name || '') + ' (type=' + (repo.readPkg().type || 'commonjs') + ')',
+    };
+  },
+
+  'POST /api/mutant/verify': async (q, body) => {
+    needRun();
+    const { file, mutant, testPaths = [] } = body;
+    const f = file && state.files[file];
+    if (!f || !mutant) throw new Error('file and mutant are required');
+    const key = mutantsMod.mutantKey(mutant);
+    const bump = (killed) => {
+      const attempts = { ...(f.mutantAttempts || {}) };
+      if (!killed) attempts[key] = (attempts[key] || 0) + 1;
+      S.upsertFile(file, {
+        mutantAttempts: attempts,
+        mutantAttemptCount: (f.mutantAttemptCount || 0) + 1,
+        mutantsKilled: (f.mutantsKilled || 0) + (killed ? 1 : 0),
+      });
+    };
+    const drop = () => { for (const p of testPaths) repo.deleteTestFile(p); };
+
+    if (!testPaths.length) { bump(false); return { ok: true, killed: false, reason: 'no test was written' }; }
+
+    // 1. the suite must stay green — a test that breaks the build is never worth keeping
+    S.setStage('improving_mutation', `checking suite after targeting ${mutant.mutator} at line ${mutant.line}`);
+    const suite = await tests.runTests(null);
+    if (!suite.passed) {
+      drop(); bump(false);
+      S.event('improving_mutation', `discarded: suite went red targeting ${mutant.mutator} at line ${mutant.line}`);
+      return { ok: true, killed: false, reason: 'suite red', summary: suite.summary };
+    }
+    // 2. did the target actually die? Only the mutant's neighbourhood is re-mutated,
+    //    which is seconds rather than the minutes a whole-file run costs.
+    const src = repo.readFileSafe(file, 500000);
+    const range = mutantsMod.verifyRange(mutant, { fileLines: src ? src.split('\n').length : null });
+    let killed = false, note = '';
+    try {
+      const r = await stryker.runStryker(file, { range });
+      const stillAlive = (r.survived || []).some((s) => mutantsMod.sameMutant(s, mutant));
+      const seen = (r.totalMutants || 0) > 0;
+      killed = seen && !stillAlive;
+      if (!seen) note = 'target not present in the range run — treating as not killed';
+    } catch (e) { note = 'kill check failed: ' + e.message.slice(0, 160); }
+
+    if (!killed) {
+      drop(); bump(false);
+      S.event('improving_mutation', `discarded: ${mutant.mutator} at line ${mutant.line} survived the new test${note ? ' (' + note + ')' : ''}`);
+      return { ok: true, killed: false, reason: note || 'mutant survived', testPaths };
+    }
+    bump(true);
+    S.event('improving_mutation', `KILLED ${mutant.mutator} at line ${mutant.line} — keeping ${testPaths.join(', ')}`);
+    return { ok: true, killed: true, testPaths, killedSoFar: (f.mutantsKilled || 0) + 1 };
   },
 
   'POST /api/verify': async (q, body) => {

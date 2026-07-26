@@ -195,11 +195,16 @@ const file = $('Start Iteration').first().json.file;
 const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];
 const u = gaps.uncovered || {};
 const fullyUncovered = u.lines === 'all';
-const nothingToCover = !fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length);
+// The coverage phase is a BOOTSTRAP only: it exists so a file is executed at all,
+// because mutation testing has nothing to work with otherwise. Once any coverage
+// exists, killing mutants raises coverage as a side effect, so we skip straight to
+// the mutant loop instead of writing bulk coverage tests.
+const nothingToCover = !gaps.needsBootstrap
+  || (!fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length));
 const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');
 const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';
 const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;
-if (nothingToCover) return [{ json: { skip: true, reason: 'file fully covered', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
+if (nothingToCover) return [{ json: { skip: true, reason: gaps.needsBootstrap ? 'file fully covered' : 'already executed by tests — mutant loop takes it from here', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
 const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');${UI_GUIDANCE_SNIPPET}
 const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full test file content"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
   + uiGuidance
@@ -216,34 +221,86 @@ const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + 
 return [{ json: { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];`,
   'Coverage Gaps');
 
-// ── mutation phase ─────────────────────────────────────────────────────────
-const mutDone = phase('Mut', `
-const gaps = $('Coverage Gaps').first().json;
-const file = $('Start Iteration').first().json.file;
-const cfg = $('Start Run').first().json.run.config;
+// ── mutant loop: ONE target, ONE test, verified kill, repeat ───────────────
+// The old batch approach ("here are 5 survivors, write tests") produced tests that
+// passed but killed nothing. Now every committed test has a named victim and is
+// kept only if that mutant actually died — dead weight becomes impossible rather
+// than pruned afterwards, and the prompt shrinks to a single focused target.
+function mutantLoop(entryNode) {
+  Http('Next Mutant', {
+    method: 'GET',
+    urlExpr: `=${API}/api/mutant/next?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}`,
+    timeout: 120000,
+  });
+  IfNum('Mutant To Kill?', '={{ $json.mutant ? 1 : 0 }}', 'equal', 1);
+
+  Code('Kill: Build Prompt', `
+const t = $json;                       // /api/mutant/next
+const m = t.mutant;
+const file = t.path;
 const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];
-const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');
-const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';
-const targetPath = base + '.mac-mut' + roundSuffix + '.test' + ext;
-// freshest survivors: sidecar tracks the last stryker run of this file (any round)
-const allSurvived = (gaps.survived && gaps.survived.length) ? gaps.survived : ($('Baseline Mutation').first().json.survived || []);
-const survived = allSurvived.slice(0, cfg.maxMutantsPerFile || 5);
-if (!survived.length) return [{ json: { skip: true, reason: 'no surviving mutants', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
-const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');${UI_GUIDANCE_SNIPPET}
-const mutantsTxt = survived.map((m, i) =>
-  '#' + (i + 1) + ' ' + m.mutator + ' at line ' + m.line + ' — mutated code would become: ' + JSON.stringify(m.replacement)
-  + (m.context ? '\\ncontext:\\n' + m.context : '')).join('\\n\\n');
-const system = 'You are an expert test engineer writing ' + gaps.runner + ' tests that KILL surviving Stryker mutants of one source file. A mutant is killed when at least one test FAILS on the mutated code while PASSING on the original code. Write precise assertions that distinguish original from mutated behavior. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full test file content"}]}. Create NEW test files only. Preferred new file path: ' + targetPath + '. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
+const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');
+// one file per target keeps the suite readable and makes a failed attempt trivial to drop
+const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '.test' + ext;
+const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };
+${UI_GUIDANCE_SNIPPET}
+const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');
+const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '
+  + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '
+  + 'Reply ONLY with JSON: {"tests":[{"path":"' + targetPath + '","content":"full test file content"}]}. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
   + uiGuidance
   + (constraints ? '\\nTeam constraints:\\n' + constraints : '');
-const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'
-  + String(gaps.source || '').slice(0, 12000)
-  + '\\n\\nSURVIVING MUTANTS TO KILL:\\n' + mutantsTxt
-  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'
-  + String(gaps.existingTest || '(none)').slice(0, 4000)
-  + '\\n\\nWrite tests that kill as many of these mutants as possible. JSON only.';
-return [{ json: { system, prompt, json: true, maxTokens: 7000, temperature: 0.3, stage: 'improving_mutation', stageDetail: 'writing mutant-killing tests', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];`,
-  covDone);
+const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'
+  + String(t.source || '').slice(0, 12000)
+  + '\\n\\nTARGET MUTANT — kill this one:\\n'
+  + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + (m.column ? ':' + m.column : '') + '\\n'
+  + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'
+  + '  status: ' + (m.status === 'survived' ? 'covered by existing tests, but nothing asserts the difference' : 'not covered at all — your test must reach this code') + '\\n'
+  + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')
+  + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'
+  + String(t.existingTest || '(none)').slice(0, 4000)
+  + '\\n\\nWrite the single test file that kills this mutant. JSON only.';
+return [{ json: { system, prompt, json: true, maxTokens: 4000, temperature: 0.2,
+  stage: 'improving_mutation', stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line,
+  targetPath } }];`);
+
+  Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+
+  Code('Kill: Parse Test', `
+const resp = $json;
+const plan = $('Kill: Build Prompt').first().json;
+let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];
+tests = tests
+  .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)
+  .slice(0, 1)                                  // one target, one test file
+  .map(t => {
+    let p = String(t.path || '').replace(/^\\.?\\//, '');
+    const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p) && !p.includes('..');
+    return { path: safe ? p : plan.targetPath, content: t.content };
+  });
+return [{ json: { tests, paths: tests.map(t => t.path), count: tests.length } }];`);
+
+  Http('Kill: Write Test', {
+    path: '/api/test/write-many',
+    body: `={{ { tests: $json.tests, stage: 'improving_mutation' } }}`,
+  });
+  // suite must stay green AND the target must actually die; the sidecar deletes the
+  // test and records the failed attempt when it does not
+  Http('Kill: Verify', {
+    path: '/api/mutant/verify',
+    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Parse Test').first().json.paths } }}`,
+    timeout: 2400000,
+  });
+  NoOp('Mutant Loop Done');
+
+  chain(entryNode, 'Next Mutant', 'Mutant To Kill?');
+  link('Mutant To Kill?', 'Kill: Build Prompt', 0);
+  link('Mutant To Kill?', 'Mutant Loop Done', 1);   // budget spent or nothing viable
+  chain('Kill: Build Prompt', 'Kill: LLM', 'Kill: Parse Test', 'Kill: Write Test', 'Kill: Verify');
+  link('Kill: Verify', 'Next Mutant');              // kept or dropped — either way, next target
+  return 'Mutant Loop Done';
+}
+const mutDone = mutantLoop(covDone);
 
 // =============================================================================
 // VERIFY → CHECK RULES → PR / DISCARD → LOOP

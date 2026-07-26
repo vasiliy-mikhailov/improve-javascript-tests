@@ -1,0 +1,63 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { rank, pickNext, mutantKey, sameMutant, verifyRange, rangeSpec } = require('../mutants');
+
+const m = (over = {}) => ({ mutator: 'EqualityOperator', line: 10, column: 3, status: 'survived', replacement: '>', ...over });
+
+test('covered survivors outrank no-coverage mutants', () => {
+  const ranked = rank([
+    m({ line: 50, status: 'nocoverage', mutator: 'EqualityOperator' }),
+    m({ line: 10, status: 'survived', mutator: 'StringLiteral' }),
+  ]);
+  assert.equal(ranked[0].line, 10, 'the covered one wins even with a harder mutator');
+  assert.match(ranked[0].why, /covered by tests/);
+});
+
+test('clustered survivors outrank isolated ones of the same kind', () => {
+  const cluster = [m({ line: 100 }), m({ line: 102 }), m({ line: 104 }), m({ line: 106 })];
+  const lonely = m({ line: 500 });
+  const ranked = rank([lonely, ...cluster]);
+  assert.notEqual(ranked[0].line, 500);
+  assert.ok(ranked[0].neighbours >= 2);
+});
+
+test('tractable mutators outrank opaque ones, all else equal', () => {
+  const ranked = rank([
+    m({ line: 20, mutator: 'BlockStatement' }),
+    m({ line: 40, mutator: 'EqualityOperator' }),
+  ]);
+  assert.equal(ranked[0].mutator, 'EqualityOperator');
+});
+
+test('repeatedly failed mutants sink and eventually drop out', () => {
+  const hard = m({ line: 10 });
+  const easy = m({ line: 200, mutator: 'ArithmeticOperator' });
+  const attempts = { [mutantKey(hard)]: 2 };
+  const ranked = rank([hard, easy], { attempts });
+  assert.equal(ranked[0].line, 200);
+  assert.equal(pickNext([hard], { attempts }), null, 'exhausted mutant is not picked again');
+});
+
+test('pickNext returns null when there is nothing to attack', () => {
+  assert.equal(pickNext([]), null);
+  assert.equal(pickNext(undefined), null);
+});
+
+test('mutant identity survives id churn between runs', () => {
+  const before = { id: '1', mutator: 'EqualityOperator', line: 10, column: 3, replacement: '>' };
+  const after = { id: '77', mutator: 'EqualityOperator', line: 10, column: 3, replacement: '>' };
+  assert.ok(sameMutant(before, after));
+  assert.ok(!sameMutant(before, { ...after, line: 11 }));
+  assert.equal(mutantKey(before), mutantKey(after));
+});
+
+test('verifyRange pads around the mutant and clamps to the file', () => {
+  assert.deepEqual(verifyRange({ line: 100, endLine: 104 }, { pad: 10 }), { from: 90, to: 114 });
+  assert.deepEqual(verifyRange({ line: 3 }, { pad: 10 }), { from: 1, to: 13 }, 'never below line 1');
+  assert.deepEqual(verifyRange({ line: 95 }, { pad: 10, fileLines: 100 }), { from: 85, to: 100 });
+});
+
+test('rangeSpec renders Stryker mutation-range syntax', () => {
+  assert.equal(rangeSpec('src/foo.ts', { from: 120, to: 190 }), 'src/foo.ts:120-190');
+});
