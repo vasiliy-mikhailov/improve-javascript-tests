@@ -354,7 +354,11 @@ const routes = {
     }
     const f = state.files[file] || S.upsertFile(file, {});
     const fileMac = mac(f.coverage, r.score);
-    S.upsertFile(file, { mutation: r.score, mac: fileMac, totalMutants: r.totalMutants, lastSurvived: (r.survived || []).slice(0, 10) });
+    S.upsertFile(file, {
+      mutation: r.score, mac: fileMac, totalMutants: r.totalMutants,
+      survivedTotal: r.survivedTotal ?? (r.survived || []).length,
+      lastSurvived: (r.survived || []).slice(0, 100),
+    });
     if (body.phase === 'baseline') {
       S.upsertFile(file, {
         macBefore: fileMac, coverageBefore: f.coverage, mutationBefore: r.score,
@@ -639,17 +643,21 @@ const routes = {
     //    both questions at once: did the target die, and what is still alive now?
     //    One test frequently kills neighbours too, so a fresh list is worth more
     //    than a narrow check — and it keeps the score and the queue exact.
-    const before = (f.lastSurvived || []).length;
+    // untruncated counts: lastSurvived is capped at 100 entries
+    const before = f.survivedTotal ?? (f.lastSurvived || []).length;
     const beforeScore = f.mutation ?? 0;
-    let killedTarget = false, killedCount = 0, note = '';
+    let killedTarget = false, killedCount = 0, scoreRose = false, note = '';
     try {
       const r = await stryker.runStryker(file);
       const alive = r.survived || [];
       killedTarget = !alive.some((s) => mutantsMod.sameMutant(s, mutant));
-      killedCount = Math.max(0, before - alive.length);
+      const afterTotal = r.survivedTotal ?? alive.length;
+      killedCount = Math.max(0, before - afterTotal);
+      scoreRose = (r.score ?? 0) > beforeScore;
       // fresh, complete survivor list + up-to-date score for the next iteration
       S.upsertFile(file, {
         lastSurvived: alive.slice(0, 100),
+        survivedTotal: r.survivedTotal ?? alive.length,
         mutation: r.score,
         totalMutants: r.totalMutants,
         mac: mac(f.coverageAfter ?? f.coverage, r.score),
@@ -661,7 +669,9 @@ const routes = {
 
     // A test earns its place if it killed ANYTHING — collateral kills are real
     // improvement even when the chosen target turns out to be equivalent.
-    const worthKeeping = killedCount > 0 || killedTarget;
+    // three independent signals, any of which means the test did real work:
+    // the target died, the survivor count fell, or the score rose.
+    const worthKeeping = killedTarget || killedCount > 0 || scoreRose;
     // The mutant is marked attempted either way: never spend a second generation
     // on a target that already resisted one.
     bump(worthKeeping);

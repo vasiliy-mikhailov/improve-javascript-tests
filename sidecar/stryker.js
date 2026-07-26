@@ -142,6 +142,9 @@ function parseReport(reportAbs, file) {
     killed,
     timedOut,
     score,
+    // the array is capped for prompt/state size; the COUNT must not be, or
+    // "how many died" is meaningless on files with many survivors
+    survivedTotal: survivedList.length,
     survived: survivedList.slice(0, 100),
   };
 }
