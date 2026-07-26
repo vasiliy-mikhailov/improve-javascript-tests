@@ -172,6 +172,13 @@ const routes = {
   'GET /api/state': async () => state,
   'GET /api/metrics': async () => metricsPayload(),
   'GET /api/rules': async () => ({ rules: state.run?.config?.rules || S.envConfig().rules, decisions: state.decisions }),
+  // live model transcript for the dashboard; `after` makes it an incremental feed
+  'GET /api/dialog': async (q) => {
+    const after = parseInt(q.get('after') || '0', 10);
+    const items = (state.dialog || []).filter((d) => d.seq > after);
+    return { dialog: items.slice(-20), latestSeq: state.dialogSeq || 0 };
+  },
+
   'GET /api/events': async (q) => {
     const after = parseInt(q.get('after') || '0', 10);
     return { events: state.events.filter((e) => e.seq > after) };
@@ -639,45 +646,49 @@ const routes = {
       S.event('improving_mutation', `discarded: suite went red targeting ${mutant.mutator} at line ${mutant.line}`);
       return { ok: true, killed: false, reason: 'suite red', summary: suite.summary };
     }
-    // 2. did the target actually die? Only the mutant's neighbourhood is re-mutated,
-    //    which is seconds rather than the minutes a whole-file run costs.
-    const src = repo.readFileSafe(file, 500000);
-    const range = mutantsMod.verifyRange(mutant, { fileLines: src ? src.split('\n').length : null });
-    let killed = false, note = '';
+    // 2. Re-run mutation over the WHOLE file. This is the authoritative answer to
+    //    both questions at once: did the target die, and what is still alive now?
+    //    One test frequently kills neighbours too, so a fresh list is worth more
+    //    than a narrow check — and it keeps the score and the queue exact.
+    const before = (f.lastSurvived || []).length;
+    const beforeScore = f.mutation ?? 0;
+    let killedTarget = false, killedCount = 0, note = '';
     try {
-      const r = await stryker.runStryker(file, { range });
-      const stillAlive = (r.survived || []).some((s) => mutantsMod.sameMutant(s, mutant));
-      const seen = (r.totalMutants || 0) > 0;
-      killed = seen && !stillAlive;
-      if (!seen) note = 'target not present in the range run — treating as not killed';
-
-      // Prune the survivor list with what this range run just proved. Without this
-      // the loop re-picks a mutant it already killed (the list is only rebuilt by
-      // FULL runs) and commits a duplicate test for a corpse. Mutants outside the
-      // verified range are left untouched — we learned nothing about them.
-      if (seen) {
-        const aliveInRange = new Set((r.survived || []).map(mutantsMod.mutantKey));
-        const before = (f.lastSurvived || []).length;
-        const pruned = (f.lastSurvived || []).filter((s) => {
-          const inRange = s.line >= range.from && s.line <= range.to;
-          return inRange ? aliveInRange.has(mutantsMod.mutantKey(s)) : true;
-        });
-        if (pruned.length !== before) {
-          S.upsertFile(file, { lastSurvived: pruned });
-          S.event('improving_mutation', `survivor list: ${before - pruned.length} mutant(s) in lines `
-            + `${range.from}-${range.to} confirmed dead and removed from the queue`);
-        }
-      }
-    } catch (e) { note = 'kill check failed: ' + e.message.slice(0, 160); }
-
-    if (!killed) {
-      drop(); bump(false);
-      S.event('improving_mutation', `discarded: ${mutant.mutator} at line ${mutant.line} survived the new test${note ? ' (' + note + ')' : ''}`);
-      return { ok: true, killed: false, reason: note || 'mutant survived', testPaths };
+      const r = await stryker.runStryker(file);
+      const alive = r.survived || [];
+      killedTarget = !alive.some((s) => mutantsMod.sameMutant(s, mutant));
+      killedCount = Math.max(0, before - alive.length);
+      // fresh, complete survivor list + up-to-date score for the next iteration
+      S.upsertFile(file, {
+        lastSurvived: alive.slice(0, 100),
+        mutation: r.score,
+        totalMutants: r.totalMutants,
+        mac: mac(f.coverageAfter ?? f.coverage, r.score),
+      });
+      recordMeasurement(file, { attemptMutation: r.score, attemptMac: mac(f.coverageAfter ?? f.coverage, r.score) });
+    } catch (e) {
+      note = 'mutation re-run failed: ' + e.message.slice(0, 160);
     }
-    bump(true);
-    S.event('improving_mutation', `KILLED ${mutant.mutator} at line ${mutant.line} — keeping ${testPaths.join(', ')}`);
-    return { ok: true, killed: true, testPaths, killedSoFar: (f.mutantsKilled || 0) + 1 };
+
+    // A test earns its place if it killed ANYTHING — collateral kills are real
+    // improvement even when the chosen target turns out to be equivalent.
+    const worthKeeping = killedCount > 0 || killedTarget;
+    // The mutant is marked attempted either way: never spend a second generation
+    // on a target that already resisted one.
+    bump(worthKeeping);
+    if (!worthKeeping) {
+      drop();
+      S.event('improving_mutation', `discarded: ${mutant.mutator} at line ${mutant.line} — nothing died${note ? ' (' + note + ')' : ''}`);
+      return { ok: true, killed: false, killedCount: 0, reason: note || 'no mutant died', testPaths };
+    }
+    const collateral = Math.max(0, killedCount - (killedTarget ? 1 : 0));
+    S.event('improving_mutation', `KILLED ${killedCount} mutant(s) — target ${mutant.mutator} at line ${mutant.line} `
+      + `${killedTarget ? 'died' : 'SURVIVED but the test killed others'}${collateral ? `, ${collateral} collateral` : ''} `
+      + `— keeping ${testPaths.join(', ')} (${(f.lastSurvived || []).length} survivor(s) left)`);
+    return {
+      ok: true, killed: true, killedTarget, killedCount, collateral,
+      testPaths, killedSoFar: (f.mutantsKilled || 0) + killedCount,
+    };
   },
 
   'POST /api/verify': async (q, body) => {

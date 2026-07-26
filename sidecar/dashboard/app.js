@@ -132,5 +132,42 @@ function render(m) {
     <span class="badge b-stage">${esc(e.stage)}</span> ${esc(e.msg)}</div>`).join('');
 }
 
+// ── live model dialog ──────────────────────────────────────────────────────
+// Incremental feed: we only ask for turns newer than the last one we hold, so a
+// long transcript costs nothing to keep watching.
+let dialogSeq = 0;
+const turns = [];
+
+async function pollDialog() {
+  let d;
+  try { d = await (await fetch('api/dialog?after=' + dialogSeq, { cache: 'no-store' })).json(); }
+  catch { return; }
+  const fresh = d.dialog || [];
+  if (!fresh.length) return;
+  for (const t of fresh) { turns.push(t); dialogSeq = Math.max(dialogSeq, t.seq); }
+  while (turns.length > 30) turns.shift();
+  renderDialog();
+}
+
+function renderDialog() {
+  $('dialog-count').textContent = turns.length ? `(newest first · ${dialogSeq} exchange(s) this run)` : '';
+  $('dialog').innerHTML = turns.slice().reverse().map((t) => {
+    const secs = Math.round((t.durationMs || 0) / 1000);
+    const peek = (t.response || '').replace(/\s+/g, ' ').slice(0, 110);
+    return `<details class="turn k-${esc(t.kind)}">
+      <summary>
+        <span class="who">${esc(t.kind)}</span>
+        <span class="meta">${new Date(t.ts * 1000).toLocaleTimeString()} · ${secs}s · ${esc(t.stage)}${t.file ? ' · ' + esc(t.file.split('/').pop()) : ''}${t.thinking ? ' · thinking' : ''}</span>
+        <span class="peek">${esc(peek)}</span>
+      </summary>
+      ${t.system ? `<div class="lbl">system</div><pre>${esc(t.system)}</pre>` : ''}
+      <div class="lbl">prompt</div><pre>${esc(t.prompt || '')}</pre>
+      <div class="lbl">response</div><pre>${esc(t.response || '')}</pre>
+    </details>`;
+  }).join('') || '<span class="muted">no model calls yet</span>';
+}
+
 tick();
+pollDialog();
 setInterval(tick, 2000);
+setInterval(pollDialog, 2000);

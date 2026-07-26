@@ -67,10 +67,15 @@ function rank(survivors, { attempts = {} } = {}) {
   return scored.sort((a, b) => b.score - a.score || (a.line || 0) - (b.line || 0));
 }
 
-/** The most promising mutant that is still worth attempting, or null. */
+/**
+ * The most promising mutant still worth attempting, or null.
+ * A mutant is attempted AT MOST ONCE: if a test written specifically to kill it
+ * did not, a second attempt on the same target is throwing good money after bad
+ * (usually it is an equivalent mutant).
+ */
 function pickNext(survivors, opts = {}) {
   const ranked = rank(survivors, opts);
-  const viable = ranked.filter((m) => m.failedAttempts < (opts.maxAttemptsPerMutant ?? 2));
+  const viable = ranked.filter((m) => m.failedAttempts < (opts.maxAttemptsPerMutant ?? 1));
   return viable[0] || null;
 }
 
@@ -158,7 +163,7 @@ function rangeSpec(file, range) {
 }
 
 /** Shortlist for the model: viable candidates, best-first, small enough to reason about. */
-function shortlist(survivors, { attempts = {}, maxAttemptsPerMutant = 2, size = 12 } = {}) {
+function shortlist(survivors, { attempts = {}, maxAttemptsPerMutant = 1, size = 12 } = {}) {
   return rank(survivors, { attempts })
     .filter((m) => m.failedAttempts < maxAttemptsPerMutant)
     .slice(0, size);

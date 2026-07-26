@@ -1,7 +1,7 @@
 'use strict';
 // OpenAI-compatible chat client for the vLLM endpoint (qwen), zero-dep via global fetch.
 const { extractJson } = require('./util');
-const { event, recordTokens } = require('./state');
+const { event, recordTokens, recordDialog } = require('./state');
 
 const BASE = (process.env.LLM_BASE_URL || '').replace(/\/$/, '');
 const KEY = process.env.LLM_API_KEY || '';
@@ -38,14 +38,31 @@ async function chat(opts) {
     chat_template_kwargs: { enable_thinking: thinking },
   };
   if (structured) body.response_format = { type: 'json_object' };
+  const startedAt = Date.now();
   const text = await post(body);
+  recordDialog({
+    kind: structured ? 'decision' : 'generation',
+    thinking, model: MODEL,
+    system: messages.find((m) => m.role === 'system')?.content || '',
+    prompt: messages.filter((m) => m.role === 'user').map((m) => m.content).join('\n---\n'),
+    response: text,
+    durationMs: Date.now() - startedAt,
+    maxTokens: body.max_tokens,
+  });
   if (!opts.json) return { text };
   let parsed = extractJson(text);
   if (parsed == null) {
     event('llm', 'JSON parse failed, retrying with repair nudge');
     messages.push({ role: 'assistant', content: text.slice(0, 4000) });
     messages.push({ role: 'user', content: 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.' });
+    const t0 = Date.now();
     const retry = await post({ ...body, messages, temperature: 0.1 });
+    recordDialog({
+      kind: 'json-repair', thinking, model: MODEL,
+      system: '(repair nudge — the previous answer was not valid JSON)',
+      prompt: 'Reply again with ONLY the JSON.',
+      response: retry, durationMs: Date.now() - t0, maxTokens: body.max_tokens,
+    });
     parsed = extractJson(retry);
   }
   return { text, json: parsed };

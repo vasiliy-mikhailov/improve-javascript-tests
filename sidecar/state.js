@@ -89,7 +89,41 @@ const state = {
   measureLedger: {},
   // per-repo cumulative LLM spend { in, out, calls }, survives run/start
   tokenLedger: {},
+  // rolling transcript of model exchanges, newest last (full text goes to
+  // /data/dialog.jsonl; this buffer is what the dashboard streams)
+  dialog: [],
+  dialogSeq: 0,
 };
+
+const MAX_DIALOG_IN_STATE = 40;
+const DIALOG_FILE = path.join(DATA_DIR, 'dialog.jsonl');
+
+/** Record one model exchange so it can be watched live. */
+function recordDialog(entry) {
+  state.dialogSeq += 1;
+  const picked = Object.values(state.files).find((f) => f.status === 'picked');
+  const full = {
+    seq: state.dialogSeq,
+    ts: nowSec(),
+    stage: state.stage?.name || 'idle',
+    detail: state.stage?.detail || '',
+    file: picked?.path || null,
+    ...entry,
+  };
+  try { fs.appendFileSync(DIALOG_FILE, JSON.stringify(full) + '\n'); } catch { }
+  // the in-memory copy is trimmed: prompts run to tens of thousands of characters
+  const clip = (s, n) => { const t = redact(s || ''); return t.length > n ? t.slice(0, n) + `\n… [${t.length - n} more chars]` : t; };
+  state.dialog.push({
+    ...full,
+    system: clip(full.system, 1500),
+    prompt: clip(full.prompt, 4000),
+    response: clip(full.response, 4000),
+  });
+  if (state.dialog.length > MAX_DIALOG_IN_STATE) {
+    state.dialog.splice(0, state.dialog.length - MAX_DIALOG_IN_STATE);
+  }
+  save();
+}
 
 /**
  * Count one model response. Attributed three ways: to the file currently being
@@ -168,6 +202,6 @@ function upsertFile(p, patch) {
 }
 
 module.exports = {
-  state, load, save, event, setStage, setProgress, upsertFile, recordTokens,
+  state, load, save, event, setStage, setProgress, upsertFile, recordTokens, recordDialog,
   freshRun, envConfig, DATA_DIR,
 };
