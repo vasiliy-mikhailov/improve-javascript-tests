@@ -211,6 +211,12 @@ async function draw(thinking) {
   return { r, plan, salvaged, files };
 }
 
+// The arm the assertions judge must be the arm production actually uses. The bootstrap
+// runs cold now (measured: same parse/syntax/import rates, 2.5-3.7x faster, more tests
+// on the hardest file), so asserting on the thinking arm would test a configuration
+// nothing runs — and would take fourteen minutes to do it.
+const PRODUCTION_THINKING = covBuildPrompt(GAPS, FILE).thinking !== false;
+
 const BATCHES = new Map();
 function batch(thinking) {
   if (!BATCHES.has(thinking)) {
@@ -237,7 +243,7 @@ test('the coverage bootstrap returns at least one test file the sidecar will act
     // test/inventory.mac-cov.test.js — so it is not policing the model here. It is
     // kept because it is the only thing that would notice if that repair were dropped
     // and the model's own path choice started reaching the sidecar.
-    const B = await batch(true);
+    const B = await batch(PRODUCTION_THINKING);
     const { passed, total } = await samples(SAMPLES, (i) => {
       const d = B[i];
       const ok = d.files.length > 0 && d.files.every((f) => f.accepted);
@@ -253,7 +259,7 @@ test('the coverage bootstrap returns at least one test file the sidecar will act
 test('every file the bootstrap emits parses as JavaScript — one that does not is deleted',
   { skip: skipUnlessLive, timeout: 900000 }, async () => {
     // PASS: `node --check` accepts every emitted file, in all SAMPLES draws.
-    const B = await batch(true);
+    const B = await batch(PRODUCTION_THINKING);
     const { passed, total } = await samples(SAMPLES, (i) => {
       const d = B[i];
       const bad = d.files.filter((f) => !f.syntax.ok);
@@ -270,7 +276,7 @@ test('the bootstrapped test imports the module under test and calls it — an im
     // calls one of its exports. This is the entire job of the phase: the coverage
     // bootstrap exists so the file is EXECUTED at all, because mutation testing has
     // nothing to work with until it is.
-    const B = await batch(true);
+    const B = await batch(PRODUCTION_THINKING);
     const { passed, total } = await samples(SAMPLES, (i) => {
       const d = B[i];
       const live = d.files.filter((f) => f.imports && f.calls.length > 0);
@@ -288,7 +294,7 @@ test('the bootstrap writes a NEW file instead of rewriting the style reference i
     // which in a bootstrap is a path that does not exist yet — the reference the model
     // is actually shown is a DIFFERENT, repo-owned file, and nothing between the model
     // and the sidecar's refusal protects it. So this is checked on the model.
-    const B = await batch(true);
+    const B = await batch(PRODUCTION_THINKING);
     const { passed, total } = await samples(SAMPLES, (i) => {
       const d = B[i];
       const bad = d.files.filter((f) => f.rewrites);
@@ -307,7 +313,7 @@ test('MEASUREMENT: the same bootstrap prompt with reasoning OFF — reported, no
     //
     // The only assertion is about the measurement itself: three answered calls. A
     // silently failing endpoint must not be reported as a result.
-    const [on, off] = [await batch(true), await batch(false)];
+    const [on, off] = [await batch(PRODUCTION_THINKING), await batch(!PRODUCTION_THINKING)];
     const line = (label, B) => {
       const files = B.flatMap((d) => d.files);
       const clean = files.filter((f) => f.syntax.ok && f.imports && f.calls.length && f.accepted && !f.rewrites);
