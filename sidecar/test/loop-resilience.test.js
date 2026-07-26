@@ -278,3 +278,35 @@ test('a generated test that fails is still deleted, and its scope is what was ch
   assert.equal(f.mutantFailures || 0, 0, 'and the failure budget is untouched');
   assert.equal(f.mutantGenFailures, 1, 'it is counted as a generation miss');
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  "no tests executed" is not a verdict
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Straight from the live run:
+//   stryker | lib/admin-page-data.ts: no tests executed — mutation score 0
+//   improving_mutation | KILLED 112 mutant(s) — target died, 111 collateral (0 left)
+// Stryker's "No tests were executed" answer carries survived: [] and no
+// survivedTotal. Read as data it says every mutant is dead; read honestly it says
+// nothing was measured at all. The kill check is absence from the survivor list, so
+// an empty list from a run that never happened looked like total victory — and the
+// test that "killed" 112 mutants was kept on that basis.
+
+test('a mutation run that executed no tests is not read as 112 kills', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(6) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const before = sb.file(FILE).survivedTotal;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+  w.noTestsNext();   // the verification run finds no related tests and measures nothing
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath] });
+
+  assert.equal(r.killed, false, 'nothing was measured, so nothing died');
+  assert.equal(r.killedCount ?? 0, 0);
+  assert.equal(w.exists(testPath), false, 'and an unverified test is not kept');
+  const f = sb.file(FILE);
+  assert.equal(f.mutantsKilled || 0, 0);
+  assert.equal(f.survivedTotal, before, 'the survivor queue is left as it was');
+  assert.deepEqual(f.mutantAttempts || {}, {}, 'the target is not retired on a non-measurement');
+}));

@@ -212,6 +212,11 @@ function installFakes(sb, opts = {}) {
     if (err) throw err;
     const spec = universe.get(file);
     if (!spec) throw new Error(`fake stryker: ${file} is not in the mutation universe — world.addFile() it first`);
+    if (world._noTests > 0) {
+      world._noTests -= 1;
+      S.event('stryker', `${file}: no tests executed — mutation score 0 (nothing kills mutants yet)`);
+      return { file, totalMutants: null, killed: 0, score: 0, survived: [], noTests: true };
+    }
     const targeting = testsTargeting(file);
     if (!targeting.length) {
       // exactly what runStryker returns for "No tests were executed"
@@ -532,6 +537,15 @@ function installFakes(sb, opts = {}) {
     testsTargeting,
 
     /** Make the next call to `name` throw. name: stryker|coverage|tests|commit|createPr|clone|install */
+    /**
+     * Make the next N mutation runs answer the way Stryker does when its related-test
+     * filter matched nothing: { totalMutants: null, killed: 0, score: 0, survived: [],
+     * noTests: true }. An empty survivor list from a run that never happened reads as
+     * "every mutant died" unless the caller checks — which is exactly what happened
+     * on lib/admin-page-data.ts (112 phantom kills).
+     */
+    noTestsNext(n = 1) { world._noTests = (world._noTests || 0) + n; return world; },
+
     failNext(name, error) {
       (errorQueue[name] ||= []).push(error instanceof Error ? error : new Error(String(error)));
       return world;

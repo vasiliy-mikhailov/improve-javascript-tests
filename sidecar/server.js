@@ -757,6 +757,14 @@ const routes = {
     let killedTarget = false, killedCount = 0, scoreRose = false, note = '';
     try {
       const r = await stryker.runStryker(file);
+      // "No tests were executed" carries survived: [] and no totals. As data that
+      // reads as "every mutant is dead"; honestly it means nothing was measured.
+      // The kill check is absence from the survivor list, so an empty list from a
+      // run that never happened once scored a single test as 112 kills.
+      if (r.noTests || r.totalMutants == null) {
+        note = 'mutation re-run executed no tests — nothing was measured';
+        throw new Error(note);
+      }
       const alive = r.survived || [];
       // against the FULL survivor list, never the capped one
       killedTarget = !(r.survivedAll || alive).some((s) => mutantsMod.sameMutant(s, mutant));
@@ -773,7 +781,7 @@ const routes = {
       });
       recordMeasurement(file, { attemptMutation: r.score, attemptMac: mac(f.coverageAfter ?? f.coverage, r.score) });
     } catch (e) {
-      note = 'mutation re-run failed: ' + e.message.slice(0, 160);
+      note = note || ('mutation re-run failed: ' + e.message.slice(0, 160));
     }
 
     // A test earns its place if it killed ANYTHING — collateral kills are real
