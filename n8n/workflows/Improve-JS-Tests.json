@@ -787,7 +787,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nfunction killParseTest(resp, plan) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, 1)                                  // one target, one test file\n    .map(t => {\n      let p = String(t.path || '').replace(/^\\.?\\//, '');\n      const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p) && !p.includes('..');\n      const collides = p === plan.existingTestPath && plan.existingTestExists;\n      return { path: (safe && !collides) ? p : plan.targetPath, content: t.content };\n    });\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: killParseTest($json, $('Kill: Build Prompt').first().json) }];",
+        "jsCode": "\nfunction killParseTest(resp, plan) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, 1)                                  // one target, one test file\n    .map(t => {\n      let p = String(t.path || '').replace(/^\\.?\\//, '');\n      // both halves of what sidecar/repo.js:writeTestFile requires — a test-shaped\n      // path AND a js/ts extension. Checking only the first reported files the disk\n      // never received.\n      const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p)\n        && /\\.[cm]?[jt]sx?$/.test(p) && !p.includes('..');\n      const collides = p === plan.existingTestPath && plan.existingTestExists;\n      return { path: (safe && !collides) ? p : plan.targetPath, content: t.content };\n    });\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: killParseTest($json, $('Kill: Build Prompt').first().json) }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -834,7 +834,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Parse Test').first().json.paths } }}"
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written } }}"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,

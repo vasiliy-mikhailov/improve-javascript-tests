@@ -33,3 +33,18 @@ test('no two nodes collide on an id', () => {
   const names = wf.nodes.map((n) => n.name);
   assert.equal(new Set(names).size, names.length, 'names are the identity, so they must be unique too');
 });
+
+// The seam between "what the model asked for" and "what exists on disk". The parse
+// nodes decide a path is acceptable using their own regexes; the sidecar's writer has
+// three guards of its own (test-path shape, a js/ts extension, and never a test the
+// repo already owned) and reports what it actually wrote. Verifying against the
+// PLANNED paths means verifying a file that may never have been created: the scoped
+// test run finds nothing, passes, and a whole mutation run is spent proving that
+// nothing died.
+test('Kill: Verify is told what the sidecar WROTE, not what the model asked for', () => {
+  const node = wf.nodes.find((n) => n.name === 'Kill: Verify');
+  assert.match(node.parameters.jsonBody, /Kill: Write Test/,
+    'the written list is the single source of truth for what is on disk');
+  assert.doesNotMatch(node.parameters.jsonBody, /Kill: Parse Test/,
+    'the planned paths are a request, not a fact');
+});

@@ -17,7 +17,11 @@ export function killParseTest(resp, plan) {
     .slice(0, 1)                                  // one target, one test file
     .map(t => {
       let p = String(t.path || '').replace(/^\.?\//, '');
-      const safe = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/.test(p) && !p.includes('..');
+      // both halves of what sidecar/repo.js:writeTestFile requires — a test-shaped
+      // path AND a js/ts extension. Checking only the first reported files the disk
+      // never received.
+      const safe = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/.test(p)
+        && /\.[cm]?[jt]sx?$/.test(p) && !p.includes('..');
       const collides = p === plan.existingTestPath && plan.existingTestExists;
       return { path: (safe && !collides) ? p : plan.targetPath, content: t.content };
     });

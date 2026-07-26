@@ -197,7 +197,12 @@ function mutantLoop(entryNode) {
   // test and records the failed attempt when it does not
   Http('Kill: Verify', {
     path: '/api/mutant/verify',
-    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Parse Test').first().json.paths } }}`,
+    // what the SIDECAR wrote, not what the model asked for: writeTestFile refuses a
+    // path that is not a js/ts test file or that the repo already owned, and a
+    // refusal lands in `errors`. Verifying the planned path would then measure a file
+    // that does not exist — a scoped run that passes vacuously and a mutation run
+    // spent proving nothing died.
+    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written } }}`,
     timeout: 2400000,
   });
   NoOp('Mutant Loop Done');

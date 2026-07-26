@@ -501,3 +501,14 @@ test('BUG (unfixed): the kill system prompt authorises a second test file it wil
   assert.ok(!/at most 2 test files/.test(s),
     'the kill prompt must not also tell the model it may return two files');
 });
+
+test('a path the sidecar would refuse to write is rewritten to the planned target', () => {
+  // The node's allowlist and repo.writeTestFile's must agree. writeTestFile requires
+  // BOTH a test-shaped path (sidecar/repo.js TEST_PATH_RE) and a js/ts extension;
+  // the node only checked the first, so `tests/fixtures/data.json` was reported as a
+  // written test and refused on disk. The coverage twin already applies both halves.
+  for (const bad of ['tests/fixtures/data.json', 'test/__snapshots__/cart.snap', 'spec/README.md', 'tests/cart']) {
+    const out = killParseTest(reply([{ path: bad, content: content(1) }]), plan);
+    assert.deepEqual(out.paths, [plan.targetPath], `${bad} must not be reported as written`);
+  }
+});
