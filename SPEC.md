@@ -79,6 +79,10 @@ Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
 ```
 
 `GET /api/mutant/next`
+- **Re-measures first if the list is stale.** After the coverage bootstrap the stored survivors are
+  the baseline ones — on a 0-coverage file that list is empty, because Stryker had no tests to run.
+  An empty list is not evidence that nothing is killable, so the endpoint re-runs mutation before
+  concluding the file is done.
 - Candidates come from **Stryker's survivor list only**. The heuristic (`sidecar/mutants.js`)
   *shortlists* 12: covered-but-surviving first (they need a sharper assertion, not a new path),
   then survivor density in the same region, then mutator tractability, minus already-attempted.
@@ -95,7 +99,9 @@ UI guidance when the file is a component. One test file, named for its victim
 `POST /api/mutant/verify`
 1. The full suite must be green; if not, the test is deleted.
 2. **Re-run mutation over the whole file.** This yields the fresh survivor list, the current score,
-   and the answer to "did the target die".
+   and the answer to "did the target die". That last question is answered against the *full*
+   survivor list (`survivedAll`), not the 100-entry array kept for prompts — a mutant past the cap
+   would otherwise be scored as killed without dying.
 3. **Keep the test if anything died** — the target or collateral. One test routinely takes
    neighbours with it, and that is real improvement.
 4. **Retire the target unless it died.** One shot per mutant, whatever else the test achieved —
@@ -150,7 +156,7 @@ position-stable key, since Stryker ids are not stable), `mutantFailures`, `mutan
 | The suite must be green before anything is kept | `mutant/verify`, `verify` |
 | MAC must strictly improve, with real changed files, before a PR | `verify`, `rules.applyCheckChanges` |
 | Only test files may be written, deleted or committed (path allowlist) | `repo.writeTestFile`, `pr.commit` |
-| A kill counts only when a mutation run says the mutant died | `mutant/verify` |
+| A kill counts only when a mutation run says the mutant died, checked against the untruncated survivor list | `mutant/verify` |
 | A mutant is retired only by evidence — never by model opinion | `mutants.resolvePick` |
 | Timeouts are counted and flagged; Stryker scores a timeout as a kill, so load can inflate the metric | `stryker.parseReport` |
 | Cleanup is reverted if it costs mutation score | `test/cleanup` |
