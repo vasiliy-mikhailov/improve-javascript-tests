@@ -20,16 +20,25 @@ async function chat(opts) {
     if (opts.system) messages.push({ role: 'system', content: opts.system });
     messages.push({ role: 'user', content: opts.prompt || '' });
   }
-  // Thinking mode and JSON mode CANNOT be combined on this backend: with both on,
-  // the reasoning channel consumes the whole completion budget and `content` comes
-  // back empty (finish_reason=length), which is worse than no JSON mode at all.
-  // So each call picks one:
-  //   decision calls (small structured answers) → JSON mode, no thinking. The model
-  //     still reasons, inside the "reason" field, and the answer always parses.
-  //   generation calls (test code)              → thinking, free-form + repair. The
-  //     thinking channel is what keeps chain-of-thought out of committed tests (D11).
-  const structured = !!opts.decision && !!opts.json && jsonModeSupported;
-  const thinking = ENABLE_THINKING && !structured;
+  // Measured against this endpoint rather than assumed (A/B, 2026-07-26):
+  //   json_object + thinking ON  → 200, content 60ch, reasoning 929ch, finish=stop
+  //   json_object + thinking OFF → 200, content 37ch, reasoning 0ch, 15 tokens, 1s
+  //   no chat_template_kwargs    → reasoning 754ch — thinking is the DEFAULT here
+  // So JSON mode and thinking are NOT mutually exclusive. An earlier comment here
+  // claimed they were; what actually happens is that a long reasoning phase can
+  // exhaust max_tokens before any content is emitted, which has nothing to do with
+  // response_format and happens just as readily without it.
+  //
+  // What each kind of call gets, and why:
+  //   every JSON call → response_format. Constraining the output removes the whole
+  //     parse-failure class, and it costs nothing.
+  //   decision calls  → no thinking. Measured: a pick answers in 1s and 15 tokens
+  //     without it and 7s with it, and the model still reasons inside the `reason`
+  //     field. Paying 7x for a shortlist ordering is not worth it.
+  //   generation calls → thinking. That channel is what keeps chain-of-thought out
+  //     of committed tests (D11).
+  const wantsJson = !!opts.json && jsonModeSupported;
+  const thinking = ENABLE_THINKING && !opts.decision;
   const body = {
     model: MODEL,
     messages,
@@ -37,7 +46,8 @@ async function chat(opts) {
     temperature: opts.temperature ?? 0.3,
     chat_template_kwargs: { enable_thinking: thinking },
   };
-  if (structured) body.response_format = { type: 'json_object' };
+  if (wantsJson) body.response_format = { type: 'json_object' };
+  const structured = wantsJson && !!opts.decision;
   const startedAt = Date.now();
   const first = await post(body);
   const text = first.content;
@@ -73,12 +83,22 @@ async function chat(opts) {
     // that same configuration is a long gamble on the same dice. The repair turn
     // therefore thinks NOT AT ALL: it has the previous attempt and an explicit
     // instruction, which is what the reasoning was for.
-    event('llm', text.length === 0
+    // Two different failures need two different things said. "Your previous answer
+    // was not valid JSON" is simply untrue when there was no answer, and a model
+    // asked to reconcile a false statement wastes the retry doing it.
+    const ranOut = text.length === 0;
+    event('llm', ranOut
       ? `model returned NO CONTENT (finish_reason=${first.finishReason}, ${first.reasoning.length} chars of reasoning, `
         + `${body.max_tokens} token budget) — the answer never left the reasoning channel; retrying without thinking`
       : `JSON parse failed (${text.length} chars returned, finish_reason=${first.finishReason}), retrying without thinking`);
-    messages.push({ role: 'assistant', content: text.slice(0, 4000) });
-    messages.push({ role: 'user', content: 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.' });
+    messages.push({ role: 'assistant', content: text.slice(0, 4000) || '(no answer — the reasoning phase used the whole budget)' });
+    messages.push({
+      role: 'user',
+      content: ranOut
+        ? 'You spent the entire token budget thinking and never produced the answer. '
+          + 'Do not think this time: reply immediately with ONLY the JSON, no prose, no markdown fences.'
+        : 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.',
+    });
     const t0 = Date.now();
     const retryRes = await post({
       ...body,

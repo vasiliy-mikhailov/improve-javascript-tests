@@ -310,3 +310,4 @@ test('a mutation run that executed no tests is not read as 112 kills', () => wit
   assert.equal(f.survivedTotal, before, 'the survivor queue is left as it was');
   assert.deepEqual(f.mutantAttempts || {}, {}, 'the target is not retired on a non-measurement');
 }));
+

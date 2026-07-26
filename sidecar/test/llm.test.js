@@ -189,3 +189,61 @@ test('salvage never returns a stray array quoted from the prompt', async () => {
     assert.deepEqual(r.json, JSON.parse(GOOD));
   } finally { f.restore(); }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  what the endpoint actually supports
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured against the live endpoint (scratchpad A/B, 2026-07-26):
+//   json_object + thinking ON   → 200, content 60ch, reasoning 929ch, finish=stop
+//   json_object + thinking OFF  → 200, content 37ch, reasoning 0ch
+//   no chat_template_kwargs     → reasoning 754ch, i.e. thinking is the DEFAULT
+// So the two are NOT mutually exclusive, and the comment in llm.js that said they
+// were was a misdiagnosis: what actually happens is that a long reasoning phase can
+// exhaust max_tokens before any content is emitted — which has nothing to do with
+// response_format and happens equally without it.
+
+test('every JSON call asks the endpoint for JSON, not just the decision ones', async () => {
+  const f = scriptFetch([GOOD, GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    await llm.chat({ prompt: 'pick one', json: true, decision: true, maxTokens: 500 });
+    assert.deepEqual(f.seen[0].response_format, { type: 'json_object' },
+      'a generation call parses JSON too — constraining the output removes the whole failure class');
+    assert.deepEqual(f.seen[1].response_format, { type: 'json_object' });
+  } finally { f.restore(); }
+});
+
+test('a decision still does not think — it is a 1s call that reasons in its `reason` field', async () => {
+  const f = scriptFetch([GOOD]);
+  try {
+    await llm.chat({ prompt: 'pick one', json: true, decision: true, maxTokens: 500 });
+    assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, false,
+      'measured: thinking turns a 1s pick into a 7s one for no gain');
+    assert.equal(f.seen[0].max_tokens, 500, 'and it needs no reasoning headroom');
+  } finally { f.restore(); }
+});
+
+test('a retry after an empty answer says what actually went wrong', async () => {
+  const f = scriptFetch([TRUNCATED, GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    const retryMsgs = f.seen[1].messages;
+    const lastUser = [...retryMsgs].reverse().find((m) => m.role === 'user');
+    assert.doesNotMatch(lastUser.content, /not valid JSON/i,
+      'the model did not write bad JSON — it wrote nothing, and telling it otherwise is a lie it has to reconcile');
+    assert.match(lastUser.content, /think|reason|token/i, 'name the real cause');
+    const assistantTurn = retryMsgs.find((m) => m.role === 'assistant');
+    assert.ok(assistantTurn.content.length > 0,
+      'an empty assistant turn is rejected by some backends and carries nothing anyway');
+  } finally { f.restore(); }
+});
+
+test('a malformed — as opposed to absent — answer still gets the JSON nudge', async () => {
+  const f = scriptFetch(['here you go: {"tests": [oops', GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    const lastUser = [...f.seen[1].messages].reverse().find((m) => m.role === 'user');
+    assert.match(lastUser.content, /not valid JSON/i);
+  } finally { f.restore(); }
+});
