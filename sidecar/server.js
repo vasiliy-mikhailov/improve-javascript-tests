@@ -445,7 +445,7 @@ const routes = {
       const r = await llm.chat({
         system: body.system, prompt: body.prompt, messages: body.messages,
         maxTokens: clamp(parseInt(body.maxTokens || '4096', 10), 64, 12000),
-        temperature: body.temperature, json: !!body.json,
+        temperature: body.temperature, json: !!body.json, decision: !!body.decision,
       });
       return { ok: true, text: r.text, json: r.json ?? null };
     } catch (e) { S.event('llm', 'LLM error: ' + e.message); return { ok: false, error: e.message }; }
@@ -547,6 +547,17 @@ const routes = {
         });
         const r = await llm.chat(req);
         const resolved = mutantsMod.resolvePick(r.json, candidates);
+        if (resolved && resolved.allEquivalent) {
+          // the model can prove there is nothing killable left — believe it rather
+          // than spending a generation per unkillable target to rediscover that
+          S.event('improving_mutation', `stopping on ${p}: all ${candidates.length} remaining mutant(s) judged equivalent — ${resolved.reason}`);
+          state.decisions.pick_mutant = {
+            rule: '(pipeline decision — which surviving mutant to attack next)',
+            result: { file: p, verdict: 'all remaining mutants equivalent', reason: resolved.reason, consideredCandidates: candidates.length },
+            ts: Date.now(),
+          };
+          return { ok: true, mutant: null, done: true, reason: 'all remaining mutants are equivalent: ' + resolved.reason };
+        }
         if (resolved) {
           next = resolved.mutant;
           killIdea = resolved.killIdea;

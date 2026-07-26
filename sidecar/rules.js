@@ -47,7 +47,7 @@ async function applyPostClone(ruleText) {
   const r = await chat({
     system: 'You are configuring an automated test-improvement pipeline. Extract actionable constraints from the team rule and repo docs. Reply ONLY with JSON: {"constraints": ["short imperative constraint", ...], "notes": "one line"}. Constraints are things the pipeline must honor when writing tests, naming branches, or making PRs.',
     prompt: `TEAM RULE (post-clone): ${ruleText}\n\nREPO DOCS:\n${repoContextHead()}`,
-    json: true, maxTokens: 1200,
+    json: true, decision: true, maxTokens: 1200,
   });
   return r.json || { constraints: [ruleText], notes: 'LLM parse failed, using raw rule text' };
 }
@@ -58,7 +58,7 @@ async function applyPrePick(ruleText) {
   const r = await chat({
     system: 'You configure branching for an automated test-improvement pipeline. From the team rule, produce JSON only: {"branchTemplate": "template containing {file} placeholder", "notes": "one line"}. The template must be a valid git branch name pattern; {file} will be replaced by a slug of the source file.',
     prompt: `TEAM RULE (before picking a file): ${ruleText}\n\nREPO DOCS:\n${repoContextHead()}`,
-    json: true, maxTokens: 800,
+    json: true, decision: true, maxTokens: 800,
   });
   const j = r.json;
   if (!j?.branchTemplate || !j.branchTemplate.includes('{file}')) return { ...dflt, notes: 'rule did not yield a usable template' };
@@ -77,7 +77,7 @@ async function applyPickFile(ruleText, { candidates = [] }) {
   const r = await chat({
     system: 'You pick ONE source file for automated test improvement (coverage AND mutation testing). Honor the team rule strictly (e.g. exclusions). Prefer files with the lowest MAC (weakest tests). IMPORTANT: "mutation=?" or "mac=?" means the mutation score has NOT been measured yet — even a 100%-coverage file may have weak assertions and surviving mutants, so such files are VALID candidates; high coverage is NOT a reason to skip a file. Reply ONLY with JSON: {"file": "<path exactly as listed>", "reason": "one line"}. Reply {"file": null, "reason": "..."} ONLY if the team rule excludes every candidate.',
     prompt: `TEAM RULE (how to pick a file): ${ruleText}\n\nCANDIDATES (path | metrics):\n${table}`,
-    json: true, maxTokens: 800,
+    json: true, decision: true, maxTokens: 800,
   });
   const j = r.json;
   if (j && j.file === null) {
@@ -116,7 +116,7 @@ async function applyCheckChanges(ruleText, ctx) {
   const r = await chat({
     system: 'You review automated test changes against a team rule. Mechanical checks already passed (suite green, MAC improved). Judge ONLY the team rule. Reply ONLY with JSON: {"approved": true/false, "reason": "one line"}.',
     prompt: `TEAM RULE (how to check changes are good): ${ruleText}\n\nFILE: ${ctx.file}\nMAC: ${ctx.macBefore} → ${ctx.macAfter} (coverage ${ctx.coverageBefore} → ${ctx.coverageAfter}, mutation ${ctx.mutationBefore} → ${ctx.mutationAfter})\n\nDIFF OF CHANGES:\n${String(ctx.diff || '').slice(0, 12000)}`,
-    json: true, maxTokens: 800,
+    json: true, decision: true, maxTokens: 800,
   });
   const j = r.json || { approved: true, reason: 'LLM verdict unparseable — mechanical checks passed' };
   j.mechanical = mech;
@@ -139,7 +139,7 @@ async function applyMakePr(ruleText, ctx) {
   const r = await chat({
     system: 'You prepare a GitHub pull request for automated test improvements, following the team rule for PR style. Reply ONLY with JSON: {"title": "...", "body": "markdown", "labels": ["..."]}. Include the before/after metrics table in the body.',
     prompt: `TEAM RULE (how to make a PR): ${ruleText}\n\nREPO DOCS:\n${repoContextHead()}\n\nFILE: ${ctx.file}\nBRANCH: ${ctx.branch}\nMETRICS: coverage ${ctx.coverageBefore}%→${ctx.coverageAfter}%, mutation ${ctx.mutationBefore}%→${ctx.mutationAfter}%, MAC ${ctx.macBefore}→${ctx.macAfter}\nCHANGED TEST FILES: ${(ctx.changedFiles || []).join(', ')}`,
-    json: true, maxTokens: 2000,
+    json: true, decision: true, maxTokens: 2000,
   });
   const j = r.json;
   if (!j?.title || !j?.body) return dflt;

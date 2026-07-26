@@ -96,7 +96,11 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [], fail
     + 'output, a callback argument). Avoid mutants whose effect is unobservable (logging, defensive '
     + 'branches that cannot be triggered, equivalent mutants that do not change behaviour at all). '
     + 'Prefer one that also puts neighbouring survivors under test. '
-    + 'Reply ONLY with JSON: {"pick": <number from the list>, "reason": "one line", "killIdea": "one line on how to kill it"}.';
+    + 'If EVERY remaining candidate is equivalent — the mutation cannot change any observable behaviour, so no '
+    + 'test could ever kill it — say so instead of picking one: {"pick": null, "allEquivalent": true, "reason": "why"}. '
+    + 'That is a useful answer, not a failure: it stops the pipeline wasting a generation per unkillable target. '
+    + 'Reply ONLY with JSON: {"pick": <number from the list>, "reason": "one line", "killIdea": "one line on how to kill it"}. '
+    + 'Keep reason and killIdea to one short line each.';
 
   // Feed failures back: a mutant that survived a test written specifically to kill
   // it is usually EQUIVALENT (the mutation cannot change observable behaviour), and
@@ -114,12 +118,19 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [], fail
     + (constraints.length ? `Team constraints on tests:\n${constraints.map((c) => '- ' + c).join('\n')}\n\n` : '')
     + 'Pick the one single test can most reliably kill. JSON only.';
 
-  return { system, prompt, json: true, maxTokens: 1200, temperature: 0.2 };
+  // 2000, not 1200: with thinking disabled for decision calls the model reasons
+  // inside `reason`, and a budget that truncates mid-string produces invalid JSON
+  // even under constrained decoding.
+  return { system, prompt, json: true, decision: true, maxTokens: 2000, temperature: 0.2 };
 }
 
 /** Validate the model's answer against the shortlist it was actually offered. */
 function resolvePick(answer, shortlist) {
   if (!answer || !shortlist?.length) return null;
+  // "everything left is equivalent" — a legitimate terminal answer
+  if (answer.allEquivalent === true || (answer.pick === null && answer.reason)) {
+    return { mutant: null, allEquivalent: true, reason: String(answer.reason || 'all remaining mutants are equivalent').slice(0, 300) };
+  }
   const n = Number(answer.pick);
   if (Number.isInteger(n) && n >= 1 && n <= shortlist.length) {
     return { mutant: shortlist[n - 1], reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };

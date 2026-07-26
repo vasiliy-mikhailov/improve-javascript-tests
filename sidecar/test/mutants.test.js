@@ -110,3 +110,22 @@ test('no failure section when nothing has failed yet', () => {
   const req = buildPickRequest([m()], { file: 'src/a.ts', source: 'x' });
   assert.ok(!req.prompt.includes('ALREADY ATTEMPTED'));
 });
+
+test('the model may declare everything left equivalent instead of picking', () => {
+  const list = [m({ line: 10 }), m({ line: 20 })];
+  const r = resolvePick({ pick: null, allEquivalent: true, reason: 'cap is unreachable' }, list);
+  assert.equal(r.mutant, null);
+  assert.equal(r.allEquivalent, true);
+  assert.match(r.reason, /unreachable/);
+});
+
+test('a null pick with a reason is treated as the equivalent verdict, not a parse failure', () => {
+  const r = resolvePick({ pick: null, reason: 'nothing observable remains' }, [m()]);
+  assert.equal(r.allEquivalent, true);
+});
+
+test('the pick prompt offers the equivalent-verdict escape hatch', () => {
+  const req = buildPickRequest([m()], { file: 'a.ts', source: 'x' });
+  assert.match(req.system, /allEquivalent/);
+  assert.equal(req.maxTokens, 2000, 'budget must fit a reason written without a thinking channel');
+});

@@ -20,17 +20,24 @@ async function chat(opts) {
     if (opts.system) messages.push({ role: 'system', content: opts.system });
     messages.push({ role: 'user', content: opts.prompt || '' });
   }
+  // Thinking mode and JSON mode CANNOT be combined on this backend: with both on,
+  // the reasoning channel consumes the whole completion budget and `content` comes
+  // back empty (finish_reason=length), which is worse than no JSON mode at all.
+  // So each call picks one:
+  //   decision calls (small structured answers) → JSON mode, no thinking. The model
+  //     still reasons, inside the "reason" field, and the answer always parses.
+  //   generation calls (test code)              → thinking, free-form + repair. The
+  //     thinking channel is what keeps chain-of-thought out of committed tests (D11).
+  const structured = !!opts.decision && !!opts.json && jsonModeSupported;
+  const thinking = ENABLE_THINKING && !structured;
   const body = {
     model: MODEL,
     messages,
-    max_tokens: (opts.maxTokens || 4096) + THINKING_EXTRA,
+    max_tokens: (opts.maxTokens || 4096) + (thinking ? THINKING_EXTRA : 0),
     temperature: opts.temperature ?? 0.3,
-    chat_template_kwargs: { enable_thinking: ENABLE_THINKING },
+    chat_template_kwargs: { enable_thinking: thinking },
   };
-  // Constrained decoding when we need JSON: unparseable answers cost a whole extra
-  // generation, and retries were burning ~12% of all model time. Disabled
-  // automatically if the endpoint rejects the parameter.
-  if (opts.json && jsonModeSupported) body.response_format = { type: 'json_object' };
+  if (structured) body.response_format = { type: 'json_object' };
   const text = await post(body);
   if (!opts.json) return { text };
   let parsed = extractJson(text);
