@@ -126,3 +126,60 @@ test('the pick prompt frames the job as ORDERING Stryker findings, not judging t
   assert.ok(!req.system.includes('allEquivalent'));
   assert.equal(req.maxTokens, 2000, 'budget must fit a reason written without a thinking channel');
 });
+
+// ── the "already failed" block in the pick prompt ───────────────────────────
+//
+// Found by a prompt test driving the real model. The candidate list is filtered on the
+// FULL mutant key (mutator|line|column|replacement) but the prompt's failed block was
+// rebuilt from mutator+line alone, so the two disagreed about what "this mutant" means.
+// Stryker's EqualityOperator emits siblings at one position — `>=` becomes `>` and also
+// `<` — so a still-killable sibling is described to the model, character for character,
+// as the thing it must not pick.
+//
+// Measured 4/4 on the real endpoint when the sibling is the only candidate: the model
+// picks it and believes it is RETRYING, inventing a cause ("the previous attempt failed
+// likely due to floating point precision…"). That sentence becomes the killIdea, which
+// kill-build-prompt splices verbatim under "HOW TO KILL IT" — so the next prompt is
+// steered by a false premise about a test that was never written.
+
+test('the failed block identifies a mutant as precisely as the filter that built the list', () => {
+  const shortlist = [
+    { mutator: 'EqualityOperator', line: 25, column: 16, replacement: 'w < H', status: 'survived' },
+    { mutator: 'ArithmeticOperator', line: 30, column: 4, replacement: 'a - b', status: 'survived' },
+  ];
+  // the sibling at the same position that DID fail
+  const failed = [{ mutator: 'EqualityOperator', line: 25, column: 16, replacement: 'w > H', attempts: 1 }];
+
+  const req = buildPickRequest(shortlist, { file: 'src/a.ts', source: '', failed });
+
+  assert.match(req.prompt, /w > H/, 'the failed sibling must be named by its replacement');
+  assert.doesNotMatch(req.prompt, /EqualityOperator at line 25 \(\d+ failed attempt/,
+    'a bare mutator+line ban also bans the sibling that is still on the list');
+});
+
+test('a replacement longer than the prompt budget is still valid text', () => {
+  // JSON.stringify then slice cuts INSIDE the quotes, so the rendered line ends with an
+  // unterminated string and the model reads a broken code fragment.
+  const long = 'if (order.speed === "express" && order.weight > 20) { return base * 2; } else { return base; }'.repeat(3);
+  const req = buildPickRequest([{ mutator: 'BlockStatement', line: 4, column: 1, replacement: long, status: 'survived' }],
+    { file: 'src/a.ts', source: '' });
+
+  const line = req.prompt.split('\n').find((l) => l.includes('code becomes:'));
+  const rendered = line.slice(line.indexOf('code becomes:') + 13).trim();
+  assert.ok(rendered.startsWith('"'), 'precondition: it is a quoted string');
+  assert.ok(rendered.endsWith('"') || rendered.endsWith('…"'),
+    `an unterminated quote reads as broken code: ${rendered.slice(-40)}`);
+});
+
+test('an answer that is a line number is not read as an index', () => {
+  // 12 candidates and {"pick": 8} meaning "line 8" silently resolves to candidate #8,
+  // which sits at line 47. The two readings are indistinguishable unless the index
+  // reading is checked against what the model said it was pointing at.
+  const shortlist = Array.from({ length: 12 }, (_, i) => ({
+    mutator: 'BooleanLiteral', line: (i + 1) * 4, column: 2, replacement: 'false', status: 'survived',
+  }));
+
+  const r = resolvePick({ pick: 8, line: 8, reason: 'the guard at line 8', killIdea: 'x' }, shortlist);
+
+  assert.equal(r.mutant.line, 8, 'the answer named a line, and one candidate is at that line');
+});

@@ -714,8 +714,10 @@ const routes = {
         const failed = Object.entries(f.mutantAttempts || {})
           .filter(([, n]) => n > 0)
           .map(([k, n]) => {
-            const [mutator, line] = k.split('|');
-            return { mutator, line: Number(line), attempts: n };
+            // the key is mutator|line|column|replacement — keep all of it, or the
+            // prompt bans siblings the candidate filter deliberately left in
+            const [mutator, line, column, replacement] = k.split('|');
+            return { mutator, line: Number(line), column: column || null, replacement: replacement || null, attempts: n };
           });
         const req = mutantsMod.buildPickRequest(candidates, {
           file: p, source, constraints: rulesMod.testWritingConstraints(), failed,

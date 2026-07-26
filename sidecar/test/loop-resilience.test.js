@@ -455,3 +455,34 @@ test('a merge that would drop a test is rejected before anything is re-measured'
   assert.equal(w.calls.stryker.length, before.stryker);
   assert.match(sb.events().join('\n'), /merge rejected/i);
 }));
+
+test('the pick prompt names a failed mutant by its full identity, not just line and mutator',
+  () => withSandbox(async (sb) => {
+    // Two halves have to agree about what "this mutant" means: mutants.rank filters the
+    // candidate list on mutator|line|column|replacement, and the prompt's failed block
+    // is built by the caller. When the caller dropped column and replacement, a sibling
+    // Stryker emitted at the same position — still on the list, still killable — was
+    // described to the model as the thing it must not pick.
+    const w = await killReady(sb, {
+      mutants: [
+        { line: 25, column: 16, mutator: 'EqualityOperator', replacement: '>' },
+        { line: 25, column: 16, mutator: 'EqualityOperator', replacement: '<' },
+        { line: 40, column: 2, mutator: 'BooleanLiteral', replacement: 'false' },
+      ],
+    });
+    const first = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+    const testPath = 'test/a-kill.test.ts';
+    w.writeTest(testPath, { target: FILE, kills: [] });
+    await sb.post('/api/mutant/verify', { file: FILE, mutant: first, testPaths: [testPath], phase: 'thinking' });
+
+    w.llm.calls.length = 0;
+    await sb.get('/api/mutant/next', { path: FILE });
+
+    const prompt = w.llm.calls.map((c) => c.prompt || '').join('\n');
+    const banLines = prompt.split('\n').filter((l) => /failed attempt/.test(l));
+    assert.ok(banLines.length, 'precondition: the failed block is rendered');
+    // the assertion has to look at the BAN LINE itself: the replacement appears all
+    // over the candidate rows, so searching the whole prompt would pass either way
+    assert.ok(banLines.some((l) => l.includes(String(first.replacement))),
+      `the ban must say WHICH replacement failed, or it bans the sibling too — got: ${JSON.stringify(banLines)}`);
+  }));

@@ -26,6 +26,17 @@ const NEIGHBOUR_WINDOW = 8;   // lines either side counted as "the same region"
 const DEFAULT_PAD = 12;       // lines either side re-mutated when verifying a kill
 
 /** Stable identity across Stryker runs — mutant ids are NOT stable, positions are. */
+/**
+ * A quoted, length-bounded rendering. Slicing the output of JSON.stringify cuts inside
+ * the quotes, so a long replacement rendered as an unterminated string and the model
+ * read a broken code fragment.
+ */
+function quoted(text, max) {
+  const raw = String(text ?? '');
+  const body = raw.length > max ? raw.slice(0, max) + '…' : raw;
+  return JSON.stringify(body);
+}
+
 function mutantKey(m) {
   return [m.mutator, m.line, m.column ?? '', String(m.replacement ?? '').slice(0, 60)].join('|');
 }
@@ -89,7 +100,7 @@ function pickNext(survivors, opts = {}) {
 function buildPickRequest(shortlist, { file, source = '', constraints = [], failed = [] } = {}) {
   const rows = shortlist.map((m, i) => [
     `#${i + 1} line ${m.line}${m.column ? ':' + m.column : ''} — ${m.mutator}`,
-    `   code becomes: ${JSON.stringify(String(m.replacement ?? '')).slice(0, 120)}`,
+    `   code becomes: ${quoted(m.replacement, 118)}`,
     `   ${m.status === 'survived' ? 'ALREADY EXECUTED by tests (needs a sharper assertion)' : 'NOT COVERED (a test must reach it first)'}`,
     m.context ? '   context:\n' + m.context.split('\n').map((l) => '     ' + l).join('\n') : '',
   ].filter(Boolean).join('\n')).join('\n\n');
@@ -114,7 +125,11 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [], fail
     ? 'ALREADY ATTEMPTED AND FAILED — a test written specifically to kill these did NOT kill them, '
       + 'so they are probably equivalent mutants (no observable behaviour change). Do not pick them again; '
       + 'if a remaining candidate looks equivalent for the same reason, say so in your reason and pick the best of the rest:\n'
-      + failed.map((f) => `  - ${f.mutator} at line ${f.line} (${f.attempts} failed attempt(s))`).join('\n') + '\n\n'
+      + failed.map((f) => `  - ${f.mutator} at line ${f.line}${f.column ? ':' + f.column : ''}`
+        + `${f.replacement ? ' where the code becomes ' + quoted(f.replacement, 60) : ''}`
+        + ` (${f.attempts} failed attempt(s))`).join('\n')
+      + '\n  A mutant at the SAME line and mutator but a DIFFERENT replacement is a different mutant '
+      + 'and is fair game — Stryker emits several per position.\n\n'
     : '';
 
   const prompt = `FILE: ${file}\n\nSOURCE:\n${String(source).slice(0, 10000)}\n\n`
@@ -135,13 +150,24 @@ function resolvePick(answer, shortlist) {
   // A refusal to pick is NOT a verdict on the mutants. Stryker found them; only
   // Stryker can retire them. Treat it as an unusable answer so the caller falls
   // back to the ranked candidate and the loop keeps working from measurement.
+  const take = (m) => ({
+    mutant: m,
+    reason: String(answer.reason || '').slice(0, 300),
+    killIdea: String(answer.killIdea || '').slice(0, 300),
+  });
   const n = Number(answer.pick);
-  if (Number.isInteger(n) && n >= 1 && n <= shortlist.length) {
-    return { mutant: shortlist[n - 1], reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };
+  // An index and a line number are the same kind of small integer, so "pick 8" out of
+  // twelve candidates is ambiguous — and read as an index it silently returns the
+  // mutant at line 47. When the answer says which line it means, believe that.
+  const said = Number(answer.line);
+  if (Number.isInteger(said)) {
+    const byStatedLine = shortlist.find((m) => m.line === said);
+    if (byStatedLine) return take(byStatedLine);
   }
-  // tolerate a line number instead of an index
+  if (Number.isInteger(n) && n >= 1 && n <= shortlist.length) return take(shortlist[n - 1]);
+  // tolerate a line number in the pick field itself
   const byLine = shortlist.find((m) => m.line === n);
-  if (byLine) return { mutant: byLine, reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };
+  if (byLine) return take(byLine);
   return null;
 }
 
