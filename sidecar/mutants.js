@@ -101,9 +101,9 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [], fail
     + 'output, a callback argument). Avoid mutants whose effect is unobservable (logging, defensive '
     + 'branches that cannot be triggered, equivalent mutants that do not change behaviour at all). '
     + 'Prefer one that also puts neighbouring survivors under test. '
-    + 'If EVERY remaining candidate is equivalent — the mutation cannot change any observable behaviour, so no '
-    + 'test could ever kill it — say so instead of picking one: {"pick": null, "allEquivalent": true, "reason": "why"}. '
-    + 'That is a useful answer, not a failure: it stops the pipeline wasting a generation per unkillable target. '
+    + 'You are ORDERING work, not deciding what survives: the candidate list comes from Stryker, and only a real '
+    + 'mutation run can retire a mutant. Always pick one — if you believe several are equivalent, pick the least '
+    + 'equivalent-looking of them and say so in your reason. '
     + 'Reply ONLY with JSON: {"pick": <number from the list>, "reason": "one line", "killIdea": "one line on how to kill it"}. '
     + 'Keep reason and killIdea to one short line each.';
 
@@ -132,10 +132,9 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [], fail
 /** Validate the model's answer against the shortlist it was actually offered. */
 function resolvePick(answer, shortlist) {
   if (!answer || !shortlist?.length) return null;
-  // "everything left is equivalent" — a legitimate terminal answer
-  if (answer.allEquivalent === true || (answer.pick === null && answer.reason)) {
-    return { mutant: null, allEquivalent: true, reason: String(answer.reason || 'all remaining mutants are equivalent').slice(0, 300) };
-  }
+  // A refusal to pick is NOT a verdict on the mutants. Stryker found them; only
+  // Stryker can retire them. Treat it as an unusable answer so the caller falls
+  // back to the ranked candidate and the loop keeps working from measurement.
   const n = Number(answer.pick);
   if (Number.isInteger(n) && n >= 1 && n <= shortlist.length) {
     return { mutant: shortlist[n - 1], reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };

@@ -127,16 +127,21 @@ function render(m) {
     <details><summary><b>${esc(k)}</b> ${v.rule ? '· rule: “' + esc(v.rule).slice(0, 90) + '”' : '· (no rule set)'}</summary>
     <pre>${esc(JSON.stringify(v.result, null, 2)).slice(0, 2000)}</pre></details>`).join('') || '<span class="muted">none yet</span>';
 
-  $('events').innerHTML = (m.events || []).slice().reverse().map((e) => `
-    <div class="ev"><span class="ts">${new Date(e.ts * 1000).toLocaleTimeString()}</span>
-    <span class="badge b-stage">${esc(e.stage)}</span> ${esc(e.msg)}</div>`).join('');
+  lastEvents = m.events || [];
+  renderActivity();
 }
 
-// ── live model dialog ──────────────────────────────────────────────────────
-// Incremental feed: we only ask for turns newer than the last one we hold, so a
-// long transcript costs nothing to keep watching.
+// ── activity: pipeline events and model exchanges in ONE timeline ──────────
+// The dialog is part of the story, not a parallel one: reading two panels and
+// correlating them by timestamp is the hard way to follow a run.
 let dialogSeq = 0;
+let lastEvents = [];
 const turns = [];
+// what the reader has expanded, and a signature of what is currently drawn.
+// The feed repaints every 2 s; without these, an open exchange would slam shut
+// (and the scroll position jump) on the next poll.
+const openTurns = new Set();
+let activitySig = '';
 
 async function pollDialog() {
   let d;
@@ -146,26 +151,57 @@ async function pollDialog() {
   if (!fresh.length) return;
   for (const t of fresh) { turns.push(t); dialogSeq = Math.max(dialogSeq, t.seq); }
   while (turns.length > 30) turns.shift();
-  renderDialog();
+  renderActivity();
 }
 
-function renderDialog() {
-  $('dialog-count').textContent = turns.length ? `(newest first · ${dialogSeq} exchange(s) this run)` : '';
-  $('dialog').innerHTML = turns.slice().reverse().map((t) => {
+function renderActivity() {
+  const rows = [
+    ...lastEvents.map((e) => ({ ts: e.ts, order: e.seq, kind: 'event', e })),
+    // a model turn is logged when it RETURNS, so place it at its start time —
+    // that is where it belongs among the events that surround it
+    ...turns.map((t) => ({ ts: t.ts - Math.round((t.durationMs || 0) / 1000), order: t.seq, kind: 'turn', t })),
+  ].sort((a, b) => a.ts - b.ts || (a.kind === b.kind ? a.order - b.order : 0));
+
+  $('dialog-count').textContent = dialogSeq ? `(${dialogSeq} model exchange(s) — click one to read it)` : '';
+
+  // repaint only when the content actually changed
+  const sig = rows.map((r) => r.kind[0] + r.order).join(',');
+  if (sig === activitySig) return;
+  activitySig = sig;
+
+  const box = $('events');
+  const scroll = box.scrollTop;
+  box.innerHTML = rows.reverse().map((row) => {
+    const time = new Date(row.ts * 1000).toLocaleTimeString();
+    if (row.kind === 'event') {
+      const e = row.e;
+      return `<div class="ev"><span class="ts">${time}</span>
+        <span class="badge b-stage">${esc(e.stage)}</span> ${esc(e.msg)}</div>`;
+    }
+    const t = row.t;
     const secs = Math.round((t.durationMs || 0) / 1000);
-    const peek = (t.response || '').replace(/\s+/g, ' ').slice(0, 110);
-    return `<details class="turn k-${esc(t.kind)}">
-      <summary>
-        <span class="who">${esc(t.kind)}</span>
-        <span class="meta">${new Date(t.ts * 1000).toLocaleTimeString()} · ${secs}s · ${esc(t.stage)}${t.file ? ' · ' + esc(t.file.split('/').pop()) : ''}${t.thinking ? ' · thinking' : ''}</span>
+    const peek = (t.response || '').replace(/\s+/g, ' ').slice(0, 100);
+    return `<details class="ev turn k-${esc(t.kind)}" data-seq="${t.seq}"${openTurns.has(t.seq) ? ' open' : ''}>
+      <summary><span class="ts">${time}</span>
+        <span class="badge b-model">${esc(t.kind)}</span>
         <span class="peek">${esc(peek)}</span>
+        <span class="meta">${secs}s${t.thinking ? ' · thinking' : ''}</span>
       </summary>
       ${t.system ? `<div class="lbl">system</div><pre>${esc(t.system)}</pre>` : ''}
       <div class="lbl">prompt</div><pre>${esc(t.prompt || '')}</pre>
       <div class="lbl">response</div><pre>${esc(t.response || '')}</pre>
     </details>`;
-  }).join('') || '<span class="muted">no model calls yet</span>';
+  }).join('');
+  box.scrollTop = scroll;
 }
+
+// `toggle` does not bubble, so capture it on the container
+$('events').addEventListener('toggle', (ev) => {
+  const el = ev.target;
+  if (!el.dataset || !el.dataset.seq) return;
+  const seq = Number(el.dataset.seq);
+  if (el.open) openTurns.add(seq); else openTurns.delete(seq);
+}, true);
 
 tick();
 pollDialog();

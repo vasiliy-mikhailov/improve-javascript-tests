@@ -111,21 +111,18 @@ test('no failure section when nothing has failed yet', () => {
   assert.ok(!req.prompt.includes('ALREADY ATTEMPTED'));
 });
 
-test('the model may declare everything left equivalent instead of picking', () => {
+test('the model cannot retire a Stryker survivor by declaring it equivalent', () => {
+  // only a mutation run may remove a mutant from the queue; a refusal to pick is
+  // an unusable answer, so the caller falls back to the ranked candidate
   const list = [m({ line: 10 }), m({ line: 20 })];
-  const r = resolvePick({ pick: null, allEquivalent: true, reason: 'cap is unreachable' }, list);
-  assert.equal(r.mutant, null);
-  assert.equal(r.allEquivalent, true);
-  assert.match(r.reason, /unreachable/);
+  assert.equal(resolvePick({ pick: null, allEquivalent: true, reason: 'looks equivalent' }, list), null);
+  assert.equal(resolvePick({ pick: null, reason: 'nothing observable remains' }, list), null);
 });
 
-test('a null pick with a reason is treated as the equivalent verdict, not a parse failure', () => {
-  const r = resolvePick({ pick: null, reason: 'nothing observable remains' }, [m()]);
-  assert.equal(r.allEquivalent, true);
-});
-
-test('the pick prompt offers the equivalent-verdict escape hatch', () => {
+test('the pick prompt frames the job as ORDERING Stryker findings, not judging them', () => {
   const req = buildPickRequest([m()], { file: 'a.ts', source: 'x' });
-  assert.match(req.system, /allEquivalent/);
+  assert.match(req.system, /ORDERING work/);
+  assert.match(req.system, /only a real mutation run can retire a mutant/);
+  assert.ok(!req.system.includes('allEquivalent'));
   assert.equal(req.maxTokens, 2000, 'budget must fit a reason written without a thinking channel');
 });
