@@ -230,7 +230,8 @@ function mutantLoop(entryNode) {
   Http('Next Mutant', {
     method: 'GET',
     urlExpr: `=${API}/api/mutant/next?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}`,
-    timeout: 120000,
+    // may re-run mutation testing when the survivor list is stale (post-bootstrap)
+    timeout: 2400000,
   });
   IfNum('Mutant To Kill?', '={{ $json.mutant ? 1 : 0 }}', 'equal', 1);
 

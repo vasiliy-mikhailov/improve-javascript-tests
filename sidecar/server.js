@@ -53,6 +53,12 @@ function recordMeasurement(file, patch) {
   S.save();
 }
 
+/** The file the loop is currently working on (there is at most one). */
+function pickedFile() {
+  const e = Object.entries(state.files).find(([, v]) => v.status === 'picked');
+  return e ? e[0] : null;
+}
+
 /** Close the current attempt's stopwatch into the file's cumulative machine time. */
 function accrueSpent(file) {
   const f = state.files[file];
@@ -369,7 +375,9 @@ const routes = {
       state.run.baseline.mac = mac(state.run.baseline.coveragePct, state.run.baseline.mutationPct);
       S.save();
     }
-    return { ok: true, ...r };
+    // survivedAll is an internal identity list — keep it out of n8n execution data
+    const { survivedAll, ...payload } = r;
+    return { ok: true, ...payload };
   },
 
   'GET /api/files/gaps': async (q) => {
@@ -427,6 +435,14 @@ const routes = {
         written.push(r.path);
         S.event(body.stage || 'improving_coverage', 'wrote ' + r.path + ' (' + r.bytes + ' bytes)');
       } catch (e) { errors.push({ path: t.path, error: e.message }); }
+    }
+    // Bootstrap tests change what mutation testing can see. The survivor list the
+    // mutant loop is about to read came from the BASELINE run, when the file had no
+    // tests at all — on a 0-coverage file that list is empty, and the loop would
+    // conclude "nothing to kill" on a file that just became fully mutable.
+    const cur = pickedFile();
+    if (written.length && cur && body.stage === 'improving_coverage') {
+      S.upsertFile(cur, { survivorsStale: true });
     }
     return { ok: true, written, errors };
   },
@@ -540,7 +556,27 @@ const routes = {
     if (spent >= hardCeiling) {
       return { ok: true, mutant: null, done: true, reason: `hard attempt ceiling ${hardCeiling} reached (${f.mutantsKilled || 0} killed)` };
     }
-    const candidates = mutantsMod.shortlist(f.lastSurvived || [], { attempts: f.mutantAttempts || {} });
+    // A stale list is not evidence of "nothing left to kill". Re-measure before
+    // giving up: the coverage bootstrap just made the file executable, so mutants
+    // that were unreachable (or invisible, when the baseline run found no tests at
+    // all) are now live targets.
+    if (f.survivorsStale) {
+      S.setStage('improving_mutation', `re-measuring mutants in ${p} after new tests`);
+      try {
+        const fresh = await stryker.runStryker(p);
+        S.upsertFile(p, {
+          mutation: fresh.score, mac: mac(f.coverage, fresh.score), totalMutants: fresh.totalMutants,
+          survivedTotal: fresh.survivedTotal ?? (fresh.survived || []).length,
+          lastSurvived: (fresh.survived || []).slice(0, 100),
+          survivorsStale: false,
+        });
+      } catch (e) {
+        S.event('improving_mutation', `mutation re-measure failed on ${p}: ${e.message.slice(0, 200)}`);
+        S.upsertFile(p, { survivorsStale: false });
+      }
+    }
+    const cur = state.files[p];
+    const candidates = mutantsMod.shortlist(cur.lastSurvived || [], { attempts: cur.mutantAttempts || {} });
     if (!candidates.length) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
 
     const source = repo.readFileSafe(p, 24000);
@@ -655,7 +691,8 @@ const routes = {
     try {
       const r = await stryker.runStryker(file);
       const alive = r.survived || [];
-      killedTarget = !alive.some((s) => mutantsMod.sameMutant(s, mutant));
+      // against the FULL survivor list, never the capped one
+      killedTarget = !(r.survivedAll || alive).some((s) => mutantsMod.sameMutant(s, mutant));
       const afterTotal = r.survivedTotal ?? alive.length;
       killedCount = Math.max(0, before - afterTotal);
       scoreRose = (r.score ?? 0) > beforeScore;
@@ -689,10 +726,10 @@ const routes = {
     const collateral = Math.max(0, killedCount - (killedTarget ? 1 : 0));
     S.event('improving_mutation', `KILLED ${killedCount} mutant(s) — target ${mutant.mutator} at line ${mutant.line} `
       + `${killedTarget ? 'died' : 'SURVIVED but the test killed others'}${collateral ? `, ${collateral} collateral` : ''} `
-      + `— keeping ${testPaths.join(', ')} (${(f.lastSurvived || []).length} survivor(s) left)`);
+      + `— keeping ${testPaths.join(', ')} (${state.files[file].survivedTotal ?? (f.lastSurvived || []).length} survivor(s) left)`);
     return {
       ok: true, killed: true, killedTarget, killedCount, collateral,
-      testPaths, killedSoFar: (f.mutantsKilled || 0) + killedCount,
+      testPaths, killedSoFar: state.files[file].mutantsKilled || 0,
     };
   },
 
@@ -714,7 +751,11 @@ const routes = {
       const macAfter = mac(coverageAfter, st.score);
       S.upsertFile(file, {
         mutation: st.score, mac: macAfter, macAfter, coverageAfter, mutationAfter: st.score,
-        lastSurvived: (st.survived || []).slice(0, 10),
+        // this is the list the NEXT round's mutant loop works from — truncating it
+        // to 10 silently caps how much of a big file a run can ever reach
+        lastSurvived: (st.survived || []).slice(0, 100),
+        survivedTotal: st.survivedTotal ?? (st.survived || []).length,
+        survivorsStale: false,
       });
       state.run.result.coveragePct = cov.totalPct;
       state.run.result.mutationPct = st.score;

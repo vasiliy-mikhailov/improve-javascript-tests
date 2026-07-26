@@ -145,6 +145,13 @@ function parseReport(reportAbs, file) {
     // the array is capped for prompt/state size; the COUNT must not be, or
     // "how many died" is meaningless on files with many survivors
     survivedTotal: survivedList.length,
+    // identity-only view of EVERY survivor. "Did the target die?" is answered by
+    // absence from the survivor list, so answering it from the capped array below
+    // reports a false kill for any mutant past the cap — exactly the weakly-tested
+    // files where the cap bites.
+    survivedAll: survivedList.map((m) => ({
+      mutator: m.mutator, line: m.line, column: m.column, replacement: String(m.replacement ?? '').slice(0, 60),
+    })),
     survived: survivedList.slice(0, 100),
   };
 }
