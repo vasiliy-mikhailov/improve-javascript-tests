@@ -1095,3 +1095,52 @@ test('every run-scoped route refuses to work without a run', () => withSandbox(a
     await assert.rejects(() => sb.call(route, {}), /no active run/, route);
   }
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  admin/reset — starting a repo over
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('admin/reset keeps the ledgers by default, because that is what batching relies on', () => withSandbox(async (sb) => {
+  await started(sb);
+  S.state.improvedLedger[sb.repoSlug] = { 'src/old.ts': { state: 'improved' } };
+  S.state.tokenLedger[sb.repoSlug] = { in: 10, out: 20, calls: 1 };
+
+  await sb.post('/api/admin/reset', {});
+
+  assert.equal(S.state.run, null);
+  assert.deepEqual(S.state.files, {});
+  assert.ok(S.state.improvedLedger[sb.repoSlug]['src/old.ts'],
+    'a batch driver resets between batches — losing the ledger there would redo every settled file');
+}));
+
+test('admin/reset with ledgers:true starts the repo over from nothing', () => withSandbox(async (sb) => {
+  const w = installFakes(sb);
+  await sb.start();
+  w.addFile({ path: FILE, mutants: [{ line: 10 }] });
+  S.state.improvedLedger[sb.repoSlug] = { 'src/old.ts': { state: 'improved' } };
+  S.state.measureLedger[sb.repoSlug] = { 'src/old.ts': { macBefore: 10 } };
+  S.state.overheadLedger[sb.repoSlug] = { cloneSec: 30 };
+  S.state.tokenLedger[sb.repoSlug] = { in: 10, out: 20, calls: 1 };
+  assert.ok(require('node:fs').existsSync(sb.repoDir), 'precondition: the clone is on disk');
+
+  const r = await sb.post('/api/admin/reset', { ledgers: true, repo: true });
+
+  assert.equal(r.ok, true);
+  assert.deepEqual(S.state.improvedLedger, {}, 'nothing may be skipped as already settled');
+  assert.deepEqual(S.state.measureLedger, {});
+  assert.deepEqual(S.state.overheadLedger, {});
+  assert.deepEqual(S.state.tokenLedger, {}, 'token cost starts from zero too, or the report is a lie');
+  assert.equal(require('node:fs').existsSync(sb.repoDir), false,
+    'repo:true forces a fresh clone rather than reusing a tree earlier runs wrote into');
+}));
+
+test('admin/reset can start ONE repo over without touching the others', () => withSandbox(async (sb) => {
+  await started(sb);
+  S.state.improvedLedger[sb.repoSlug] = { 'src/a.ts': { state: 'improved' } };
+  S.state.improvedLedger['other-repo'] = { 'src/b.ts': { state: 'improved' } };
+
+  await sb.post('/api/admin/reset', { ledgers: true, repoUrl: sb.repoUrl });
+
+  assert.equal(S.state.improvedLedger[sb.repoSlug], undefined);
+  assert.ok(S.state.improvedLedger['other-repo'], 'another repo\'s history is not ours to delete');
+}));

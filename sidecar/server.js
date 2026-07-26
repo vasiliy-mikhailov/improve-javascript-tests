@@ -996,10 +996,30 @@ const routes = {
     return { ok: true };
   },
 
-  'POST /api/admin/reset': async () => {
+  // Plain reset is what the batch driver does BETWEEN batches, so it deliberately
+  // keeps the ledgers — they are the record of what is already settled. Starting a
+  // repo over is a different request, and has to say so.
+  'POST /api/admin/reset': async (q, body = {}) => {
+    // read the target BEFORE the run is dropped — it is where the repo url lives
+    const target = body.repoUrl || state.run?.config?.repoUrl || process.env.REPO_URL || '';
     state.run = null; state.files = {}; state.decisions = {}; state.prs = []; state.events = []; state.seq = 0;
-    S.setStage('idle', 'state reset');
-    return { ok: true };
+    const LEDGERS = ['improvedLedger', 'measureLedger', 'overheadLedger', 'tokenLedger'];
+    let cleared = null;
+    if (body.ledgers) {
+      cleared = body.repoUrl ? slugify(body.repoUrl) : 'all repos';
+      for (const name of LEDGERS) {
+        if (body.repoUrl) delete state[name][slugify(body.repoUrl)];
+        else state[name] = {};
+      }
+    }
+    let repoRemoved = false;
+    if (body.repo && target) {
+      // a tree earlier runs wrote into is not a clean starting point
+      try { fs.rmSync(path.join(S.DATA_DIR, 'repos', slugify(target)), { recursive: true, force: true }); repoRemoved = true; } catch { }
+    }
+    S.setStage('idle', cleared ? `state reset — ledgers cleared for ${cleared}` : 'state reset');
+    S.save();
+    return { ok: true, ledgersCleared: cleared, repoRemoved };
   },
 };
 
