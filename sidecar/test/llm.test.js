@@ -61,16 +61,21 @@ const TRUNCATED = require('./fixtures/qwen-thinking-truncated.json');
 
 const GOOD = '{"tests":[{"path":"test/a.test.ts","content":"it(\'x\', () => {});"}]}';
 
-test('an empty answer is retried WITHOUT thinking, not with the setup that produced it',
+test('a generation retry KEEPS thinking — it is the hard cases that run out of budget',
   async () => {
+    // The mutants that exhaust the budget are the ones whose kill test needs the most
+    // thought: an edge case nobody has asserted yet. Retrying those without reasoning
+    // buys a cheap answer to the question we most needed answered well. What failed
+    // was the BUDGET, so the budget is what changes.
     const f = scriptFetch(['', GOOD]);
     try {
       const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
-      assert.equal(f.seen.length, 2, 'one generation, one repair');
-      assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, true,
-        'the first call still thinks — that is what keeps reasoning out of the test file');
-      assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, false,
-        'the repair must not re-run the configuration that returned nothing');
+      assert.equal(f.seen.length, 2, 'one generation, one retry');
+      assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, true);
+      assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, true,
+        'still thinking — this is test-writing for a mutant that resisted everything else');
+      assert.ok(f.seen[1].max_tokens > f.seen[0].max_tokens,
+        'and with room to finish: the first attempt proved the old budget was too small');
       assert.deepEqual(r.json.tests[0].path, 'test/a.test.ts');
     } finally { f.restore(); }
   });
@@ -79,18 +84,37 @@ test('a truncated answer is retried the same way', async () => {
   const f = scriptFetch(['\n\n{"tests":[{"path":"tests/unit/a.kill-L', GOOD]);
   try {
     const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
-    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, false);
-    assert.ok(r.json, 'the repair result is what the caller gets');
+    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, true);
+    assert.ok(r.json, 'the retry result is what the caller gets');
   } finally { f.restore(); }
 });
 
-test('the repair turn drops the thinking headroom it no longer needs', async () => {
+test('a DECISION retry stays non-thinking — it never had thinking to lose', async () => {
+  const f = scriptFetch(['not json at all', GOOD]);
+  try {
+    await llm.chat({ prompt: 'pick one', json: true, decision: true, maxTokens: 500 });
+    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, false,
+      'ordering a shortlist is not test-writing');
+  } finally { f.restore(); }
+});
+
+test('the retry hands the model back its own reasoning so it resumes instead of restarting', async () => {
+  const f = scriptFetch([TRUNCATED, GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+    const assistantTurn = f.seen[1].messages.find((m) => m.role === 'assistant');
+    const reasoning = TRUNCATED.choices[0].message.reasoning;
+    assert.ok(assistantTurn.content.includes(reasoning.slice(-200)),
+      'the work it already did is worth more than an apology for not finishing');
+  } finally { f.restore(); }
+});
+
+test('the retry budget grows past what the failed attempt burned, and stays bounded', async () => {
   const f = scriptFetch(['', GOOD]);
   try {
     await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
-    assert.ok(f.seen[1].max_tokens < f.seen[0].max_tokens,
-      'the first call budgets for a reasoning chain; the repair does not have one');
-    assert.ok(f.seen[1].max_tokens >= 4000, 'but the answer itself still has its full budget');
+    assert.ok(f.seen[1].max_tokens > f.seen[0].max_tokens);
+    assert.ok(f.seen[1].max_tokens <= 24000, 'the context window is finite');
   } finally { f.restore(); }
 });
 

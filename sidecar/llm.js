@@ -91,21 +91,31 @@ async function chat(opts) {
       ? `model returned NO CONTENT (finish_reason=${first.finishReason}, ${first.reasoning.length} chars of reasoning, `
         + `${body.max_tokens} token budget) — the answer never left the reasoning channel; retrying without thinking`
       : `JSON parse failed (${text.length} chars returned, finish_reason=${first.finishReason}), retrying without thinking`);
-    messages.push({ role: 'assistant', content: text.slice(0, 4000) || '(no answer — the reasoning phase used the whole budget)' });
+    // Hand back the work it already did. Its reasoning is where the answer was being
+    // written, so resuming from it beats an apology and a blank page.
+    const carry = text.slice(0, 4000)
+      || (first.reasoning ? `My reasoning so far (cut off):\n${first.reasoning.slice(-3000)}` : '(no answer)');
+    messages.push({ role: 'assistant', content: carry });
     messages.push({
       role: 'user',
       content: ranOut
-        ? 'You spent the entire token budget thinking and never produced the answer. '
-          + 'Do not think this time: reply immediately with ONLY the JSON, no prose, no markdown fences.'
+        ? 'You ran out of tokens while thinking and never produced the answer. Keep your remaining '
+          + 'reasoning short — you have already done the analysis above — and reply with ONLY the JSON, '
+          + 'no prose, no markdown fences.'
         : 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.',
     });
     const t0 = Date.now();
+    // KEEP thinking for generation. The calls that exhaust the budget are, by
+    // selection, the hard ones: a mutant that survived everything else, whose kill
+    // test has to hit an edge case nobody has asserted yet. Answering that without
+    // reasoning buys a cheap answer to the question we most needed answered well.
+    // What failed was the BUDGET, so the budget is what changes. (Decision calls
+    // never had thinking, so this leaves them exactly as they were.)
     const retryRes = await post({
       ...body,
       messages,
       temperature: 0.1,
-      max_tokens: opts.maxTokens || 4096,
-      chat_template_kwargs: { enable_thinking: false },
+      max_tokens: Math.min(body.max_tokens * 2, 24000),
     });
     const retry = retryRes.content;
     recordDialog({
