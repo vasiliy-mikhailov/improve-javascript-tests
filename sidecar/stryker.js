@@ -87,7 +87,8 @@ async function runStryker(file, opts = {}) {
     event('stryker', `${file}:${opts.range.from}-${opts.range.to} (kill check): `
       + `${parsed.totalMutants} mutant(s) in range, ${parsed.killed} killed, ${parsed.survived.length} still alive`);
   } else {
-    event('stryker', `${file}: ${parsed.totalMutants} mutants, ${parsed.killed} killed, ${parsed.survived.length} survived+nocov, score ${parsed.score}%`);
+    // the survivor COUNT must come from the untruncated total, not the capped array
+    event('stryker', `${file}: ${parsed.totalMutants} mutants, ${parsed.killed} killed, ${parsed.survivedTotal} survived+nocov, score ${parsed.score}%`);
   }
   return parsed;
 }

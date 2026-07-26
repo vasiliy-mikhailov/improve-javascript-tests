@@ -165,7 +165,14 @@ async function listScopeFiles() {
   if (r.code !== 0) throw new Error('git ls-files failed');
   const match = globsToMatcher(cfg.scopeGlob);
   const isTest = (p) => /(^|\/)(tests?|__tests__|__mocks__|spec)\//.test(p) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(p);
-  const files = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+  const tracked = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+  // Snapshot the tests the repo already owns. We are only ever allowed to ADD test
+  // files — every prompt says so — but nothing enforced it: the write allowlist
+  // checks that a path LOOKS like a test, and a repo's own test looks exactly like
+  // one. A model echoing the style-reference path would overwrite a real test, and
+  // a failed attempt's cleanup would then delete it.
+  state.repoOwnedTests = tracked.filter((p) => TEST_PATH_RE.test(p));
+  const files = tracked
     .filter((p) => /\.[cm]?[jt]sx?$/.test(p))
     .filter((p) => !/\.d\.[cm]?ts$/.test(p) && !/\.test-d\./.test(p) && !/\.config\.[cm]?[jt]s$/.test(p))
     .filter((p) => !isTest(p))
@@ -209,8 +216,12 @@ function readFileSafe(rel, maxLen = 200000) {
 
 const TEST_PATH_RE = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/;
 
+/** Tests that existed in the repo before we touched it — never ours to change. */
+function isRepoOwnedTest(rel) { return (state.repoOwnedTests || []).includes(rel); }
+
 function writeTestFile(rel, content) {
   if (!TEST_PATH_RE.test(rel)) throw new Error('refusing to write outside test locations: ' + rel);
+  if (isRepoOwnedTest(rel)) throw new Error('refusing to overwrite a repo-owned test file: ' + rel);
   if (!/\.[cm]?[jt]sx?$/.test(rel)) throw new Error('test file must be a js/ts file');
   const dir = repoDir();
   const abs = path.resolve(dir, rel);
@@ -222,6 +233,7 @@ function writeTestFile(rel, content) {
 
 function deleteTestFile(rel) {
   if (!TEST_PATH_RE.test(rel)) throw new Error('refusing to delete outside test locations');
+  if (isRepoOwnedTest(rel)) throw new Error('refusing to delete a repo-owned test file: ' + rel);
   const dir = repoDir();
   const abs = path.resolve(dir, rel);
   if (!abs.startsWith(dir + path.sep)) throw new Error('path escapes repo');

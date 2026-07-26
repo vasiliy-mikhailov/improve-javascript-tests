@@ -982,5 +982,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-S.load();
-server.listen(PORT, () => console.log(`sidecar listening on :${PORT}`));
+// Importable: tests drive the route table in-process (with the OS-touching
+// modules faked) instead of only ever exercising it through a live container.
+if (require.main === module) {
+  S.load();
+  server.listen(PORT, () => console.log(`sidecar listening on :${PORT}`));
+}
+
+module.exports = { routes, server };

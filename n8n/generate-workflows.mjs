@@ -6,10 +6,26 @@
 //
 // Run: node generate-workflows.mjs → writes workflows/Improve-JS-Tests.json
 
+// The 6 Code nodes' logic lives in ./nodes/*.js as plain, importable, unit-testable
+// functions; `emit` inlines their SOURCE here so there is exactly one copy of it.
+// The 10 IF conditions live in ./nodes/conditions.js for the same reason.
+// All this file still owns is the WIRING: which graph value feeds which argument.
+
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+
+import { emit } from './emit.js';
+import { condition } from './nodes/conditions.js';
+import { uiGuidance } from './nodes/ui-guidance.js';
+import { commonTestRules } from './nodes/common-test-rules.js';
+import { covBuildPrompt } from './nodes/cov-build-prompt.js';
+import { covParseTests } from './nodes/cov-parse-tests.js';
+import { covBuildRepair } from './nodes/cov-build-repair.js';
+import { covParseRepair } from './nodes/cov-parse-repair.js';
+import { killBuildPrompt } from './nodes/kill-build-prompt.js';
+import { killParseTest } from './nodes/kill-parse-test.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, 'workflows');
@@ -35,10 +51,9 @@ function chain(...names) { for (let i = 0; i < names.length - 1; i++) link(names
 
 const NoOp = (name) => add('n8n-nodes-base.noOp', name, {});
 const Code = (name, jsCode) => add('n8n-nodes-base.code', name, { jsCode, mode: 'runOnceForAllItems' }, 2);
-const IfNum = (name, valueExpr, operation, value2) =>
-  add('n8n-nodes-base.if', name, {
-    conditions: { number: [{ value1: valueExpr, value2, operation }] },
-  }, 1);
+// the expression and its comparison both come from nodes/conditions.js — an IF
+// condition must never exist in two places
+const IfNum = (name) => add('n8n-nodes-base.if', name, { conditions: { number: [condition(name)] } }, 1);
 
 function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000 }) {
   const params = {
@@ -54,28 +69,9 @@ function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000 }) 
   return add('n8n-nodes-base.httpRequest', name, params, 4.2);
 }
 
-// ── shared prompt fragments (live inside Code nodes) ───────────────────────
-// Component-testing guidance, injected when the picked file is a UI component
-// (.jsx/.tsx or imports the detected framework). Kept as a Code-node snippet.
-const UI_GUIDANCE_SNIPPET = `
-const isComponent = /\\.[jt]sx$/.test(file) || (gaps.ui && /from\\s+["'](react|vue|svelte|preact)["']/.test(String(gaps.source || '').slice(0, 2000)));
-const uiGuidance = (gaps.ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + gaps.ui.framework + '). Component-testing rules:'
-  + '\\n- Render it with ' + (gaps.ui.testingLibrary || "the repo's established component-testing approach") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'
-  + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'
-  + (gaps.ui.userEvent ? "\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations." : '')
-  + (gaps.ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')
-  + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'
-  + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'
-  : '';`;
-
-const COMMON_TEST_RULES = `
-- Tests must be deterministic (no timing races, no network, no randomness without seeding).
-- Code must satisfy strict linters: no \`any\` types, no unused imports or variables, no non-null assertions.
-- Import the module under test via its public path exactly as existing tests do.
-- Never inspect function source code (no fn.toString() introspection).
-- No snapshot tests. Prefer precise value assertions.
-- The tests MUST pass against the CURRENT implementation of the source file.
-- Output at most 2 test files.`;
+// Shared prompt fragments both builders call. Passed to `emit` as deps so their
+// source is inlined alongside whichever builder needs them.
+const PROMPT_DEPS = [uiGuidance, commonTestRules];
 
 // =============================================================================
 // SPINE
@@ -96,12 +92,10 @@ Http('Rules: write-test', { path: '/api/rules/apply', body: `={{ { stage: 'write
 
 NoOp('Next Iteration');
 Http('Get Candidates', { method: 'GET', path: '/api/files/candidates' });
-IfNum('More Work?', '={{ $json.done ? 0 : 1 }}', 'equal', 1);
+IfNum('More Work?');
 Http('Rules: pick file', { path: '/api/rules/apply', body: `={{ { stage: 'pick_file' } }}` });
-IfNum('File Picked?', `={{ $json.result && $json.result.file ? 1 : 0 }}`, 'equal', 1);
-// pick failed: transient (bad LLM output) → try again; terminal (rule excludes
-// every candidate) → finish. The sidecar caps consecutive transient retries.
-IfNum('Pick Retryable?', `={{ ($json.result && $json.result.retry) ? 1 : 0 }}`, 'equal', 1);
+IfNum('File Picked?');
+IfNum('Pick Retryable?');
 Http('Start Iteration', { path: '/api/iteration/start', body: `={{ { file: $('Rules: pick file').first().json.result.file } }}` });
 Http('Baseline Mutation', { path: '/api/stryker/run', body: `={{ { file: $('Start Iteration').first().json.file, phase: 'baseline', stage: 'improving_mutation' } }}`, timeout: 2700000 });
 Http('Coverage Gaps', { method: 'GET', urlExpr: `=${API}/api/files/gaps?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}` });
@@ -120,53 +114,29 @@ chain('Start Iteration', 'Baseline Mutation', 'Coverage Gaps');
 // =============================================================================
 function phase(prefix, buildPromptCode, entryNode) {
   const B = (n) => `${prefix}: ${n}`;
+  const stage = prefix === 'Cov' ? 'improving_coverage' : 'improving_mutation';
   Code(B('Build Prompt'), buildPromptCode);
-  IfNum(B('Has Work?'), `={{ $json.skip ? 0 : 1 }}`, 'equal', 1);
+  IfNum(B('Has Work?'));
   Http(B('LLM Write Tests'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
-  Code(B('Parse Tests'), `
-const resp = $json;
-const plan = $('${B('Build Prompt')}').first().json;
-let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];
-tests = tests
-  .filter(t => t && typeof t.path === 'string' && typeof t.content === 'string' && t.content.trim().length > 10)
-  .slice(0, 2)
-  .map((t, i) => {
-    let p = t.path.replace(/^\\.?\\//, '');
-    const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p) && !p.includes('..');
-    const collides = p === plan.existingTestPath && plan.existingTestExists;
-    if (!safe || collides) p = i === 0 ? plan.targetPath : plan.targetPath.replace('.test.', '-' + i + '.test.');
-    return { path: p, content: t.content };
-  });
-return [{ json: { tests, paths: tests.map(t => t.path), count: tests.length } }];`);
-  Http(B('Write Tests'), { path: '/api/test/write-many', body: `={{ { tests: $json.tests, stage: '${prefix === 'Cov' ? 'improving_coverage' : 'improving_mutation'}' } }}` });
-  Http(B('Run Tests'), { path: '/api/test/run', body: `={{ { stage: '${prefix === 'Cov' ? 'improving_coverage' : 'improving_mutation'}' } }}`, timeout: 1200000 });
-  IfNum(B('Green?'), '={{ $json.passed ? 1 : 0 }}', 'equal', 1);
-  IfNum(B('Wrote Any?'), `={{ $('${B('Parse Tests')}').first().json.count }}`, 'larger', 0);
-  Code(B('Build Repair'), `
-const fail = $json;
-const parsed = $('${B('Parse Tests')}').first().json;
-const gaps = $('Coverage Gaps').first().json;
-const filesTxt = parsed.tests.map(t => 'PATH: ' + t.path + '\\n' + t.content.slice(0, 6000)).join('\\n\\n---\\n\\n');
-const system = 'You are an expert test engineer. Tests you previously wrote FAIL against the current implementation. Fix them. Keep the SAME file paths. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full corrected file content"}]}. If a test asserts wrong expected values, correct the expectations to match the real behavior of the source. If a test cannot be fixed, drop it from the output.';
-const prompt = 'TEST RUNNER OUTPUT (failures):\\n' + String(fail.summary || '').slice(0, 3500)
-  + '\\n\\nYOUR TEST FILES:\\n' + filesTxt
-  + '\\n\\nSOURCE FILE ' + gaps.path + ' (for reference):\\n' + String(gaps.source || '').slice(0, 10000)
-  + '\\n\\nReply with corrected JSON now.';
-return [{ json: { system, prompt, json: true, maxTokens: 6000, temperature: 0.2, stage: '${prefix === 'Cov' ? 'improving_coverage' : 'improving_mutation'}', stageDetail: 'repairing failing generated tests' } }];`);
+  Code(B('Parse Tests'), emit(covParseTests, [],
+    '$json',                                       // the LLM response
+    `$('${B('Build Prompt')}').first().json`));    // the plan it was asked to follow
+  Http(B('Write Tests'), { path: '/api/test/write-many', body: `={{ { tests: $json.tests, stage: '${stage}' } }}` });
+  Http(B('Run Tests'), { path: '/api/test/run', body: `={{ { stage: '${stage}' } }}`, timeout: 1200000 });
+  IfNum(B('Green?'));
+  IfNum(B('Wrote Any?'));
+  Code(B('Build Repair'), emit(covBuildRepair, [],
+    '$json',                                       // the failing test run
+    `$('${B('Parse Tests')}').first().json`,       // the files we wrote
+    `$('Coverage Gaps').first().json`,             // the source, for reference
+    `'${stage}'`));
   Http(B('LLM Repair'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
-  Code(B('Parse Repair'), `
-const resp = $json;
-const prev = $('${B('Parse Tests')}').first().json;
-let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];
-tests = tests
-  .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)
-  .slice(0, prev.paths.length)
-  .map((t, i) => ({ path: prev.paths.includes(t.path) ? t.path : prev.paths[i], content: t.content }))
-  .filter(t => t.path);
-return [{ json: { tests, paths: tests.map(t => t.path), count: tests.length } }];`);
+  Code(B('Parse Repair'), emit(covParseRepair, [],
+    '$json',                                       // the repaired files
+    `$('${B('Parse Tests')}').first().json`));    // the only paths a repair may touch
   Http(B('Write Repair'), { path: '/api/test/write-many', body: `={{ { tests: $json.tests } }}` });
   Http(B('Re-run Tests'), { path: '/api/test/run', body: `={{ {} }}`, timeout: 1200000 });
-  IfNum(B('Green After Repair?'), '={{ $json.passed ? 1 : 0 }}', 'equal', 1);
+  IfNum(B('Green After Repair?'));
   Http(B('Delete Broken Tests'), {
     path: '/api/test/delete-many',
     body: `={{ { paths: ($('${B('Parse Tests')}').first().json.paths || []).concat($('${B('Parse Repair')}').first().json.paths || []) } }}`,
@@ -189,36 +159,9 @@ return [{ json: { tests, paths: tests.map(t => t.path), count: tests.length } }]
 }
 
 // ── coverage phase ─────────────────────────────────────────────────────────
-const covDone = phase('Cov', `
-const gaps = $json; // response of Coverage Gaps
-const file = $('Start Iteration').first().json.file;
-const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];
-const u = gaps.uncovered || {};
-const fullyUncovered = u.lines === 'all';
-// The coverage phase is a BOOTSTRAP only: it exists so a file is executed at all,
-// because mutation testing has nothing to work with otherwise. Once any coverage
-// exists, killing mutants raises coverage as a side effect, so we skip straight to
-// the mutant loop instead of writing bulk coverage tests.
-const nothingToCover = !gaps.needsBootstrap
-  || (!fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length));
-const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');
-const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';
-const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;
-if (nothingToCover) return [{ json: { skip: true, reason: gaps.needsBootstrap ? 'file fully covered' : 'already executed by tests — mutant loop takes it from here', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];
-const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');${UI_GUIDANCE_SNIPPET}
-const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {"tests":[{"path":"...","content":"full test file content"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
-  + uiGuidance
-  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');
-const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'
-  + String(gaps.source || '').slice(0, 14000)
-  + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :
-      'lines ' + JSON.stringify((u.lines || []).slice(0, 120))
-      + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))
-      + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))
-  + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'
-  + String(gaps.existingTest || '(none)').slice(0, 6000)
-  + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';
-return [{ json: { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists } }];`,
+const covDone = phase('Cov', emit(covBuildPrompt, PROMPT_DEPS,
+  '$json',                                         // response of Coverage Gaps
+  `$('Start Iteration').first().json.file`),       // the file this iteration improves
   'Coverage Gaps');
 
 // ── mutant loop: ONE target, ONE test, verified kill, repeat ───────────────
@@ -233,54 +176,16 @@ function mutantLoop(entryNode) {
     // may re-run mutation testing when the survivor list is stale (post-bootstrap)
     timeout: 2400000,
   });
-  IfNum('Mutant To Kill?', '={{ $json.mutant ? 1 : 0 }}', 'equal', 1);
+  IfNum('Mutant To Kill?');
 
-  Code('Kill: Build Prompt', `
-const t = $json;                       // /api/mutant/next
-const m = t.mutant;
-const file = t.path;
-const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];
-const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');
-// one file per target keeps the suite readable and makes a failed attempt trivial to drop
-const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '.test' + ext;
-const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };
-${UI_GUIDANCE_SNIPPET}
-const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');
-const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '
-  + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '
-  + 'Reply ONLY with JSON: {"tests":[{"path":"' + targetPath + '","content":"full test file content"}]}. Rules:${COMMON_TEST_RULES.replace(/\n/g, '\\n')}'
-  + uiGuidance
-  + (constraints ? '\\nTeam constraints:\\n' + constraints : '');
-const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'
-  + String(t.source || '').slice(0, 12000)
-  + '\\n\\nTARGET MUTANT — kill this one:\\n'
-  + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + (m.column ? ':' + m.column : '') + '\\n'
-  + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'
-  + '  status: ' + (m.status === 'survived' ? 'covered by existing tests, but nothing asserts the difference' : 'not covered at all — your test must reach this code') + '\\n'
-  + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')
-  + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')
-  + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'
-  + String(t.existingTest || '(none)').slice(0, 4000)
-  + '\\n\\nWrite the single test file that kills this mutant. JSON only.';
-return [{ json: { system, prompt, json: true, maxTokens: 4000, temperature: 0.2,
-  stage: 'improving_mutation', stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line,
-  targetPath } }];`);
+  Code('Kill: Build Prompt', emit(killBuildPrompt, PROMPT_DEPS,
+    '$json'));                                     // response of Next Mutant
 
   Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
 
-  Code('Kill: Parse Test', `
-const resp = $json;
-const plan = $('Kill: Build Prompt').first().json;
-let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];
-tests = tests
-  .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)
-  .slice(0, 1)                                  // one target, one test file
-  .map(t => {
-    let p = String(t.path || '').replace(/^\\.?\\//, '');
-    const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p) && !p.includes('..');
-    return { path: safe ? p : plan.targetPath, content: t.content };
-  });
-return [{ json: { tests, paths: tests.map(t => t.path), count: tests.length } }];`);
+  Code('Kill: Parse Test', emit(killParseTest, [],
+    '$json',                                       // the LLM response
+    `$('Kill: Build Prompt').first().json`));      // the plan it was asked to follow
 
   Http('Kill: Write Test', {
     path: '/api/test/write-many',
@@ -308,13 +213,12 @@ const mutDone = mutantLoop(covDone);
 // VERIFY → CHECK RULES → PR / DISCARD → LOOP
 // =============================================================================
 Http('Verify', { path: '/api/verify', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: 3600000 });
-// multi-round: keep the round iff ≥1 of coverage/mutation/MAC improved AND none degraded
-IfNum('Another Round?', `={{ ($json.improvedAny && !$json.degradedAny && ($json.rounds || 0) < ($json.maxRounds || 5)) ? 1 : 0 }}`, 'equal', 1);
+IfNum('Another Round?');
 Http('Accept Round', { path: '/api/round/accept', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Drop Last Round', { path: '/api/round/drop', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Cleanup Tests', { path: '/api/test/cleanup', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: 3600000 });
 Http('Rules: check changes', { path: '/api/rules/apply', body: `={{ { stage: 'check_changes', context: $('Drop Last Round').first().json } }}`, timeout: 600000 });
-IfNum('Approved?', `={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}`, 'equal', 1);
+IfNum('Approved?');
 Http('Rules: make PR', { path: '/api/rules/apply', body: `={{ { stage: 'make_pr', context: $('Drop Last Round').first().json } }}`, timeout: 600000 });
 Http('Create PR', {
   path: '/api/pr/create',
@@ -361,8 +265,14 @@ const allowed = ['n8n-nodes-base.manualTrigger', 'n8n-nodes-base.webhook', 'n8n-
   'n8n-nodes-base.code', 'n8n-nodes-base.if', 'n8n-nodes-base.noOp', 'n8n-nodes-base.splitInBatches'];
 const bad = w.nodes.filter((n) => !allowed.includes(n.type));
 const shellish = w.nodes.filter((n) => n.type === 'n8n-nodes-base.code' && /child_process|execSync|spawn|require\(['"]fs['"]\)|readFileSync|writeFileSync/.test(n.parameters.jsCode || ''));
-if (bad.length || shellish.length) {
-  console.error('CONSTRAINT VIOLATION', { bad: bad.map((n) => n.name), shellish: shellish.map((n) => n.name) });
+// `emit` inlines by SOURCE, so a node function that calls a shared helper the binding
+// line forgot to list in `deps` yields a Code node that only blows up inside n8n at
+// run time. Catch the missing copy here instead.
+const HELPERS = [uiGuidance, commonTestRules];
+const unbound = w.nodes.filter((n) => n.type === 'n8n-nodes-base.code' && HELPERS.some((h) =>
+  new RegExp(`\\b${h.name}\\s*\\(`).test(n.parameters.jsCode || '') && !(n.parameters.jsCode || '').includes(`function ${h.name}(`)));
+if (bad.length || shellish.length || unbound.length) {
+  console.error('CONSTRAINT VIOLATION', { bad: bad.map((n) => n.name), shellish: shellish.map((n) => n.name), unbound: unbound.map((n) => n.name) });
   process.exit(1);
 }
 console.log('✓ native-nodes-only constraint satisfied');
