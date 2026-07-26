@@ -267,6 +267,13 @@ function testDirCounts() {
  * it shows the LLM the repo's import aliases, setup and naming conventions.
  * Prefers tests of the same kind (component .tsx/.jsx vs plain .ts/.js).
  */
+// Our own output must never be the example. The reference is picked by SIZE, and a
+// generated kill test — one `it`, a couple of imports — is routinely the smallest test
+// in the repo, so it would win and the model would be shown its own previous work as
+// "the repo's conventions". Errors compound and the file drifts further from what the
+// team actually writes with every round.
+const GENERATED_TEST_RE = /\.(mac-cov|mac)(-r\d+)?\.test\.|\.kill-L\d+-/;
+
 function findStyleReference(srcRel) {
   const dir = repoDir();
   const wantComponent = /\.[jt]sx$/.test(srcRel);
@@ -279,7 +286,7 @@ function findStyleReference(srcRel) {
       if (ent.name === 'node_modules' || ent.name.startsWith('.') || ent.name === 'dist' || ent.name === 'coverage') continue;
       const p = path.join(d, ent.name);
       if (ent.isDirectory()) walk(p, depth + 1);
-      else if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(ent.name)) matches.push(p);
+      else if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(ent.name) && !GENERATED_TEST_RE.test(ent.name)) matches.push(p);
     }
   };
   walk(dir, 0);
