@@ -139,3 +139,6 @@ Current implementation flow: [SPEC.md](SPEC.md).
 | 9 | 2026-07-26 | **No per-file cap on productive work.** Re-run mutation after every attempt and work from the fresh list; never attempt a mutant twice; expect one kill to take several mutants with it. |
 | 10 | 2026-07-26 | **Live model dialog** in the activity feed — prompts and responses visible as they happen. |
 | 11 | 2026-07-26 | **Mutants come from Stryker, never from model judgement.** |
+| 12 | 2026-07-26 | **Unit-test the code the nodes call.** The Code nodes' logic moves out of the generator into importable files; the e2e run finds the bug, a unit test pins it red, then it is fixed. |
+| 13 | 2026-07-26 | **Prompt tests** — unit-sized tests that call the real model, with mechanical verdicts, kept out of the offline suite. |
+| 14 | 2026-07-26 | **Two-phase kill.** Try to kill a mutant without reasoning first; escalate to a thinking attempt only when that fails. A failed cheap attempt does not spend the mutant's one shot. |

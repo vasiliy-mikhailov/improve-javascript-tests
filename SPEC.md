@@ -69,14 +69,25 @@ imports the module. The model writes at most 2 test files; if the suite goes red
 repair attempt, then the files are deleted. Once any coverage exists this phase is skipped
 entirely — killing mutants raises coverage as a side effect.
 
-**Mutant loop** — the core:
+**Mutant loop** — the core. Two attempts per mutant at most, and the first one is cheap:
 
 ```
 Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
      ▲              │yes
-     │       Kill: Build Prompt → Kill: LLM → Kill: Parse Test → Kill: Write Test → Kill: Verify
-     └───────────────────────────────────────────────────────────────────────────────────┘
+     │       Kill: Build Prompt (thinking OFF) → LLM → Parse → Write → Kill: Verify (phase 'cheap')
+     │                                                                        │
+     │       ┌────────────────── Kill: Escalate? ◄───────────────────────────┘
+     │       │no (killed, or the shot is spent)
+     └───────┤
+             │yes    Kill: Build Prompt 2 (thinking ON, escalated) → LLM 2 → Parse 2 → Write 2
+             └────────────────────────────→ Kill: Verify 2 (phase 'thinking') ──→ Next Mutant
 ```
+
+Measured on a prompt taken from the pipeline's own dialog log: the model answers in 21-28s
+without reasoning and 112-186s with it, and on everything that could be checked mechanically the
+cheap answer was no worse. In the live run the cheap attempt carries about 92% of the kills, and
+the escalation has already killed a mutant the cheap attempt missed. Reasoning is spent only where
+it demonstrably pays.
 
 `GET /api/mutant/next`
 - **Re-measures first if the list is stale.** After the coverage bootstrap the stored survivors are
@@ -90,14 +101,23 @@ Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
   work, not judging which findings count — it cannot retire a mutant, and an unusable answer falls
   back to the ranked candidate rather than stopping the loop.
 - Stops when: no un-attempted survivors remain, the **failure budget** is spent
-  (`MAX_MUTANTS_PER_FILE` — *failures only*, kills are free), or a 6× hard ceiling trips.
+  (`MAX_MUTANTS_PER_FILE` — *failures only*, kills are free), a 6× hard ceiling trips, or the
+  model has failed to produce a usable test `budget × 3` times (a broken endpoint, not a verdict
+  on the file). A mutant we could not write a test for three times running is parked so one
+  pathological target cannot pin the loop.
 
 `Kill: Build Prompt` → one mutant, its source context, the kill idea, the repo's test conventions,
-UI guidance when the file is a component. One test file, named for its victim
-(`foo.kill-L42-equalityoperator.test.ts`).
+UI guidance when the file is a component. One test file whose name carries the whole mutant
+identity — mutator, line, column and a hash of the replacement
+(`foo.kill-L42-equalityoperator-1fgc2lh.test.ts`). Line and mutator alone are not an identity:
+Stryker emits several mutants in one place, and a shared name made round two overwrite the test
+that killed round one's mutant, then delete it when round two failed.
 
 `POST /api/mutant/verify`
-1. The full suite must be green; if not, the test is deleted.
+1. The new test must pass — checked **scoped to the file just written**, not against the whole
+   suite. Measured on the live repo: 1s against 52-59s, on every one of up to fifteen attempts per
+   file. The whole-suite question is still asked once per round by `/api/verify`, and a round whose
+   full suite is red is dropped entirely, so nothing unverified reaches a PR.
 2. **Re-run mutation over the whole file.** This yields the fresh survivor list, the current score,
    and the answer to "did the target die". That last question is answered against the *full*
    survivor list (`survivedAll`), not the 100-entry array kept for prompts — a mutant past the cap
@@ -108,6 +128,16 @@ UI guidance when the file is a component. One test file, named for its victim
    `mutantAttempts[key]` is keyed on `killedTarget`, so a test that killed only neighbours still
    uses up its target's attempt. The **failure budget** is charged separately, on `worthKeeping`,
    so a test that achieved something never costs budget.
+5. **A shot is spent by evidence, not by accident.** A test was written and the mutant survived it
+   — that is evidence. These are not, and none of them retires the target or charges the budget:
+   the model returned nothing; the generated test failed against the *unmutated* code; the
+   verification run crashed; the verification run executed no tests at all. Each is counted as a
+   generation miss with its own ceiling, and the unverified test is deleted either way.
+   A `phase: 'cheap'` failure is likewise not a verdict — the escalated attempt has not run yet.
+
+   "No tests were executed" deserves its own line, because it once read as a triumph: Stryker's
+   reply carries `survived: []` with no totals, and the kill check is absence from the survivor
+   list, so a run that measured nothing scored a single test as **112 kills**.
 
 ### 2.4 Verify, rounds, PR
 
@@ -156,6 +186,9 @@ position-stable key, since Stryker ids are not stable), `mutantFailures`, `mutan
 | The suite must be green before anything is kept | `mutant/verify`, `verify` |
 | MAC must strictly improve, with real changed files, before a PR | `verify`, `rules.applyCheckChanges` |
 | Only test files may be written, deleted or committed (path allowlist) | `repo.writeTestFile`, `pr.commit` |
+| A test the repo already owned is never overwritten or deleted — we only ever ADD | `repo.isRepoOwnedTest`, snapshotted at `listScopeFiles` |
+| The loop verifies what the sidecar WROTE, not what the model asked for | `Kill: Verify` binding |
+| Our own generated tests are never used as the style reference the model imitates | `repo.findStyleReference` |
 | A kill counts only when a mutation run says the mutant died, checked against the untruncated survivor list | `mutant/verify` |
 | A mutant is retired only by evidence — never by model opinion | `mutants.resolvePick` |
 | Timeouts are counted and flagged; Stryker scores a timeout as a kill, so load can inflate the metric | `stryker.parseReport` |
@@ -199,6 +232,26 @@ creates the owner, logs in once with a 10-year JWT duration, stores the cookie, 
 injects it into the Caddy site block. `/dashboard/*` proxies to the sidecar.
 
 ## 8. Tests
+
+Three layers, and the middle one is the newest:
+
+| layer | what it asks | cost |
+|---|---|---|
+| **unit** (`npm test`) | does our code do what we meant? Fakes for everything OS-touching. | 311 tests, ~0.3s, offline |
+| **prompt** (`npm run test:prompts`) | does the MODEL do what our prompt asks? Real endpoint, mechanical verdicts, N samples with a threshold. | 7 tests, ~4 min, real tokens |
+| **e2e** | a straight-through run against a real repository. | hours |
+
+A prompt test is unit-sized in scope — one prompt, one criterion — and nothing like a unit test in
+character: non-hermetic and probabilistic. A kill-prompt case is judged the way Stryker judges,
+running the generated test against the original module and the mutated one. They skip themselves
+when the endpoint is not configured, so a clean checkout stays offline.
+
+Coverage of our own code: `npm run coverage` (79.6% lines / 79.9% branches / 80.2% functions);
+`npm run coverage:check` gates just under that so it can only ratchet up. The floor is
+`exec.js`/`stryker.js`/`coverage.js`/`pr.js` — the OS boundary, which the harness replaces
+wholesale and only e2e exercises for real. **Mutation score of our own code is not measured.**
+
+### Layer detail
 
 `npm test` — unit tests for the pure logic: glob matching (including the brace-aware split that a
 naive comma-split broke), slugs, MAC, JSON extraction, secret redaction, timesheet estimation,
