@@ -603,3 +603,34 @@ test('BUG Parse Repair: a reordered reply writes one file\'s content over anothe
   ]), prev());
   assert.equal(new Set(out.paths).size, out.paths.length, 'a repair must not target the same file twice');
 });
+
+// ── the bootstrap asks cheaply first, like the kill loop ────────────────────
+//
+// Measured on three real bootstrap prompts from the pipeline's own dialog log, three
+// samples each, judged by the real parser plus `node --check` plus "does it import and
+// exercise the module":
+//   parsed 9/9 both arms · valid 9/9 both · imports+uses 9/9 both
+//   latency 2.5-3.7x faster without reasoning (465s vs 1276s over nine calls)
+//   MORE tests without it on the hardest file (14/6/7 `it()` blocks vs 4/2/2)
+//   executed case: both arms green, identical 100% line / 95.65% branch coverage
+//   with reasoning ON the hard file used 85-98% of its 12000-token budget — the same
+//   wall that returned two EMPTY completions at 9000, ~400s each to recover
+// The single measured loss: 1 of 9 cold files carried 2 chain-of-thought comments,
+// which the existing cleanup stage stripped while leaving the suite green at identical
+// coverage. D11 stops being structural and becomes a downstream guarantee.
+
+test('the bootstrap prompt asks the endpoint not to reason', () => {
+  const plan = covBuildPrompt(gaps(), 'src/cart.ts');
+  assert.equal(plan.thinking, false);
+});
+
+test('the repair turn is the escalation, and it reasons', () => {
+  const plan = covBuildRepair(
+    { summary: 'FAIL 1 failed' },
+    { tests: [{ path: 'test/a.test.ts', content: 'x' }], paths: ['test/a.test.ts'] },
+    gaps(),
+    'improving_coverage',
+  );
+  assert.notEqual(plan.thinking, false,
+    'the cheap attempt already failed — reasoning is what is left to try');
+});

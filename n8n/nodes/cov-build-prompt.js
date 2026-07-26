@@ -37,5 +37,14 @@ export function covBuildPrompt(gaps, file) {
     + '\n\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\n'
     + String(gaps.existingTest || '(none)').slice(0, 6000)
     + '\n\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';
-  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };
+  // Cold, like the first kill attempt. Measured on three real prompts from the
+  // pipeline's own dialog log, three samples each: parsing, syntactic validity and
+  // "imports and exercises the module" were 9/9 in BOTH arms, the cold arm ran 2.5-3.7x
+  // faster and wrote more tests on the hardest file, and on the case that could be
+  // executed both arms were green with identical coverage. With reasoning on, that
+  // hardest file used 85-98% of its budget — the same wall that returned two empty
+  // completions in a live run, ~400s each to recover. The one measured loss is a
+  // chain-of-thought comment in 1 of 9 files, which the cleanup stage strips.
+  // The repair turn keeps reasoning: by then the cheap attempt has already failed.
+  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, thinking: false, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code (fast attempt, without reasoning)', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };
 }
