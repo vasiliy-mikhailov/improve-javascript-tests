@@ -8,8 +8,16 @@ import { commonTestRules } from './common-test-rules.js';
 // single victim and the file it goes in is named after that victim — a failed
 // attempt is then trivial to drop.
 //
-// @param t  response of the "Next Mutant" node: { mutant, path, testPath, source, ... }
-export function killBuildPrompt(t) {
+// Asked twice at most. The first attempt runs WITHOUT reasoning: measured on a prompt
+// from the pipeline's own dialog log, the model answers in 21-28s that way against
+// 112-186s with reasoning, and on everything that could be checked mechanically the
+// cheap answer was no worse. Reasoning is then spent only on the mutants that survive
+// the cheap attempt — which is exactly where it might be worth six times the wait.
+//
+// @param t     response of the "Next Mutant" node: { mutant, path, testPath, source, ... }
+// @param opts  { thinking, escalated } — the second attempt sets both
+export function killBuildPrompt(t, opts) {
+  const o = opts || {};
   const m = t.mutant;
   const file = t.path;
   const ext = (file.match(/\.[cm]?[jt]sx?$/) || ['.ts'])[0];
@@ -56,6 +64,12 @@ export function killBuildPrompt(t) {
     + 'Reply ONLY with JSON: {"tests":[{"path":"' + targetPath + '","content":"full test file content"}]}. Rules:' + commonTestRules(1)
     + ui
     + (constraints ? '\nTeam constraints:\n' + constraints : '');
+  const escalation = o.escalated
+    ? '\n\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '
+      + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '
+      + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '
+      + 'something that can, such as the arguments a collaborator is called with.\n'
+    : '';
   const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\n'
     + String(t.source || '').slice(0, 12000)
     + '\n\nTARGET MUTANT — kill this one:\n'
@@ -66,9 +80,13 @@ export function killBuildPrompt(t) {
     + (t.killIdea ? '\nHOW TO KILL IT (from the analysis that selected this mutant):\n  ' + t.killIdea + '\n' : '')
     + '\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\n'
     + String(t.existingTest || '(none)').slice(0, 4000)
+    + escalation
     + '\n\nWrite the single test file that kills this mutant. JSON only.';
   return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,
-    stage: 'improving_mutation', stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line,
+    thinking: o.thinking,
+    stage: 'improving_mutation',
+    stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line
+      + (o.thinking === false ? ' (fast attempt, without reasoning)' : o.escalated ? ' (retry, with reasoning)' : ''),
     // the parser needs to know which path belongs to the repo, or it cannot refuse it
     targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };
 }

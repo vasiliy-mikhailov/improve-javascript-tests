@@ -38,7 +38,10 @@ async function chat(opts) {
   //   generation calls → thinking. That channel is what keeps chain-of-thought out
   //     of committed tests (D11).
   const wantsJson = !!opts.json && jsonModeSupported;
-  const thinking = ENABLE_THINKING && !opts.decision;
+  // opts.thinking is an explicit override: the mutant loop tries a kill test WITHOUT
+  // reasoning first (measured 21-28s against 112-186s for the same prompt) and only
+  // escalates when that attempt fails to kill anything.
+  const thinking = opts.thinking != null ? !!opts.thinking : (ENABLE_THINKING && !opts.decision);
   const body = {
     model: MODEL,
     messages,
@@ -111,11 +114,14 @@ async function chat(opts) {
     // reasoning buys a cheap answer to the question we most needed answered well.
     // What failed was the BUDGET, so the budget is what changes. (Decision calls
     // never had thinking, so this leaves them exactly as they were.)
+    // If the first attempt deliberately did not think, thinking is exactly what the
+    // retry has left to offer; otherwise keep it and give it room to finish.
     const retryRes = await post({
       ...body,
       messages,
       temperature: 0.1,
-      max_tokens: Math.min(body.max_tokens * 2, 24000),
+      max_tokens: Math.min(Math.max(body.max_tokens, opts.maxTokens || 4096) * 2, 24000),
+      chat_template_kwargs: { enable_thinking: true },
     });
     const retry = retryRes.content;
     recordDialog({

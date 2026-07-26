@@ -262,7 +262,7 @@ test('the plan carries the routing metadata the rest of the graph reads', () => 
   assert.equal(plan.stageDetail, 'writing a test to kill BooleanLiteral at line 7');
   assert.deepEqual(Object.keys(plan).sort(),
     ['existingTestExists', 'existingTestPath', 'json', 'maxTokens', 'prompt', 'stage', 'stageDetail',
-      'system', 'targetPath', 'temperature'].sort());
+      'system', 'targetPath', 'temperature', 'thinking'].sort());
 });
 
 test('team constraints are listed, and their section vanishes when there are none', () => {
@@ -511,4 +511,33 @@ test('a path the sidecar would refuse to write is rewritten to the planned targe
     const out = killParseTest(reply([{ path: bad, content: content(1) }]), plan);
     assert.deepEqual(out.paths, [plan.targetPath], `${bad} must not be reported as written`);
   }
+});
+
+// ── two-phase kill ──────────────────────────────────────────────────────────
+// The same prompt, asked cheaply first. Measured on a prompt taken from the run's own
+// dialog log: 21-28s without reasoning, 112-186s with it, and on everything that could
+// be checked mechanically the cheap answer was no worse. So reasoning is spent only on
+// the mutants that survive the cheap attempt.
+
+test('the cheap attempt asks the endpoint not to think, and says so in the stage detail', () => {
+  const plan = killBuildPrompt(target(), { thinking: false });
+  assert.equal(plan.thinking, false);
+  assert.match(plan.stageDetail, /without reasoning|cheap|fast/i,
+    'the dashboard should show which of the two attempts is running');
+});
+
+test('the thinking attempt is the default, and is what an escalation asks for', () => {
+  assert.equal(killBuildPrompt(target()).thinking, undefined, 'unspecified means the endpoint default');
+  assert.equal(killBuildPrompt(target(), { thinking: true }).thinking, true);
+});
+
+test('both attempts plan the SAME file — the cheap one was deleted when it failed', () => {
+  assert.equal(killBuildPrompt(target(), { thinking: false }).targetPath,
+    killBuildPrompt(target(), { thinking: true }).targetPath);
+});
+
+test('the escalated prompt tells the model the cheap attempt already failed', () => {
+  const plan = killBuildPrompt(target(), { thinking: true, escalated: true });
+  assert.match(plan.prompt, /already failed|previous attempt|did not kill/i,
+    'otherwise it is likely to write the same test again');
 });

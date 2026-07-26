@@ -89,12 +89,14 @@ test('a truncated answer is retried the same way', async () => {
   } finally { f.restore(); }
 });
 
-test('a DECISION retry stays non-thinking — it never had thinking to lose', async () => {
+test('a DECISION asks without thinking, and only escalates if the answer is unusable', async () => {
   const f = scriptFetch(['not json at all', GOOD]);
   try {
     await llm.chat({ prompt: 'pick one', json: true, decision: true, maxTokens: 500 });
-    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, false,
-      'ordering a shortlist is not test-writing');
+    assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, false,
+      'ordering a shortlist is a 1s call; measured, thinking makes it 7s for no gain');
+    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, true,
+      'but a second identical ask would just repeat the first — reasoning is what is left to try');
   } finally { f.restore(); }
 });
 
@@ -269,5 +271,23 @@ test('a malformed — as opposed to absent — answer still gets the JSON nudge'
     await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
     const lastUser = [...f.seen[1].messages].reverse().find((m) => m.role === 'user');
     assert.match(lastUser.content, /not valid JSON/i);
+  } finally { f.restore(); }
+});
+
+test('a caller can force thinking off for a call that would otherwise think', async () => {
+  const f = scriptFetch([GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000, thinking: false });
+    assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, false);
+    assert.equal(f.seen[0].max_tokens, 4000, 'and it pays no reasoning headroom');
+  } finally { f.restore(); }
+});
+
+test('forcing thinking off also forces the retry to think — the cheap try already failed', async () => {
+  const f = scriptFetch(['', GOOD]);
+  try {
+    await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000, thinking: false });
+    assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, true,
+      'a second cheap attempt would repeat the first one');
   } finally { f.restore(); }
 });

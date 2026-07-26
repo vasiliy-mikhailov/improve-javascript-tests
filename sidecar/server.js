@@ -484,6 +484,8 @@ const routes = {
         system: body.system, prompt: body.prompt, messages: body.messages,
         maxTokens: clamp(parseInt(body.maxTokens || '4096', 10), 64, 12000),
         temperature: body.temperature, json: !!body.json, decision: !!body.decision,
+        // explicit override from the workflow: the cheap kill attempt asks for no reasoning
+        thinking: body.thinking,
       });
       return { ok: true, text: r.text, json: r.json ?? null };
     } catch (e) { S.event('llm', 'LLM error: ' + e.message); return { ok: false, error: e.message }; }
@@ -688,7 +690,11 @@ const routes = {
 
   'POST /api/mutant/verify': async (q, body) => {
     needRun();
-    const { file, mutant, testPaths = [] } = body;
+    // phase 'cheap' is the no-reasoning first attempt: its failure is not a verdict on
+    // the mutant, because the escalated attempt has not happened yet. Anything else
+    // (including no phase at all) is the last word.
+    const { file, mutant, testPaths = [], phase } = body;
+    const cheap = phase === 'cheap';
     const f = file && state.files[file];
     if (!f || !mutant) throw new Error('file and mutant are required');
     const key = mutantsMod.mutantKey(mutant);
@@ -727,7 +733,7 @@ const routes = {
 
     if (!testPaths.length) {
       miss('no usable test was generated');
-      return { ok: true, killed: false, noTest: true, reason: 'no test was written' };
+      return { ok: true, killed: false, noTest: true, retryable: cheap, reason: 'no test was written' };
     }
 
     // 1. The new test must pass — one that fails is never worth keeping.
@@ -745,7 +751,7 @@ const routes = {
       // capped the same way.
       drop();
       miss('the generated test failed against the unmutated code');
-      return { ok: true, killed: false, reason: 'suite red', summary: suite.summary };
+      return { ok: true, killed: false, retryable: cheap, reason: 'suite red', summary: suite.summary };
     }
     // 2. Re-run mutation over the WHOLE file. This is the authoritative answer to
     //    both questions at once: did the target die, and what is still alive now?
@@ -791,9 +797,19 @@ const routes = {
     if (note) {
       drop();
       miss(note);
-      return { ok: true, killed: false, killedCount: 0, reason: note, testPaths };
+      return { ok: true, killed: false, killedCount: 0, retryable: cheap, reason: note, testPaths };
     }
     const worthKeeping = killedTarget || killedCount > 0 || scoreRose;
+    // A cheap attempt that achieved nothing is not the mutant's verdict — the
+    // reasoning attempt is still to come, and retiring the target here would leave it
+    // with nothing to aim at. Charge nothing, keep the target on the queue, and tell
+    // the caller to escalate.
+    if (cheap && !worthKeeping) {
+      drop();
+      S.upsertFile(file, { mutantAttemptCount: (f.mutantAttemptCount || 0) + 1 });
+      S.event('improving_mutation', `no kill without reasoning for ${mutant.mutator} at line ${mutant.line} — escalating to a thinking attempt`);
+      return { ok: true, killed: false, killedCount: 0, retryable: true, reason: 'no mutant died (cheap attempt)', testPaths };
+    }
     // The TARGET is retired unless it actually died — one shot per mutant, whatever
     // else the test achieved. The failure budget, by contrast, is only charged when
     // the test achieved nothing at all.
@@ -801,14 +817,14 @@ const routes = {
     if (!worthKeeping) {
       drop();
       S.event('improving_mutation', `discarded: ${mutant.mutator} at line ${mutant.line} — nothing died${note ? ' (' + note + ')' : ''}`);
-      return { ok: true, killed: false, killedCount: 0, reason: note || 'no mutant died', testPaths };
+      return { ok: true, killed: false, killedCount: 0, retryable: false, reason: note || 'no mutant died', testPaths };
     }
     const collateral = Math.max(0, killedCount - (killedTarget ? 1 : 0));
     S.event('improving_mutation', `KILLED ${killedCount} mutant(s) — target ${mutant.mutator} at line ${mutant.line} `
       + `${killedTarget ? 'died' : 'SURVIVED but the test killed others'}${collateral ? `, ${collateral} collateral` : ''} `
       + `— keeping ${testPaths.join(', ')} (${state.files[file].survivedTotal ?? (f.lastSurvived || []).length} survivor(s) left)`);
     return {
-      ok: true, killed: true, killedTarget, killedCount, collateral,
+      ok: true, killed: true, killedTarget, killedCount, collateral, retryable: false,
       testPaths, killedSoFar: state.files[file].mutantsKilled || 0,
     };
   },

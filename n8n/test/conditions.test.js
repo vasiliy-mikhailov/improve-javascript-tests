@@ -77,6 +77,7 @@ const BRANCHES = {
   'Cov: Wrote Any?': ['Cov: Build Repair', 'Cov: Done'],
   'Cov: Green After Repair?': ['Cov: Done', 'Cov: Delete Broken Tests'],
   'Mutant To Kill?': ['Kill: Build Prompt', 'Mutant Loop Done'],
+  'Kill: Escalate?': ['Kill: Build Prompt 2', 'Next Mutant'],
   'Another Round?': ['Accept Round', 'Drop Last Round'],
   'Approved?': ['Cleanup Tests', 'Discard Changes'],
 };
@@ -108,8 +109,8 @@ test('the evaluator refuses what it cannot resolve', () => {
   assert.equal(evaluate('={{ $json.done ? 0 : 1 }}', { json: {} }), 1);
 });
 
-test('condition() is the single source for all 11 IF nodes', () => {
-  assert.equal(Object.keys(CONDITIONS).length, 11);
+test('condition() is the single source for all 12 IF nodes', () => {
+  assert.equal(Object.keys(CONDITIONS).length, 12);
   assert.deepEqual(Object.keys(COMPARISONS).sort(), Object.keys(CONDITIONS).sort());
   assert.deepEqual(Object.keys(BRANCHES).sort(), Object.keys(CONDITIONS).sort());
   assert.throws(() => condition('Wrote Any?'), /no condition registered/);   // near-miss name
@@ -120,7 +121,7 @@ test('condition() is the single source for all 11 IF nodes', () => {
 // the generated workflow must agree with the module the tables below exercise
 // =============================================================================
 test('every IF node in the workflow carries exactly the registered condition', () => {
-  assert.equal(ifNodes.length, 11, 'workflow has a different number of IF nodes than conditions.js knows');
+  assert.equal(ifNodes.length, 12, 'workflow has a different number of IF nodes than conditions.js knows');
   for (const n of ifNodes) {
     assert.deepEqual(n.parameters.conditions.number, [condition(n.name)], `${n.name}: expression drifted from conditions.js`);
     assert.equal(n.typeVersion, 1, `${n.name}: IF v2+ uses a different parameter shape than this test models`);
@@ -424,6 +425,8 @@ test('every condition reads a field whose falsy value already MEANS the false an
     ['Cov: Wrote Any?', parsed({ count: 0 }), 1, 'count 0 is READ, not defaulted — the comparison is `larger 0`'],
     ['Cov: Green After Repair?', { json: { passed: false } }, 1, 'still red after the repair turn'],
     ['Mutant To Kill?', { json: { mutant: null } }, 1, 'null is the only "no target" /api/mutant/next sends'],
+    ['Kill: Escalate?', { json: { killed: true, retryable: false } }, 1,
+      'retryable:false is the sidecar saying the target is spent — a kill, or the reasoning attempt already ran'],
     ['Another Round?', { json: verify({ maxRounds: 0 }) }, 1, 'the fixed one: an explicit cap of 0 now stops the loop'],
     ['Approved?', approved({ approved: false }, { improved: true }), 1, 'approved:false is a refusal, not a missing verdict'],
   ];

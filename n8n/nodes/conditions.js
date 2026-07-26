@@ -1,4 +1,4 @@
-// The 11 IF conditions, keyed by node name.
+// The 12 IF conditions, keyed by node name.
 //
 // An n8n IF node evaluates its own expression — it cannot call our code — so unlike
 // the Code nodes these stay as expression STRINGS. They live here anyway so that the
@@ -26,6 +26,8 @@ export const CONDITIONS = {
   'Cov: Wrote Any?': "={{ $('Cov: Parse Tests').first().json.count }}",
   'Cov: Green After Repair?': '={{ $json.passed ? 1 : 0 }}',
   'Mutant To Kill?': '={{ $json.mutant ? 1 : 0 }}',
+  // the cheap attempt failed and the sidecar kept the target on the queue for us
+  'Kill: Escalate?': '={{ $json.retryable ? 1 : 0 }}',
   // multi-round: keep going iff ≥1 of coverage/mutation/MAC improved AND none degraded.
   // The cap uses `??`, not `||`: a team configuring MAX_ROUNDS_PER_FILE=0 ("one pass per
   // file, no extra rounds") means it, and `|| 5` would hand them five rounds instead.
@@ -47,6 +49,7 @@ export const COMPARISONS = {
   'Cov: Wrote Any?': { operation: 'larger', value2: 0 },
   'Cov: Green After Repair?': { operation: 'equal', value2: 1 },
   'Mutant To Kill?': { operation: 'equal', value2: 1 },
+  'Kill: Escalate?': { operation: 'equal', value2: 1 },
   'Another Round?': { operation: 'equal', value2: 1 },
   'Approved?': { operation: 'equal', value2: 1 },
 };

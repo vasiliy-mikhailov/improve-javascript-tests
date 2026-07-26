@@ -311,3 +311,60 @@ test('a mutation run that executed no tests is not read as 112 kills', () => wit
   assert.deepEqual(f.mutantAttempts || {}, {}, 'the target is not retired on a non-measurement');
 }));
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  two-phase kill: cheap first, reasoning only when the cheap one failed
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured on the same prompt from the run's own dialog log: without reasoning the
+// model answers in 21-28s, with it in 112-186s. On everything measurable so far the
+// cheap answer was no worse. So the loop asks cheaply first and escalates only for
+// the mutants that survive that — which is where the reasoning is worth 6x.
+//
+// The escalation only works if the cheap failure does NOT spend the mutant's one
+// shot; otherwise the second attempt has nothing left to aim at.
+
+test('a failed CHEAP attempt leaves the mutant available for the thinking attempt', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(6) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [] });          // green, kills nothing
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+
+  assert.equal(r.killed, false);
+  assert.equal(r.retryable, true, 'the caller is told a thinking attempt is worth making');
+  assert.equal(w.exists(testPath), false, 'the useless test still goes');
+  const f = sb.file(FILE);
+  assert.deepEqual(f.mutantAttempts || {}, {}, 'the one shot is not spent on the cheap try');
+  assert.equal(f.mutantFailures || 0, 0, 'nor is the failure budget');
+}));
+
+test('a failed THINKING attempt does spend the shot — there is nothing further to try', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(6) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [] });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'thinking' });
+
+  assert.equal(r.killed, false);
+  assert.equal(r.retryable, false);
+  const f = sb.file(FILE);
+  assert.equal(Object.keys(f.mutantAttempts || {}).length, 1, 'now the mutant is retired');
+  assert.equal(f.mutantFailures, 1);
+}));
+
+test('a CHEAP attempt that kills is kept exactly like any other', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(6) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+
+  assert.equal(r.killed, true);
+  assert.equal(r.retryable, false, 'nothing to escalate — it worked');
+  assert.equal(w.exists(testPath), true);
+  assert.equal(sb.file(FILE).mutantsKilled, 1);
+}));
