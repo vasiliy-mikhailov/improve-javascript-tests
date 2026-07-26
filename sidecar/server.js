@@ -803,11 +803,26 @@ const routes = {
     const f = state.files[file];
     S.setStage('improving_mac', `verifying MAC improvement for ${file}`);
     try {
-      const suite = await tests.runTests(null);
-      if (!suite.passed) {
-        return { ok: true, improved: false, testsGreen: false, reason: 'full suite red', summary: suite.summary, file };
+      // A round that wrote nothing has nothing to measure — and measuring it anyway
+      // costs a suite run, a coverage run and a mutation run (three minutes on a
+      // real repo) to rediscover that. This happens for real: the bootstrap returns
+      // no parseable answer, the mutant loop keeps nothing, and the file is verified
+      // against itself.
+      const changedNow = await pr.changedFiles();
+      if (!changedNow.length) {
+        S.event('improving_mac', `nothing to verify for ${file} — this round changed no files`);
+        return {
+          ok: true, improved: false, improvedAny: false, degradedAny: false, testsGreen: true,
+          reason: 'no changes in this round', rounds: f.rounds || 0,
+          maxRounds: state.run.config.maxRoundsPerFile, file,
+        };
       }
+      // ONE measurement pass: runCoverage runs the whole suite already, so a separate
+      // runTests here was a second full suite run over an unchanged tree.
       const cov = await coverage.runCoverage();
+      if (cov.exitCode !== 0) {
+        return { ok: true, improved: false, testsGreen: false, reason: 'full suite red', summary: cov.summary, file };
+      }
       S.setStage('improving_mac', `re-measuring mutation score for ${file}`);
       const st = await stryker.runStryker(file);
       const coverageAfter = state.files[file].coverage;

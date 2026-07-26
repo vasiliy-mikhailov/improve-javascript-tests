@@ -36,6 +36,12 @@ sidecar/test/helpers/   env.js (sandbox) + fakes.js (the fake world)      ┘
 eval/                 E2E: real container, real repos                      docker exec …
 ```
 
+Both UNIT layers are measured together by `npm run coverage` — one report, because they
+are one process. `eval/` is **not** measured: it drives a container over HTTP, so no
+line of the code under test executes in the coverage process. Anything only `eval/`
+exercises reads as uncovered here, and should — see
+[What only e2e covers](#what-only-e2e-covers).
+
 `n8n/` is ESM (`n8n/package.json` sets `"type": "module"`), the sidecar is CommonJS.
 That split is deliberate — don't try to unify it; the root `package.json` has no
 `type` field and each subtree declares its own.
@@ -112,10 +118,10 @@ eval/**           the e2e harness — it runs against a container, not in this p
 scripts/**        one-off operator scripts
 ```
 
-Leaving the tests in flatters the number badly: with `sidecar/test/**` counted, the
-line total reads ~84 %; the honest figure for code that ships is ~66 %. Helpers are the
-worst offender — `fakes.js` is 549 lines at 96 % and would have dragged the average up
-by itself.
+Leaving the tests in flatters the number badly: counted, the line total reads **86.69 %**;
+excluded, the honest figure for code that ships is **69.88 %**. The helpers are the worst
+offender — `fakes.js` is ~550 lines at 96 %, and a test helper is always well covered
+because running the tests *is* running the helper. Measuring it proves nothing.
 
 ### One caveat you must know
 
@@ -131,12 +137,16 @@ invisible here.
 
 ### Measured today
 
+A snapshot, not a contract — `npm run coverage` reprints it in seconds, and that
+output wins over this table whenever they disagree. Sorted worst-last on purpose: the
+bottom of the table is the reading list.
+
 | file | line % | branch % | funcs % |
 | --- | ---: | ---: | ---: |
 | `n8n/nodes/common-test-rules.js` | 100.00 | 100.00 | 100.00 |
 | `n8n/nodes/conditions.js` | 100.00 | 83.33 | 100.00 |
 | `n8n/nodes/cov-build-prompt.js` | 100.00 | 90.00 | 100.00 |
-| `n8n/nodes/cov-build-repair.js` | 100.00 | 80.00 | 100.00 |
+| `n8n/nodes/cov-build-repair.js` | 100.00 | 87.50 | 100.00 |
 | `n8n/nodes/cov-parse-repair.js` | 100.00 | 94.44 | 100.00 |
 | `n8n/nodes/cov-parse-tests.js` | 100.00 | 100.00 | 100.00 |
 | `n8n/nodes/kill-build-prompt.js` | 100.00 | 95.83 | 100.00 |
@@ -145,28 +155,37 @@ invisible here.
 | `sidecar/timesheet.js` | 100.00 | 100.00 | 100.00 |
 | `sidecar/tokens.js` | 100.00 | 100.00 | 100.00 |
 | `sidecar/mutants.js` | 100.00 | 76.47 | 100.00 |
-| `sidecar/util.js` | 98.37 | 81.97 | 94.44 |
+| `sidecar/util.js` | 99.19 | 88.71 | 94.44 |
+| `sidecar/state.js` | 90.82 | 60.98 | 71.43 |
+| `sidecar/llm.js` | 85.04 | **40.74** | 62.50 |
 | `sidecar/server.js` | 78.60 | 70.83 | 62.90 |
-| `sidecar/state.js` | 75.85 | 72.41 | 63.64 |
 | `sidecar/repo.js` | 58.48 | 59.76 | 73.33 |
 | `sidecar/tests.js` | 29.63 | 100.00 | 0.00 |
 | `sidecar/exec.js` | 23.33 | 100.00 | 0.00 |
-| `sidecar/llm.js` | 20.87 | 50.00 | 0.00 |
 | `sidecar/pr.js` | 17.36 | 100.00 | 0.00 |
 | `sidecar/rules.js` | 17.33 | 37.50 | 22.22 |
-| `sidecar/stryker.js` | 13.13 | 100.00 | 0.00 |
 | `sidecar/coverage.js` | 14.85 | 100.00 | 0.00 |
-| **all files** | **~66** | **~76** | **~70** |
+| `sidecar/stryker.js` | 13.13 | 100.00 | 0.00 |
+| **all files** | **69.88** | **75.39** | **71.09** |
 
-Read `branch %` on the bottom half of that table with suspicion: a file whose functions
-are never called reports 100 % branches because *no branch was ever reached*. Stryker
-does not have that blind spot, which is the whole argument for the pipeline this repo
-builds.
+Two ways to be misled by that table:
+
+- **A `100.00` branch % on a barely-run file means nothing.** `coverage.js`, `pr.js`,
+  `stryker.js`, `exec.js` and `tests.js` all report perfect branches at 13-30 % lines —
+  because no branch was ever *reached*, so none was ever half-taken. Read the branch
+  column only for files whose line % is already high.
+- **A high line % can hide the part that matters.** `llm.js` reads 85 % lines and
+  **41 % branches**: the happy path is well covered and every failure path — the
+  429/5xx retry ladder, the JSON-mode fallback, the network-abort retry — is not. The
+  branch column is the one that found that.
+
+Both blind spots are exactly the argument for the mutation testing this repo automates:
+line coverage says the line ran, not that anything would have noticed it changing.
 
 ### The thresholds, and why they are low
 
 ```
---test-coverage-lines=63  --test-coverage-branches=74  --test-coverage-functions=68
+--test-coverage-lines=67  --test-coverage-branches=72  --test-coverage-functions=68
 ```
 
 Set a few points **below** what is measured, deliberately. A gate that goes red on a
@@ -436,6 +455,24 @@ withSandbox({ quiet: false }, async (sb) => {         // quiet:false keeps state
 The sandbox uses a throwaway `DATA_DIR` under the OS temp dir and deletes it on exit,
 so this cannot touch a real repo or the production `/data`.
 
+### One file's coverage
+
+To ask "what of `repo.js` does this one test file actually reach?", narrow the report
+with `--test-coverage-include` (it takes the *source* path, not the test's):
+
+```bash
+node --test --experimental-test-coverage \
+  --test-coverage-include='sidecar/repo.js' \
+  sidecar/test/repo-guard.test.js
+#  repo.js | 27.49 | 68.97 | 48.00 | 19 21-49 51-54 56-69 72-89 91-159 …
+```
+
+The `uncovered lines` column is the working list: write the next test against a range
+in it, re-run, and watch the range shrink. Do not chase the percentage — chase the
+ranges you can name a *behaviour* for. A range you cannot name is usually error
+handling that deserves a test, or dead code that deserves deleting; either answer is
+worth more than a point of coverage.
+
 ---
 
 ## Proving a test would have caught the bug
@@ -489,29 +526,117 @@ for most of it without the graph simulator we are not building.
 - **Webhook trigger, the batch driver (`eval/full-run.mjs`), n8n execution limits,
   and workflow-level restart/resume.**
 
-**Sidecar modules with no unit test**
+**Sidecar modules with no unit test** (measured line coverage in brackets — every one
+of these is a module the fakes *replace*, so the number is what the routes happen to
+touch on the way past, not evidence of anything)
 
-- `repo.js` — `guessTestPath`, `findStyleReference`, `detectUi`, `listScopeFiles`,
-  clone/install/branch. `writeTestFile`/`deleteTestFile` *are* exercised, for real,
-  through the route tests; the rest is git- and filesystem-shaped.
-- `stryker.js` — config generation, the CLI invocation, `parseReport` (including the
-  >10 % timeout-inflation warning: the fake models `timeout: true`, but no route reads
-  `timedOut`, so nothing asserts it).
-- `coverage.js` — parsing a real `coverage-final.json`.
-- `llm.js` — the HTTP client, retries, thinking blocks. (`util.extractJson` *is*
-  tested.)
-- `pr.js`, `exec.js` — every git/`gh`/child-process path.
-- `rules.js` — the rules engine. Its routes are faked-adjacent and untested.
-- `state.js` persistence — save/load across a restart, ledger replay.
-- The dashboard (`sidecar/dashboard/*`), `entrypoint.sh`, `Dockerfile`.
+- `stryker.js` **[13 %]** — config generation, the CLI invocation, and all of
+  `parseReport`. The fake reproduces `parseReport`'s *output shape* faithfully; nothing
+  reads a real `mutation-report.json`.
+- `coverage.js` **[15 %]** — `parseSummary` and `uncoveredLines` against a real
+  istanbul `coverage-final.json` / `coverage-summary.json`.
+- `pr.js` **[17 %]** — every git/`gh` path: `changedFiles` NUL parsing, rename records,
+  `isCommittableTest`, commit, push, patch mode.
+- `rules.js` **[17 %]** — the whole rules engine. Its route (`/api/rules/apply`) is
+  untested too, so this is uncovered end to end.
+- `exec.js` **[23 %]** — spawn, the process-group kill on timeout, output truncation,
+  the `LLM_API_KEY` scrub.
+- `tests.js` **[30 %]** — vitest/jest argv construction and the pass/fail decision.
+- `repo.js` **[58 %]** — `guessTestPath`, `findStyleReference`, `detectUi`,
+  `listScopeFiles`, clone/install/branch/reset. `writeTestFile`/`deleteTestFile` *are*
+  exercised for real through the route tests; the rest is git- and filesystem-shaped.
 
-**Routes not directly exercised** (15 of 31 are): `/api/health`, `/api/state`,
-`/api/metrics`, `/api/rules`, `/api/dialog`, `/api/events`, `/api/stage`,
-`/api/repo/clone`, `/api/repo/prepare` (notably its `settledFromLedger` /
-`measurementsRestored` replay branch), `/api/files/candidates`, `/api/rules/apply`,
-`/api/test/write`, `/api/test/delete`, `/api/test/delete-many`, `/api/test/run`,
-`/api/llm/chat`, `/api/admin/reset`. Most are thin, but `repo/prepare`'s ledger replay
-and `rules/apply` are not, and deserve their own pass.
+**Partly tested, with the untested half being the dangerous one**
+
+- `llm.js` **[85 % lines, 41 % branches]** — `chat()` and its repair nudge are tested;
+  `post()`'s entire error half (lines 99-112 and 119-123) is not: the JSON-mode
+  fallback latch, the 429/5xx retry ladder, the network-abort retry.
+- `state.js` **[91 % lines, 61 % branches]** — `load()` is wholly uncovered, and so are
+  `setProgress`'s redaction and the dialog-trim branch.
+- `server.js` **[79 % lines, 63 % functions]** — the HTTP layer itself (`json`,
+  `readBody`, `serveStatic`, the error funnel), `metricsPayload`, and the routes listed
+  below. The route *table* is heavily tested; the server *around* it is not.
+- The dashboard (`sidecar/dashboard/*`), `entrypoint.sh`, `Dockerfile` — excluded from
+  the denominator on purpose; they cannot run under `node --test`.
+
+### Where the next production bug will come from
+
+Ranked by (blast radius × how likely the input is to be malformed). This is the useful
+part of the coverage report — not the percentages.
+
+1. **`stryker.parseReport` on a real report** (`stryker.js` 96-158, 13 %). Every
+   decision the pipeline makes is downstream of this function: the score, the survivor
+   list, `survivedAll` (which answers "did the target die?"). It is fed JSON produced
+   by a tool that changes between majors — and the code already supports two Stryker
+   majors. A shape change here silently reports a false kill or a 100 % score, and the
+   fakes cannot see it because they *are* the expected output.
+2. **`coverage.parseSummary` / `uncoveredLines`** (`coverage.js` 47-99, 15 %). Path
+   normalisation between absolute istanbul keys and repo-relative state keys, plus
+   three fallback lookups (`cov[abs] || cov[rel] || endsWith('/'+rel)`). Get it wrong
+   and every file reports 0 % coverage, which sends the pipeline into the bootstrap
+   path for files that are already covered — an expensive, silent wrong turn.
+3. **`llm.post`'s error half** (`llm.js` 99-112 and 119-123 — 41 % branches, and the
+   missing branches are all of the failure ones). Three ways to fail: `jsonModeSupported`
+   is a module-level latch that never resets, so one misclassified error message
+   downgrades every later call for the life of the process; the
+   `/response_format|guided|json_object|unrecognized|unexpected/i` test runs against
+   arbitrary vendor error text, and "unexpected" is a common word in unrelated 400s;
+   and the retry ladder can turn one 300 s abort into a ~15-minute stall inside a
+   single n8n HTTP node, which then trips *its* timeout and fails the run.
+4. **`pr.changedFiles` porcelain parsing** (`pr.js` 11-26). Hand-written parsing of
+   `git status --porcelain -z` with a manual index skip for `R`/`C` records. Off by one
+   and the pipeline commits a file it did not mean to, or drops a generated test out of
+   the PR. It touches the user's repo, which makes it the highest-consequence parser
+   here even though it is small.
+5. **`/api/repo/prepare`'s ledger replay** (`server.js` 241-270). Two loops that
+   rewrite `state.files` from the persisted ledger on restart. Wrong, and the pipeline
+   either re-does finished work or skips files that were never finished. It is the only
+   substantial *route* with no test, and it is the one that runs after every crash.
+6. **`repo.install`'s package-manager matrix** (`repo.js` 91-159). pnpm/yarn/npm ×
+   vitest-major-to-stryker-major pinning × legacy-peer retry. It fails loudly rather
+   than silently, which is why it is not higher, but it is the single most common
+   real-world failure and it has no test at all.
+7. **`exec.run`'s timeout kill** (`exec.js` 13-58). `process.kill(-child.pid)` on a
+   detached group. If the group kill regresses, Stryker's test-runner children are
+   orphaned and keep burning CPU for the rest of the container's life — the failure
+   mode is a slow machine, not an error.
+8. **`server.js`'s error funnel** (1041-1065). On any thrown error during a POST it
+   marks the whole run `failed`. A spurious throw from a thin route therefore kills a
+   run that was fine. `readBody`'s 20 MB guard and `serveStatic`'s traversal check
+   (`abs.startsWith(DASH)`) are also unexercised, and the second one is a security
+   control.
+9. **`state.load()`** (`state.js` 142-151, uncovered). `Object.assign(state, raw)` over
+   a persisted blob with no shape check, wrapped in a bare `catch {}` that treats a
+   corrupt state file as a first boot — i.e. silently discards the ledger the whole
+   batch mode depends on. Paired with a debounced `save()` a fast exit can drop.
+10. **`rules.js`** (17 %). Uncovered, but every path ends in an LLM call whose answer is
+    already treated as untrusted, and a wrong answer degrades one PR rather than the
+    run. Low blast radius, hence last — but it is 148 lines nothing has ever executed.
+
+**Routes not directly exercised** — 18 of the 32 in the route table are; these 14 are
+not:
+
+```
+GET  /api/health   /api/state   /api/metrics   /api/rules   /api/dialog   /api/events
+POST /api/stage    /api/repo/clone   /api/repo/prepare   /api/rules/apply
+POST /api/test/delete   /api/test/delete-many   /api/test/run   /api/llm/chat
+```
+
+Most are thin. Three are not, and deserve their own pass: `repo/prepare`'s ledger
+replay (see the risk list above), `rules/apply`'s stage dispatch — an unknown stage
+name falls through to `rulesMod.apply`, which throws, which the error funnel turns into
+a **failed run** — and `/api/metrics`, whose `metricsPayload` is ~90 lines of
+aggregation (FTE, ETA, tokens-per-file, the 250-row cap) that only the dashboard reads
+and nothing asserts.
+
+To re-derive this list after adding tests:
+
+```bash
+for r in $(grep -oE "^  '(GET|POST) /api/[a-z/-]+'" sidecar/server.js | sed "s/^  '//; s/'\$//"); do
+  p=${r#* }; n=$(grep -rohF "$p" sidecar/test/*.test.js | wc -l)
+  [ "$n" -eq 0 ] && echo "UNTESTED $r"
+done
+```
 
 **Judgement calls no unit test can make**
 

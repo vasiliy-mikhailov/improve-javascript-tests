@@ -257,6 +257,10 @@ function installFakes(sb, opts = {}) {
     calls.coverage.push({});
     const err = takeError('coverage');
     if (err) throw err;
+    // The coverage pass RUNS THE SUITE — that is why /api/verify uses it as both
+    // the green/red signal and the measurement. A fake that always reports exit 0
+    // would let a caller believe a red suite was green.
+    const red = !!world.suiteRed || allTestFiles().some((t) => t.red);
     const files = {};
     for (const spec of universe.values()) {
       files[spec.path] = testsTargeting(spec.path).length ? spec.coverageWithTests : spec.coverageWithout;
@@ -270,8 +274,11 @@ function installFakes(sb, opts = {}) {
     for (const rel of Object.keys(S.state.files)) {
       if (files[rel] === undefined && S.state.files[rel].coverage == null) S.upsertFile(rel, { coverage: 0 });
     }
-    S.event('coverage', `total line coverage ${totalPct}% (suite exit 0)`);
-    return { totalPct, files, exitCode: 0 };
+    S.event('coverage', `total line coverage ${totalPct}% (suite exit ${red ? 1 : 0})`);
+    return {
+      totalPct, files, exitCode: red ? 1 : 0,
+      summary: red ? 'FAIL  1 failed | 2 passed (fake runner)' : 'ok  3 passed (fake runner)',
+    };
   }
 
   function uncoveredLines(rel) {

@@ -810,24 +810,29 @@ test('verify calls a round degraded when any metric fell below the round base', 
   assert.match(log(sb), /DEGRADED \(stop, drop round\)/);
 }));
 
-test('verify refuses to call a measured delta an improvement when nothing changed on disk', () => withSandbox(async (sb) => {
+test('verify does not measure a round that produced nothing', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }, { line: 20 }] });
   w.writeTest(KILL_TEST, { target: FILE, kills: [10] });
   await sb.post('/api/verify', { file: FILE });
   await sb.post('/api/round/accept', { file: FILE });     // commits the round
+  const before = { cov: w.calls.coverage.length, stryker: w.calls.stryker.length };
 
   const r = await sb.post('/api/verify', { file: FILE });
 
-  assert.deepEqual(r.changedFiles, [], 'the round is committed; nothing is pending');
-  assert.equal(r.macAfter, 40);
-  assert.equal(r.macBefore, 0);
-  assert.equal(r.improved, false, 'no changed files → any delta is stryker flakiness, not improvement');
+  // Nothing is pending: the previous round is committed and this one wrote nothing.
+  // Measuring would cost a suite, a coverage and a mutation run to rediscover that,
+  // and any delta it reported would be Stryker flakiness rather than improvement.
+  assert.equal(r.improved, false);
   assert.equal(r.improvedAny, false);
+  assert.equal(r.reason, 'no changes in this round');
+  assert.equal(w.calls.coverage.length, before.cov, 'no coverage run');
+  assert.equal(w.calls.stryker.length, before.stryker, 'no mutation run');
 }));
 
-test('verify stops at a red suite without measuring anything', () => withSandbox(async (sb) => {
+test('verify stops at a red suite without running mutation testing', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
-  const coverageRuns = w.calls.coverage.length;
+  w.writeTest(KILL_TEST, { target: FILE, kills: [10] });
+  const strykerRuns = w.calls.stryker.length;
   w.suiteRed = true;
 
   const r = await sb.post('/api/verify', { file: FILE });
@@ -836,11 +841,13 @@ test('verify stops at a red suite without measuring anything', () => withSandbox
   assert.equal(r.improved, false);
   assert.equal(r.testsGreen, false);
   assert.equal(r.reason, 'full suite red');
-  assert.equal(w.calls.coverage.length, coverageRuns);
+  // the coverage pass IS the suite run — what must not happen is the expensive part
+  assert.equal(w.calls.stryker.length, strykerRuns, 'a score measured on a red suite means nothing');
 }));
 
 test('verify turns a measurement crash into a verdict, not a dead run', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
+  w.writeTest(KILL_TEST, { target: FILE, kills: [10] });
   w.failNext('coverage', new Error('coverage run produced no summary (exit 1)'));
 
   const r = await sb.post('/api/verify', { file: FILE });

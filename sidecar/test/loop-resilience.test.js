@@ -177,3 +177,56 @@ test('cleanup is reverted when it costs COVERAGE, even though the score is uncha
   assert.equal(sb.file(FILE).coverage, 90,
     'and the recorded coverage must not be left describing the file cleanup deleted');
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  verify: measure once, and only when there is something to measure
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Observed in a live run: the coverage bootstrap produced no parseable answer, so
+// the round wrote nothing at all — and the pipeline still spent a full suite run, a
+// coverage run and a Stryker run (about three minutes on this repo) to discover that
+// nothing had changed. In the same trace the suite ran twice back to back with no
+// edit in between, because verify runs the suite AND then a coverage pass that runs
+// the whole suite again.
+
+test('verify measures the suite ONCE — the coverage pass already runs it', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  w.writeTest('test/a-kill.test.ts', { target: FILE, kills: [1] });
+  const suiteRuns = w.calls.tests.length;
+  const covRuns = w.calls.coverage.length;
+
+  await sb.post('/api/verify', { file: FILE });
+
+  assert.equal(w.calls.coverage.length, covRuns + 1, 'one coverage pass');
+  assert.equal(w.calls.tests.length, suiteRuns,
+    'and no separate suite run — the coverage pass reports pass/fail too');
+}));
+
+test('verify still refuses to measure anything when the suite is red', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  w.writeTest('test/a-kill.test.ts', { target: FILE, kills: [1], red: true });
+  const strykerRuns = w.calls.stryker.length;
+
+  const r = await sb.post('/api/verify', { file: FILE });
+
+  assert.equal(r.improved, false);
+  assert.equal(r.testsGreen, false);
+  assert.equal(w.calls.stryker.length, strykerRuns, 'a red suite makes the measurement meaningless');
+}));
+
+test('verify short-circuits a round that changed nothing', () => withSandbox(async (sb) => {
+  // the bootstrap produced no parseable answer and the mutant loop kept nothing:
+  // there is no artifact to measure, and measuring it costs three minutes
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  const before = { tests: w.calls.tests.length, cov: w.calls.coverage.length, stryker: w.calls.stryker.length };
+
+  const r = await sb.post('/api/verify', { file: FILE });
+
+  assert.equal(r.improved, false);
+  assert.equal(r.improvedAny, false, 'nothing changed, so nothing improved');
+  assert.equal(w.calls.tests.length, before.tests, 'no suite run');
+  assert.equal(w.calls.coverage.length, before.cov, 'no coverage run');
+  assert.equal(w.calls.stryker.length, before.stryker, 'no mutation run');
+  assert.match(sb.events().join('\n'), /nothing to verify|no changes/i,
+    'and it says why, so an empty round is visible rather than silent');
+}));
