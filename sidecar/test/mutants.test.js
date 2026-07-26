@@ -95,3 +95,18 @@ test('resolvePick tolerates a line number instead of an index', () => {
   const list = [m({ line: 10 }), m({ line: 42 })];
   assert.equal(resolvePick({ pick: 42, reason: 'by line' }, list).mutant.line, 42);
 });
+
+test('the pick prompt warns off mutants that already resisted a targeted test', () => {
+  const req = buildPickRequest([m({ line: 10 }), m({ line: 20 })], {
+    file: 'src/a.ts', source: 'x',
+    failed: [{ mutator: 'EqualityOperator', line: 10, attempts: 1 }],
+  });
+  assert.match(req.prompt, /ALREADY ATTEMPTED AND FAILED/);
+  assert.match(req.prompt, /probably equivalent mutants/);
+  assert.match(req.prompt, /EqualityOperator at line 10 \(1 failed attempt/);
+});
+
+test('no failure section when nothing has failed yet', () => {
+  const req = buildPickRequest([m()], { file: 'src/a.ts', source: 'x' });
+  assert.ok(!req.prompt.includes('ALREADY ATTEMPTED'));
+});

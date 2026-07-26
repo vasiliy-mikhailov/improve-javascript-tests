@@ -535,8 +535,15 @@ const routes = {
     if (candidates.length > 1) {
       S.setStage('improving_mutation', `choosing the next mutant to attack in ${p}`);
       try {
+        // what already resisted a targeted test — usually equivalent mutants
+        const failed = Object.entries(f.mutantAttempts || {})
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => {
+            const [mutator, line] = k.split('|');
+            return { mutator, line: Number(line), attempts: n };
+          });
         const req = mutantsMod.buildPickRequest(candidates, {
-          file: p, source, constraints: rulesMod.testWritingConstraints(),
+          file: p, source, constraints: rulesMod.testWritingConstraints(), failed,
         });
         const r = await llm.chat(req);
         const resolved = mutantsMod.resolvePick(r.json, candidates);

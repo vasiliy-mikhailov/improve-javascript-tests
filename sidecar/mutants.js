@@ -81,7 +81,7 @@ function pickNext(survivors, opts = {}) {
  * observable effect a test can assert. Prompt/parse live here so they are pure
  * and unit-testable; the HTTP call happens in the caller.
  */
-function buildPickRequest(shortlist, { file, source = '', constraints = [] } = {}) {
+function buildPickRequest(shortlist, { file, source = '', constraints = [], failed = [] } = {}) {
   const rows = shortlist.map((m, i) => [
     `#${i + 1} line ${m.line}${m.column ? ':' + m.column : ''} — ${m.mutator}`,
     `   code becomes: ${JSON.stringify(String(m.replacement ?? '')).slice(0, 120)}`,
@@ -98,8 +98,19 @@ function buildPickRequest(shortlist, { file, source = '', constraints = [] } = {
     + 'Prefer one that also puts neighbouring survivors under test. '
     + 'Reply ONLY with JSON: {"pick": <number from the list>, "reason": "one line", "killIdea": "one line on how to kill it"}.';
 
+  // Feed failures back: a mutant that survived a test written specifically to kill
+  // it is usually EQUIVALENT (the mutation cannot change observable behaviour), and
+  // re-picking it burns a full generation for nothing.
+  const history = failed.length
+    ? 'ALREADY ATTEMPTED AND FAILED — a test written specifically to kill these did NOT kill them, '
+      + 'so they are probably equivalent mutants (no observable behaviour change). Do not pick them again; '
+      + 'if a remaining candidate looks equivalent for the same reason, say so in your reason and pick the best of the rest:\n'
+      + failed.map((f) => `  - ${f.mutator} at line ${f.line} (${f.attempts} failed attempt(s))`).join('\n') + '\n\n'
+    : '';
+
   const prompt = `FILE: ${file}\n\nSOURCE:\n${String(source).slice(0, 10000)}\n\n`
     + `SURVIVING MUTANT CANDIDATES:\n\n${rows}\n\n`
+    + history
     + (constraints.length ? `Team constraints on tests:\n${constraints.map((c) => '- ' + c).join('\n')}\n\n` : '')
     + 'Pick the one single test can most reliably kill. JSON only.';
 
