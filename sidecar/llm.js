@@ -52,16 +52,28 @@ async function chat(opts) {
   if (!opts.json) return { text };
   let parsed = extractJson(text);
   if (parsed == null) {
-    event('llm', 'JSON parse failed, retrying with repair nudge');
+    // The recorded failures are not verbose answers, they are EMPTY ones: the
+    // reasoning channel spends the completion budget before any visible output, so
+    // `content` arrives blank or cut off mid-token — after ~158 seconds. Re-running
+    // that same configuration is a long gamble on the same dice. The repair turn
+    // therefore thinks NOT AT ALL: it has the previous attempt and an explicit
+    // instruction, which is what the reasoning was for.
+    event('llm', `JSON parse failed (${text.length} chars returned), retrying without thinking`);
     messages.push({ role: 'assistant', content: text.slice(0, 4000) });
     messages.push({ role: 'user', content: 'Your previous answer was not valid JSON. Reply again with ONLY the JSON, no prose, no markdown fences.' });
     const t0 = Date.now();
-    const retry = await post({ ...body, messages, temperature: 0.1 });
+    const retry = await post({
+      ...body,
+      messages,
+      temperature: 0.1,
+      max_tokens: opts.maxTokens || 4096,
+      chat_template_kwargs: { enable_thinking: false },
+    });
     recordDialog({
-      kind: 'json-repair', thinking, model: MODEL,
+      kind: 'json-repair', thinking: false, model: MODEL,
       system: '(repair nudge — the previous answer was not valid JSON)',
       prompt: 'Reply again with ONLY the JSON.',
-      response: retry, durationMs: Date.now() - t0, maxTokens: body.max_tokens,
+      response: retry, durationMs: Date.now() - t0, maxTokens: opts.maxTokens || 4096,
     });
     parsed = extractJson(retry);
   }

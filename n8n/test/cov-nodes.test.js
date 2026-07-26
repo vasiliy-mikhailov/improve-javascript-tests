@@ -328,14 +328,58 @@ test('Parse Tests: traversal is rejected, however it is spelled', () => {
   }
 });
 
-test('Parse Tests: the path allowlist is looser than the sidecar\'s writer (documented gap)', () => {
-  // The node trusts anything under tests/, including a non-JS extension. The sidecar
-  // ALSO demands /\.[cm]?[jt]sx?$/ before it writes, so this entry is counted here and
-  // silently refused there — count says 1, the disk says 0. Reported, not fixed.
+test('Parse Tests: a path the sidecar would refuse to write is rewritten to the planned target', () => {
+  // The location half of the allowlist is not enough. repo.writeTestFile ALSO demands
+  // /\.[cm]?[jt]sx?$/, so a path like this used to be reported by the node and refused by
+  // the sidecar — count said 1, the disk had 0, and "Cov: Run Tests" then ran against a
+  // file that was never created.
   const out = covParseTests(llm([{ path: 'tests/fixtures/data.json', content: '{"fixture": true, "n": 1}' }]), plan());
-  assert.equal(out.paths[0], 'tests/fixtures/data.json');
-  assert.match(out.paths[0], SIDECAR_TEST_PATH_RE, 'passes the location half of the allowlist');
-  assert.doesNotMatch(out.paths[0], SIDECAR_EXT_RE, 'but fails the extension half, which only the sidecar checks');
+  assert.equal(out.paths[0], 'test/cart.mac-cov.test.ts', 'redirected to a path the sidecar accepts');
+});
+
+test('Parse Tests: every path the node emits is one the sidecar will actually write', () => {
+  // The node's notion of "test path" must be the sidecar's, not a looser one: anything
+  // the node reports and repo.writeTestFile rejects is a file the pipeline counts but
+  // never has.
+  const hostile = [
+    'tests/fixtures/data.json',       // right place, wrong extension
+    'test/__snapshots__/cart.snap',
+    'spec/README.md',
+    '__tests__/cases.yaml',
+    'tests/cart',                     // no extension at all
+    'test/cart.test.',                // trailing dot, no extension
+    'src/cart.ts',                    // not a test location either
+  ];
+  for (const path of hostile) {
+    const out = covParseTests(llm([{ path, content: content() }]), plan());
+    assert.match(out.paths[0], SIDECAR_TEST_PATH_RE, path);
+    assert.match(out.paths[0], SIDECAR_EXT_RE, path);
+  }
+
+  // …and a legitimate path still passes through untouched.
+  const good = covParseTests(llm([{ path: 'tests/unit/cart.spec.tsx', content: content() }]), plan());
+  assert.equal(good.paths[0], 'tests/unit/cart.spec.tsx');
+});
+
+test('Parse Tests: a reply with no path lands on the planned target instead of being wasted', () => {
+  // The coverage phase plans a target path exactly like the mutant phase does, and its
+  // twin (killParseTest) has always fallen back to it. Dropping the entry threw away a
+  // whole generation over a missing field the graph can supply.
+  const out = covParseTests(llm([{ content: content('no path at all') }]), plan());
+  assert.deepEqual(out.paths, ['test/cart.mac-cov.test.ts']);
+  assert.equal(out.count, 1);
+  assert.equal(out.tests[0].content, content('no path at all'), 'the content is still the model\'s');
+
+  // A null, blank or non-string path is the same situation as a missing one.
+  for (const path of [null, undefined, '', '   ', 42, {}]) {
+    const one = covParseTests(llm([{ path, content: content() }]), plan());
+    assert.deepEqual(one.paths, ['test/cart.mac-cov.test.ts'], JSON.stringify(path));
+  }
+
+  // Two path-less entries still get one slot each, so the second cannot clobber the first.
+  const two = covParseTests(llm([{ content: content('a') }, { content: content('b') }]), plan());
+  assert.deepEqual(two.paths, ['test/cart.mac-cov.test.ts', 'test/cart.mac-cov-1.test.ts']);
+  assert.equal(two.tests[1].content, content('b'));
 });
 
 test('Parse Tests: a leading ./ or / is stripped so the path stays repo-relative', () => {
@@ -376,7 +420,10 @@ test('Parse Tests: a malformed or failed LLM response yields count 0 instead of 
     { ok: true, json: {} },
     { ok: true },
     {},
-    { ok: true, json: { tests: [null, 42, 'nope', { path: 'test/a.test.ts' }, { content: content() }] } },
+    // Entries with no CONTENT are junk however they are spelled. An entry with content
+    // but no path is not junk any more — it is work, and it goes to the planned target
+    // (see "a reply with no path lands on the planned target").
+    { ok: true, json: { tests: [null, 42, 'nope', { path: 'test/a.test.ts' }, { path: 'test/b.test.ts', content: null }] } },
   ];
   for (const resp of empties) {
     const out = covParseTests(resp, plan());
@@ -424,6 +471,34 @@ test('Build Repair: the prompt carries the failure output, our files and the sou
   assert.equal(out.maxTokens, 6000);
   assert.equal(out.temperature, 0.2, 'lower than the write pass — this is a correction, not an idea');
   assert.match(out.stageDetail, /repairing/);
+});
+
+test('Build Repair: the model is asked for EVERY file back — the graph cannot honour a drop', () => {
+  // Follow the sub-graph in generate-workflows.mjs: "Cov: Write Repair" writes only what
+  // came back, so a file the model omits is not removed — it stays on disk with its
+  // ORIGINAL FAILING content. "Cov: Re-run Tests" is then red by construction and
+  // "Cov: Delete Broken Tests" deletes Parse Tests' paths AND Parse Repair's, so the file
+  // that WAS repaired dies with the one that was dropped. Dropping is never the better
+  // move, so the prompt must not offer it.
+  const out = covBuildRepair({ summary: 'FAIL' }, parsed(), gaps(), 'improving_coverage');
+
+  assert.doesNotMatch(out.system, /drop it from the output/i, 'the graph has no way to act on a dropped file');
+  assert.match(out.system, /return every file/i, 'the reply must cover every path we wrote');
+  assert.match(out.system, /omitting a file does not delete it/i, 'the model is told what a drop really costs');
+  assert.match(out.system, /delete that case/i, 'an unfixable assertion is dropped as a CASE, not as a FILE');
+  assert.match(out.system, /never an empty file/i, 'a file with no runnable test is red too');
+
+  // The requirement is restated as a checklist the model can count against.
+  assert.ok(
+    out.prompt.trimEnd().endsWith('all 2 files, on these exact paths: test/cart.mac-cov.test.ts, test/cart.mac-cov-1.test.ts'),
+    out.prompt.slice(-160),
+  );
+  const one = covBuildRepair({ summary: 'FAIL' }, parsed({
+    tests: [{ path: 'test/cart.mac-cov.test.ts', content: content() }],
+    paths: ['test/cart.mac-cov.test.ts'],
+    count: 1,
+  }), gaps(), 'improving_coverage');
+  assert.ok(one.prompt.trimEnd().endsWith('all 1 file, on these exact paths: test/cart.mac-cov.test.ts'), one.prompt.slice(-160));
 });
 
 test('Build Repair: the stage is passed through so the mutant phase can reuse the node', () => {

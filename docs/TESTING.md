@@ -45,11 +45,13 @@ That split is deliberate — don't try to unify it; the root `package.json` has 
 ## Running
 
 ```bash
-npm test              # everything: sidecar + n8n node units
-npm run test:sidecar  # sidecar/test/*.test.js only
-npm run test:n8n      # n8n/test/*.test.js only
-npm run workflow      # regenerate n8n/workflows/Improve-JS-Tests.json
-npm run check         # npm test && regenerate the workflow
+npm test               # everything: sidecar + n8n node units
+npm run test:sidecar   # sidecar/test/*.test.js only
+npm run test:n8n       # n8n/test/*.test.js only
+npm run coverage       # the same suite + the per-file coverage table
+npm run coverage:check # the same, with the thresholds enforced (exit 1 if under)
+npm run workflow       # regenerate n8n/workflows/Improve-JS-Tests.json
+npm run check          # test + coverage gate + regenerate the workflow
 ```
 
 One file, or one test:
@@ -68,23 +70,116 @@ type is outside the native allowlist, or if a Code node calls a shared helper
 That last check exists because `emit()` inlines by *source*: a missing `deps` entry
 produces a Code node that is only broken inside n8n, at run time.
 
-### The suite is not all green, on purpose
+### The baseline is green
 
-Five tests are **deliberately RED**. Each one pins a production bug that was found
-while writing the suite and left unfixed per the brief — never change production
-behaviour to make a test pass.
+`npm test` is **all green**. Any red name is a regression — there are no tests left
+deliberately failing. (There were: five `BUG …` tests pinned bugs the brief said not
+to fix. They have since been fixed and their tests now assert the fixed contract. If
+you pin a new bug you cannot fix, prefix the name `BUG ` and say so here, so the next
+person can tell a pinned bug from a break.)
+
+The working loop is fixed and non-negotiable:
+
+> **write the unit test for the defect → watch it RED → fix → watch it GREEN.**
+
+Never edit a test to make it pass. If a test encodes the old contract and your fix
+deliberately changes that contract, rewrite the test to state the **new** contract,
+keep its intent, and say so in the change description. Weakening an assertion until it
+passes is how a suite of 200 tests ends up proving nothing.
+
+---
+
+## Coverage
+
+Node 22's built-in coverage — no nyc, no c8, no dependency of any kind. Verified on
+`v22.22.2`; the flags are `--experimental-test-coverage`, `--test-coverage-exclude`,
+and `--test-coverage-lines` / `--test-coverage-branches` / `--test-coverage-functions`.
+
+```bash
+npm run coverage        # the table, no gate — what you read while working
+npm run coverage:check  # the gate — exit 1 if any of the three totals is under
+```
+
+### What is in the denominator
+
+Production code only: `sidecar/*.js` and `n8n/nodes/*.js`. Four exclusions, all in the
+npm script:
 
 ```
-BUG Parse Tests: two files with the same path are both reported, so one is silently lost
-BUG Parse Repair: a reordered reply writes one file's content over another
-BUG (unfixed): two different mutants on one line share a target path
-BUG (unfixed): the model can overwrite the repo's own test file
-BUG (unfixed): the kill system prompt authorises a second test file it will discard
+**/test/**        the tests themselves and sidecar/test/helpers/{env,fakes}.js
+**/dashboard/**   sidecar/dashboard/* is browser code; node --test never loads it
+eval/**           the e2e harness — it runs against a container, not in this process
+scripts/**        one-off operator scripts
 ```
 
-So the healthy baseline is **187 tests, 182 pass, 5 fail**. Any *other* failing name
-is a regression. Fixing one of the five bugs should turn its test green — that is the
-point of leaving them in.
+Leaving the tests in flatters the number badly: with `sidecar/test/**` counted, the
+line total reads ~84 %; the honest figure for code that ships is ~66 %. Helpers are the
+worst offender — `fakes.js` is 549 lines at 96 % and would have dragged the average up
+by itself.
+
+### One caveat you must know
+
+**Node reports only files that were loaded during the run.** A module no test ever
+requires contributes nothing to the denominator — it does not appear as 0 %, it simply
+is not there. `n8n/emit.js` and `n8n/generate-workflows.mjs` are the proof: neither is
+excluded, neither is loaded by the unit suite, and neither appears in the table.
+
+So the gate cannot catch "someone added `sidecar/newthing.js` and no test at all". It
+catches "someone added code to a module that *is* under test and left it uncovered".
+When you add a sidecar module, add at least one test that requires it, or its risk is
+invisible here.
+
+### Measured today
+
+| file | line % | branch % | funcs % |
+| --- | ---: | ---: | ---: |
+| `n8n/nodes/common-test-rules.js` | 100.00 | 100.00 | 100.00 |
+| `n8n/nodes/conditions.js` | 100.00 | 83.33 | 100.00 |
+| `n8n/nodes/cov-build-prompt.js` | 100.00 | 90.00 | 100.00 |
+| `n8n/nodes/cov-build-repair.js` | 100.00 | 80.00 | 100.00 |
+| `n8n/nodes/cov-parse-repair.js` | 100.00 | 94.44 | 100.00 |
+| `n8n/nodes/cov-parse-tests.js` | 100.00 | 100.00 | 100.00 |
+| `n8n/nodes/kill-build-prompt.js` | 100.00 | 95.83 | 100.00 |
+| `n8n/nodes/kill-parse-test.js` | 100.00 | 100.00 | 100.00 |
+| `n8n/nodes/ui-guidance.js` | 100.00 | 100.00 | 100.00 |
+| `sidecar/timesheet.js` | 100.00 | 100.00 | 100.00 |
+| `sidecar/tokens.js` | 100.00 | 100.00 | 100.00 |
+| `sidecar/mutants.js` | 100.00 | 76.47 | 100.00 |
+| `sidecar/util.js` | 98.37 | 81.97 | 94.44 |
+| `sidecar/server.js` | 78.60 | 70.83 | 62.90 |
+| `sidecar/state.js` | 75.85 | 72.41 | 63.64 |
+| `sidecar/repo.js` | 58.48 | 59.76 | 73.33 |
+| `sidecar/tests.js` | 29.63 | 100.00 | 0.00 |
+| `sidecar/exec.js` | 23.33 | 100.00 | 0.00 |
+| `sidecar/llm.js` | 20.87 | 50.00 | 0.00 |
+| `sidecar/pr.js` | 17.36 | 100.00 | 0.00 |
+| `sidecar/rules.js` | 17.33 | 37.50 | 22.22 |
+| `sidecar/stryker.js` | 13.13 | 100.00 | 0.00 |
+| `sidecar/coverage.js` | 14.85 | 100.00 | 0.00 |
+| **all files** | **~66** | **~76** | **~70** |
+
+Read `branch %` on the bottom half of that table with suspicion: a file whose functions
+are never called reports 100 % branches because *no branch was ever reached*. Stryker
+does not have that blind spot, which is the whole argument for the pipeline this repo
+builds.
+
+### The thresholds, and why they are low
+
+```
+--test-coverage-lines=63  --test-coverage-branches=74  --test-coverage-functions=68
+```
+
+Set a few points **below** what is measured, deliberately. A gate that goes red on a
+fresh clone is a gate everyone learns to ignore, and then it protects nothing. These
+three numbers are a **ratchet**: they may be raised when the real figure rises, and the
+only legitimate reason to lower one is deleting tests on purpose.
+
+Node's thresholds are **totals across the whole run**, not per file — it has no
+per-file gate. So a well-covered new module can mask a badly-covered one. The per-file
+table above, not the aggregate, is what to look at in review.
+
+Raising the bar: run `npm run coverage`, take the three totals, subtract ~2, edit the
+three flags in `package.json`. Nothing else knows about them.
 
 ---
 
@@ -221,6 +316,67 @@ expect it.
 3. Drive the route sequence the workflow drives. If your test needs a state the
    workflow cannot reach, that is worth a comment — it may be dead code.
 4. Assert state and disk, then the response.
+
+### Adding a case to the synthetic mutation universe
+
+Most new cases need **no change to `fakes.js` at all** — the universe is data, so you
+describe the world in the test:
+
+```js
+const w = installFakes(sb);
+await sb.start({ maxMutantsPerFile: 5 });
+w.addFile({
+  path: 'src/pricing.ts',
+  sourceLines: 80,                    // synthetic source, so line numbers are real
+  existingTest: 'test/pricing.test.ts',
+  existingTestKills: [10],            // what the repo's own suite already kills
+  coverageWithTests: 72,              // reported once anything targets the file
+  coverageWithout: 0,                 // reported while nothing does
+  uncovered: [31, 32, 33],            // what /api/files/gaps hands the prompt
+  mutants: [
+    { line: 12, mutator: 'ArithmeticOperator', replacement: '-' },
+    { line: 20, collateral: [21, 22] },      // one sharp test takes neighbours
+    { line: 40, equivalent: true },          // nothing can ever kill this
+    { line: 50, killedAtBaseline: true },    // the repo's tests already got it
+    { line: 60, timeout: true },             // scores as a kill, shows in timedOut
+    { line: 70, status: 'nocoverage' },      // sorts after covered survivors
+  ],
+});
+```
+
+`addFile` writes the synthetic source into the sandbox repo, registers the file in
+`state.files` (so call it **after** `/api/run/start`), and — if you passed
+`existingTest` — writes a repo-owned test that git never tracks, so `resetToBase`
+cannot delete it.
+
+Then make a generated test kill something, exactly as a route would:
+
+```js
+const t = w.writeTest('test/pricing.mac-kill.test.ts',
+  { target: 'src/pricing.ts', kills: [20], red: false });
+```
+
+`kills` becomes `// KILLS: 20` in the file; the fake Stryker re-reads the sandbox off
+disk on every call, so deleting that file genuinely un-kills the mutant on the next
+measurement. `red: true` adds `// SUITE: RED` and turns `runTests` red — that is how
+you exercise the delete-and-charge-the-budget paths without a broken JS parser.
+
+Only touch `fakes.js` when you need a **new kind of fate** — a rule that cannot be
+expressed by the five above. Then:
+
+1. Add the field to `normMutant()` with an explicit default, so every existing test
+   keeps its current meaning.
+2. Teach `deadMutants()` (transitive kill walk) or `runStryker`'s `isDead` about it —
+   whichever is the right layer. Kill *rules* live in `deadMutants`; "already dead
+   regardless of tests" lives in `isDead`.
+3. Add the row to the table above **and** to the header comment in `fakes.js`. Both
+   are load-bearing documentation; a fate nobody can find is a fate nobody uses.
+4. Prove the new fate matters: write the route test first and watch it fail for the
+   right reason before the fake supports it.
+
+The rule that keeps this honest: **the fake models Stryker's answers, never the
+sidecar's logic.** If you find yourself adding a knob to `fakes.js` so that a route
+behaves a certain way, the knob belongs in the test's route sequence instead.
 
 ---
 

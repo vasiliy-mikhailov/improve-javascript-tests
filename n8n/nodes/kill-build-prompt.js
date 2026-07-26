@@ -25,6 +25,29 @@ export function killBuildPrompt(t) {
   const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };
   const tag = hash(String(m.mutator) + '|' + m.line + '|' + (m.column ?? '') + '|' + String(m.replacement ?? '').slice(0, 60));
   const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '-' + tag + '.test' + ext;
+  // A column of 0 is a position, not "no column" — so ask whether it is ABSENT.
+  const col = m.column == null || m.column === '' ? '' : ':' + m.column;
+  // What the status actually tells the test writer. This is a lookup and not a
+  // two-way ternary because 'survived' and 'nocoverage' are two members of an open
+  // set: sidecar/stryker.js filters survivors to exactly those two today, but the
+  // moment that filter widens, an "everything else is nocoverage" branch would tell
+  // the model its target is unreached — and it would then write a test that merely
+  // executes the code instead of one that discriminates the mutation.
+  // Stryker's own enum is PascalCase and the sidecar lower-cases it; do not depend on
+  // that having happened.
+  // null prototype: the status comes from a JSON report, and a plain object would
+  // answer 'constructor' or '__proto__' with a prototype member that then gets
+  // concatenated into the prompt as text.
+  const statusBrief = {
+    __proto__: null,
+    survived: 'covered by existing tests, but nothing asserts the difference',
+    nocoverage: 'not covered at all — your test must reach this code',
+  };
+  const rawStatus = String(m.status ?? '').trim().toLowerCase();
+  // The fallback claims only what is known: the label, and that coverage is unknown.
+  const status = statusBrief[rawStatus]
+    || (rawStatus ? 'Stryker reports this mutant as "' + rawStatus + '"' : 'unreported by Stryker')
+      + ' — whether any existing test reaches this code is unknown, so your test must both execute it and assert the difference';
   const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };
   const ui = uiGuidance(file, gaps);
   const constraints = (t.constraints || []).map(c => '- ' + c).join('\n');
@@ -36,9 +59,9 @@ export function killBuildPrompt(t) {
   const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\n'
     + String(t.source || '').slice(0, 12000)
     + '\n\nTARGET MUTANT — kill this one:\n'
-    + '  mutator: ' + m.mutator + '\n  line: ' + m.line + (m.column ? ':' + m.column : '') + '\n'
+    + '  mutator: ' + m.mutator + '\n  line: ' + m.line + col + '\n'
     + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\n'
-    + '  status: ' + (m.status === 'survived' ? 'covered by existing tests, but nothing asserts the difference' : 'not covered at all — your test must reach this code') + '\n'
+    + '  status: ' + status + '\n'
     + (m.context ? '\nSOURCE AROUND THE TARGET:\n' + m.context + '\n' : '')
     + (t.killIdea ? '\nHOW TO KILL IT (from the analysis that selected this mutant):\n  ' + t.killIdea + '\n' : '')
     + '\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\n'

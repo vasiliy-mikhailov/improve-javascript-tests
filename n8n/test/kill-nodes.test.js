@@ -78,10 +78,21 @@ test('a replacement that is empty or whitespace is still visible to the model', 
   assert.match(q, /the mutation replaces that code with: "\\n  "/);
 });
 
-test('a mutant with no column is described without a dangling colon', () => {
-  const p = killBuildPrompt(target({ mutant: { column: undefined } })).prompt;
-  assert.match(p, /line: 118\n/);
-  assert.ok(!p.includes('line: 118:'), 'no "line: 118:" with nothing after it');
+test('a column is printed when present — including column 0 — and omitted when absent', () => {
+  // Absent and zero are different facts. Stryker's columns are 1-based today, so a 0
+  // does not occur in practice, but "no column" must be decided by ABSENCE: the day a
+  // 0-based producer appears, a falsiness test would silently drop the only piece of
+  // information that separates two mutants sharing a line.
+  for (const absent of [undefined, null]) {
+    const p = killBuildPrompt(target({ mutant: { column: absent } })).prompt;
+    assert.match(p, /line: 118\n/);
+    assert.ok(!p.includes('line: 118:'), 'no "line: 118:" with nothing after it');
+    assert.ok(!/line: 118:(undefined|null)/.test(p), 'and no placeholder word either');
+  }
+  for (const column of [0, 1, 27]) {
+    const p = killBuildPrompt(target({ mutant: { column } })).prompt;
+    assert.ok(p.includes('line: 118:' + column + '\n'), `column ${column} is a real position and must be shown`);
+  }
 });
 
 test('the context section disappears when Stryker gave us no source context', () => {
@@ -103,6 +114,58 @@ test("'survived' and 'nocoverage' get materially different instructions", () => 
   assert.ok(!survived.includes('not covered at all'), 'a survivor must never be called uncovered');
   assert.ok(!nocov.includes('covered by existing tests'), 'and vice versa');
   assert.notEqual(survived, nocov);
+});
+
+// the one "  status: ..." line of the brief, so the mapping can be asserted whole
+const statusLine = (status) =>
+  killBuildPrompt(target({ mutant: { status } })).prompt.split('\n').find((l) => l.startsWith('  status: '));
+
+test('the status sentence is a lookup keyed by status, not a two-way ternary', () => {
+  // sidecar/stryker.js lower-cases Stryker's own PascalCase enum, so both spellings
+  // must land on the same sentence — the prompt must not depend on that normalisation
+  // happening upstream.
+  for (const s of ['survived', 'Survived'])
+    assert.equal(statusLine(s), '  status: covered by existing tests, but nothing asserts the difference');
+  for (const s of ['nocoverage', 'NoCoverage'])
+    assert.equal(statusLine(s), '  status: not covered at all — your test must reach this code');
+});
+
+test('any other status is described honestly instead of being called uncovered', () => {
+  // The survivor list is filtered to survived+nocoverage TODAY (sidecar/stryker.js).
+  // The moment that filter widens — or a mutant arrives from anywhere else — an
+  // "everything else means nocoverage" ternary starts telling the model a falsehood
+  // about its target, and a model told "not covered at all" writes a reach-the-code
+  // test instead of a discriminating assertion. Every status Stryker can emit:
+  for (const status of ['timeout', 'runtimeerror', 'compileerror', 'ignored', 'pending', 'killed']) {
+    const line = statusLine(status);
+    assert.ok(line, `a status line is still printed for ${status}`);
+    assert.ok(line.includes(status), `the raw status travels with it: ${line}`);
+    assert.ok(!line.includes('not covered at all'), `${status} is not known to be uncovered`);
+    assert.ok(!line.includes('covered by existing tests'), `${status} is not known to be covered`);
+  }
+});
+
+test('a status that names an Object.prototype member gets the fallback, not a prototype member', () => {
+  // The status string comes from a JSON report; looking it up in a plain object hands
+  // 'constructor' back a function and '__proto__' back Object.prototype, either of
+  // which would be concatenated into the prompt as text.
+  for (const status of ['constructor', '__proto__', 'hasOwnProperty']) {
+    const line = statusLine(status);
+    assert.ok(line.includes('unknown'), `${status} must fall through to the honest fallback: ${line}`);
+    assert.ok(!line.includes('function') && !line.includes('[object'), `no prototype member leaked: ${line}`);
+  }
+});
+
+test('a missing status yields a usable sentence, never "undefined"', () => {
+  for (const status of [undefined, null, '']) {
+    const line = statusLine(status);
+    assert.ok(line, `a status line is still printed for ${JSON.stringify(status)}`);
+    assert.ok(!/undefined|null/.test(line), `no placeholder word in: ${line}`);
+    assert.ok(!line.includes('not covered at all'), 'an unknown status is not a coverage claim');
+    assert.ok(!line.includes('covered by existing tests'));
+    assert.ok(killBuildPrompt(target({ mutant: { status } })).prompt.includes('TARGET MUTANT'),
+      'and the rest of the brief is unaffected');
+  }
 });
 
 test('the kill idea from the mutant pick is handed to the test writer', () => {

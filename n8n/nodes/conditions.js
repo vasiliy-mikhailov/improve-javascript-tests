@@ -26,8 +26,11 @@ export const CONDITIONS = {
   'Cov: Wrote Any?': "={{ $('Cov: Parse Tests').first().json.count }}",
   'Cov: Green After Repair?': '={{ $json.passed ? 1 : 0 }}',
   'Mutant To Kill?': '={{ $json.mutant ? 1 : 0 }}',
-  // multi-round: keep going iff ≥1 of coverage/mutation/MAC improved AND none degraded
-  'Another Round?': '={{ ($json.improvedAny && !$json.degradedAny && ($json.rounds || 0) < ($json.maxRounds || 5)) ? 1 : 0 }}',
+  // multi-round: keep going iff ≥1 of coverage/mutation/MAC improved AND none degraded.
+  // The cap uses `??`, not `||`: a team configuring MAX_ROUNDS_PER_FILE=0 ("one pass per
+  // file, no extra rounds") means it, and `|| 5` would hand them five rounds instead.
+  // `($json.rounds || 0)` keeps its `||` — 0 is that field's intended default anyway.
+  'Another Round?': '={{ ($json.improvedAny && !$json.degradedAny && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}',
   // the rules engine approving is not enough — the round must also have improved something
   'Approved?': "={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}",
 };

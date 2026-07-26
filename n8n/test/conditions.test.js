@@ -320,14 +320,28 @@ test('Another Round? stops when /api/verify itself failed', () => {
   assert.equal(branchOf('Another Round?', { json: { ok: true, improved: false, testsGreen: false, error: 'stryker crashed', file: 'src/a.ts' } }), 1);
 });
 
-test('Another Round? reads an explicit maxRounds of 0 as 5 — latent, see the report', () => {
-  // `($json.maxRounds || 5)` cannot tell 0 from missing. Asserting the ACTUAL
-  // behaviour rather than the intended one: today the sidecar coerces the config the
-  // same way (state.js: parseInt(...) || 5), so a 0 never reaches this expression —
-  // remove that coercion and "0 rounds" silently becomes "5 rounds".
-  assert.equal(round({ rounds: 0, maxRounds: 0 }), 0, 'maxRounds:0 does NOT stop the loop');
-  // by contrast rounds:0 is genuinely the intended default, so `|| 0` is harmless
-  assert.equal(round({ rounds: 0, maxRounds: 1 }), 0);
+test('Another Round? honours an explicit maxRounds of 0 — one pass per file, no extra rounds', () => {
+  // NEW CONTRACT. `($json.maxRounds || 5)` could not tell "the team asked for zero
+  // extra rounds" from "the field is missing", so a configured 0 bought five rounds
+  // nobody asked for. `?? 5` separates the two: only ABSENT means "use the default".
+  assert.equal(round({ rounds: 0, maxRounds: 0 }), 1, 'maxRounds:0 ⇒ stop at once, even on an improving round');
+  assert.equal(roundOn({ improvedAny: true, degradedAny: false, maxRounds: 0 }), 1, 'no rounds field either ⇒ still stop');
+  // the boundary, pinned in both directions
+  assert.equal(roundOn(without(verify(), 'maxRounds')), 0, 'MISSING maxRounds still means the documented default of 5');
+  assert.equal(round({ rounds: 4, maxRounds: 5 }), 0, 'below the cap ⇒ another round');
+  assert.equal(round({ rounds: 5, maxRounds: 5 }), 1, 'rounds === maxRounds ⇒ stop');
+  // `($json.rounds || 0)` keeps its `||` on purpose: 0 IS the intended default there,
+  // so no legitimate value is swallowed by it
+  assert.equal(round({ rounds: 0, maxRounds: 1 }), 0, 'first round runs under a cap of 1');
+  assert.equal(roundOn(without(verify({ maxRounds: 1 }), 'rounds')), 0);
+  // `??` also treats null as absent. /api/verify answers with a number today, so this
+  // is a characterization, not a contract the sidecar exercises.
+  assert.equal(round({ rounds: 0, maxRounds: null }), 0, 'null ⇒ treated as absent ⇒ default 5');
+  // WHAT 0 THEN MEANS, end to end: `rounds` counts ACCEPTED (committed) rounds, and the
+  // false branch is Drop Last Round → POST /api/round/drop → discardUncommitted(). So a
+  // cap of 0 lets a file be worked on and then throws every test away, reporting
+  // improved:false and no PR. A team wanting "one pass per file, kept" wants 1, not 0.
+  // See the report: the sidecar should reject 0 rather than accept an expensive no-op.
 });
 
 // =============================================================================
@@ -376,6 +390,45 @@ test('no condition throws on an empty response from its own node', () => {
     const expected = ['More Work?', 'Cov: Has Work?', 'Baseline OK?'].includes(name) ? 0 : 1;
     assert.equal(idx, expected, `${name}: empty input changed which way it fails`);
   }
+});
+
+// =============================================================================
+// cross-cutting: the `||`-swallows-a-legitimate-falsy-value audit
+// =============================================================================
+test('only the rounds counter may default with `||`, because 0 IS its default', () => {
+  // The bug class: `x || D` cannot distinguish "not supplied" from a supplied 0, ''
+  // or false, so any expression that defaults a field an operator can legitimately
+  // set to a falsy value silently overrides them. maxRounds was exactly that and now
+  // reads `?? 5`. This guard fails the moment a new `||` default is added anywhere.
+  for (const [name, expr] of Object.entries(CONDITIONS)) {
+    if (name === 'Another Round?') continue;
+    assert.doesNotMatch(expr, /\|\|/, `${name}: a new \`||\` default needs the 0/''/false audit first`);
+  }
+  const another = CONDITIONS['Another Round?'];
+  assert.equal(another.match(/\|\|/g).length, 1, 'exactly one `||` survives the audit');
+  assert.match(another, /\$json\.rounds \|\| 0/, 'the survivor is the rounds counter, whose default IS 0');
+  assert.match(another, /\$json\.maxRounds \?\? 5/, 'the cap must distinguish an explicit 0 from a missing field');
+});
+
+test('every condition reads a field whose falsy value already MEANS the false answer', () => {
+  // The other half of the audit: no `||` is not enough — a bare truthiness test
+  // (`$json.x ? 1 : 0`) swallows a falsy value just as thoroughly. For each condition,
+  // the falsy value the sidecar can actually send, and why that branch is right.
+  const cases = [
+    ['More Work?', { json: { done: false } }, 0, 'done:false is the sidecar saying there IS work left'],
+    ['File Picked?', pick({ file: '' }), 1, 'an empty path is not a file anything downstream could open'],
+    ['Pick Retryable?', pick({ file: null, retry: false }), 1, 'retry:false is terminal by definition'],
+    ['Baseline OK?', { json: { failed: false, score: 0 } }, 0, 'failed:false is a measured baseline; score 0 is not read here'],
+    ['Cov: Has Work?', { json: { skip: false } }, 0, 'skip:false means Build Prompt produced real work'],
+    ['Cov: Green?', { json: { passed: false } }, 1, 'passed:false is a red suite'],
+    ['Cov: Wrote Any?', parsed({ count: 0 }), 1, 'count 0 is READ, not defaulted — the comparison is `larger 0`'],
+    ['Cov: Green After Repair?', { json: { passed: false } }, 1, 'still red after the repair turn'],
+    ['Mutant To Kill?', { json: { mutant: null } }, 1, 'null is the only "no target" /api/mutant/next sends'],
+    ['Another Round?', { json: verify({ maxRounds: 0 }) }, 1, 'the fixed one: an explicit cap of 0 now stops the loop'],
+    ['Approved?', approved({ approved: false }, { improved: true }), 1, 'approved:false is a refusal, not a missing verdict'],
+  ];
+  assert.deepEqual(cases.map((c) => c[0]).sort(), Object.keys(CONDITIONS).sort(), 'every condition must be audited');
+  for (const [name, fx, expected, why] of cases) assert.equal(branchOf(name, fx), expected, `${name}: ${why}`);
 });
 
 test('Baseline OK? routes a file whose baseline could not be measured to the next iteration', () => {
