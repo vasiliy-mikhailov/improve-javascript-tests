@@ -507,7 +507,7 @@ test('mutant/next survives a failed re-measure by clearing the flag and reportin
   assert.match(log(sb), /mutation re-measure failed on src\/a\.ts/);
 }));
 
-test('mutant/next stops on the failure budget, counting failures and not kills', () => withSandbox(async (sb) => {
+test('mutant/next stops on wasted attempts, counting waste and not kills', () => withSandbox(async (sb) => {
   await killReady(sb, { mutants: [{ line: 10 }] }, { maxMutantsPerFile: 2 });
 
   // plenty of successful work done, one failure — the loop must keep going
@@ -520,7 +520,7 @@ test('mutant/next stops on the failure budget, counting failures and not kills',
   const r = await sb.get('/api/mutant/next', { path: FILE });
   assert.equal(r.done, true);
   assert.equal(r.mutant, null);
-  assert.match(r.reason, /failure budget spent \(2 unsuccessful attempts; 9 killed\)/);
+  assert.match(r.reason, /attempt budget spent \(2 test\(s\) killed nothing, 0 could not be written or run; 9 killed\)/);
 }));
 
 test('mutant/next stops at the hard attempt ceiling even with budget left', () => withSandbox(async (sb) => {

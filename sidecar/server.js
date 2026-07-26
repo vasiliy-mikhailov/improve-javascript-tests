@@ -657,20 +657,24 @@ const routes = {
     const failures = f.mutantFailures || 0;
     const spent = f.mutantAttemptCount || 0;
     const hardCeiling = budget * 6;
-    if (failures >= budget) {
-      return { ok: true, mutant: null, done: true, reason: `failure budget spent (${failures} unsuccessful attempts; ${f.mutantsKilled || 0} killed)` };
+    // The budget bounds WASTE, and a test that cannot run is waste whoever is at
+    // fault. Counting only judged failures against it removed the brake entirely: on a
+    // live file 19 red tests cost 0 of 15, so the round ran for two and a half hours
+    // with the 90-attempt ceiling as its only stop. A red test still does not retire
+    // its MUTANT — that distinction is about evidence and stands — but it does spend
+    // the loop's time.
+    const genFailures = f.mutantGenFailures || 0;
+    if (failures + genFailures >= budget) {
+      return {
+        ok: true, mutant: null, done: true,
+        reason: `attempt budget spent (${failures} test(s) killed nothing, ${genFailures} could not be written or run; `
+          + `${f.mutantsKilled || 0} killed)`,
+      };
     }
     if (spent >= hardCeiling) {
       return { ok: true, mutant: null, done: true, reason: `hard attempt ceiling ${hardCeiling} reached (${f.mutantsKilled || 0} killed)` };
     }
-    // Generation failures do not retire mutants, so they need their own stop: without
-    // one, an unhealthy endpoint would keep the loop cycling the same survivors.
-    if ((f.mutantGenFailures || 0) >= budget * 3) {
-      return {
-        ok: true, mutant: null, done: true,
-        reason: `no usable test was generated ${f.mutantGenFailures} times — the model endpoint looks unhealthy`,
-      };
-    }
+
     // A stale list is not evidence of "nothing left to kill". Re-measure before
     // giving up: the coverage bootstrap just made the file executable, so mutants
     // that were unreachable (or invisible, when the baseline run found no tests at
@@ -678,9 +682,15 @@ const routes = {
     if (f.survivorsStale) {
       S.setStage('improving_mutation', `re-measuring mutants in ${p} after new tests`);
       try {
+        // Coverage is otherwise measured only at baseline and at verify, so a file that
+        // had no tests carries coverage 0 — and therefore MAC 0 — for the whole round,
+        // however many mutants die. This is the one moment we KNOW it changed: the
+        // bootstrap just made the file executable. One coverage run, once per file.
+        try { await coverage.runCoverage(); } catch { }
         const fresh = await stryker.runStryker(p);
+        const cov = state.files[p]?.coverage ?? f.coverage;
         S.upsertFile(p, {
-          mutation: fresh.score, mac: mac(f.coverage, fresh.score), totalMutants: fresh.totalMutants,
+          mutation: fresh.score, mac: mac(cov, fresh.score), totalMutants: fresh.totalMutants,
           survivedTotal: fresh.survivedTotal ?? (fresh.survived || []).length,
           lastSurvived: (fresh.survived || []).slice(0, 100),
           survivorsStale: false,

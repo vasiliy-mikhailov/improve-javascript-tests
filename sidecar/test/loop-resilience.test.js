@@ -56,8 +56,8 @@ test('repeated empty answers still stop the loop rather than spinning forever', 
     await sb.post('/api/mutant/verify', { file: FILE, mutant: r.mutant, testPaths: [] });
   }
   assert.ok(stops, 'the loop must terminate when the model never produces anything');
-  assert.match(String(stops.reason), /usable|generat|unhealthy/i,
-    'and it must say the generator is broken, not that the mutants resisted');
+  assert.match(String(stops.reason), /could not be written|budget/i,
+    'and it must distinguish "nothing was written" from "the mutants resisted"');
 }));
 
 test('one unwritable mutant does not pin the loop to itself', () => withSandbox(async (sb) => {
@@ -486,3 +486,85 @@ test('the pick prompt names a failed mutant by its full identity, not just line 
     assert.ok(banLines.some((l) => l.includes(String(first.replacement))),
       `the ban must say WHICH replacement failed, or it bans the sibling too — got: ${JSON.stringify(banLines)}`);
   }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  the two reasons a file looks stuck
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured on a live file after 144 minutes: 55 attempts, 16 kills, 6 failures and
+// NINETEEN generation misses — every one of them "the generated test failed against
+// the unmutated code". Meanwhile the dashboard showed mutation 56% and MAC 0, because
+// coverage was still the baseline 0 it was measured at before any test existed.
+
+test('a bootstrapped file gets its coverage re-measured, so MAC stops reading zero',
+  () => withSandbox(async (sb) => {
+    // Coverage is measured at baseline and at verify, nowhere else. A file that had no
+    // tests therefore carries coverage 0 for the whole round — hours — while mutation
+    // climbs, and MAC (coverage x mutation / 100) is pinned at 0 the entire time. The
+    // moment the survivor list is refreshed after the bootstrap is exactly the moment
+    // coverage is known to have changed, so it is measured there, once.
+    const w = installFakes(sb);
+    await sb.start();
+    w.addFile({ path: FILE, mutants: mutantsAt(6), coverageWithTests: 90, coverageWithout: 0 });
+    await sb.post('/api/coverage/run', { phase: 'baseline' });
+    await sb.post('/api/iteration/start', { file: FILE });
+    await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+    assert.equal(sb.file(FILE).coverage, 0, 'precondition: nothing covers it yet');
+
+    // one incidental kill, which is what a bootstrap test normally does: it executes
+    // the module, and something dies as a side effect. With a score of 0 MAC is
+    // legitimately 0 however good the coverage is, so the fixture has to clear that.
+    w.writeTest('test/a.mac-cov.test.ts', { target: FILE, kills: [1] });
+    await sb.post('/api/test/write-many', { stage: 'improving_coverage', tests: [] , paths: []});
+    S.upsertFile(FILE, { survivorsStale: true });
+    await sb.get('/api/mutant/next', { path: FILE });
+
+    const f = sb.file(FILE);
+    assert.equal(f.coverage, 90, 'the file is executed now, and the record says so');
+    assert.ok((f.mac ?? 0) > 0, `MAC must stop reading 0 once coverage is real — got ${f.mac}`);
+  }));
+
+test('an escalation after a RED test is told what the failure was', () => withSandbox(async (sb) => {
+  // All nineteen misses on the live file were red tests. The escalation already runs
+  // for them, but it was told only "a previous attempt failed" — never the compiler or
+  // runner output that would let it fix an import or a mock shape. So it rebuilt the
+  // same eighty lines of scaffolding and made the same class of mistake.
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line], red: true });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+
+  assert.equal(r.retryable, true);
+  assert.ok(r.summary && r.summary.length > 0,
+    'the runner output must reach the caller, or the escalated prompt cannot use it');
+  assert.match(r.summary, /FAIL|failed/i);
+}));
+
+test('a test that will not even run still spends the loop budget', () => withSandbox(async (sb) => {
+  // The regression this session introduced, and the reason a live file sat on one
+  // target for two and a half hours instead of settling and moving on.
+  //
+  // A red test is not evidence about the MUTANT — that reasoning stands, and the target
+  // still keeps its shot. But the failure budget is not about mutants; it bounds WASTE,
+  // and a test that cannot run is waste whoever is at fault. Making those free removed
+  // the only brake that ended a round: 19 red tests cost 0 of 15, leaving the 90-attempt
+  // hard ceiling as the sole stop — about eight hours per file at the observed cycle.
+  const w = await killReady(sb, { mutants: mutantsAt(30) }, { maxMutantsPerFile: 4 });
+
+  for (let i = 0; i < 12; i++) {
+    const r = await sb.get('/api/mutant/next', { path: FILE });
+    if (!r.mutant) {
+      assert.match(String(r.reason), /budget/i, 'the loop must stop on wasted attempts, not only on judged ones');
+      const f = sb.file(FILE);
+      assert.ok((f.mutantFailures || 0) + (f.mutantGenFailures || 0) >= 4,
+        'and it must count both kinds of waste against the same budget');
+      return;
+    }
+    const p = `test/a-kill-${i}.test.ts`;
+    w.writeTest(p, { target: FILE, kills: [], red: true });      // red every time
+    await sb.post('/api/mutant/verify', { file: FILE, mutant: r.mutant, testPaths: [p], phase: 'thinking' });
+  }
+  assert.fail('twelve unusable attempts against a budget of four and the loop never stopped');
+}));
