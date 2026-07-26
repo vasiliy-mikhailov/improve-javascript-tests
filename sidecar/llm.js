@@ -27,6 +27,10 @@ async function chat(opts) {
     temperature: opts.temperature ?? 0.3,
     chat_template_kwargs: { enable_thinking: ENABLE_THINKING },
   };
+  // Constrained decoding when we need JSON: unparseable answers cost a whole extra
+  // generation, and retries were burning ~12% of all model time. Disabled
+  // automatically if the endpoint rejects the parameter.
+  if (opts.json && jsonModeSupported) body.response_format = { type: 'json_object' };
   const text = await post(body);
   if (!opts.json) return { text };
   let parsed = extractJson(text);
@@ -40,6 +44,11 @@ async function chat(opts) {
   return { text, json: parsed };
 }
 
+// Flipped to false the first time the endpoint refuses response_format, so a
+// backend without JSON mode degrades to the old free-form + repair path instead
+// of failing every call.
+let jsonModeSupported = String(process.env.LLM_JSON_MODE || 'auto') !== 'off';
+
 async function post(body, attempt = 0) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 300000);
@@ -52,6 +61,13 @@ async function post(body, attempt = 0) {
     });
     if (!res.ok) {
       const errText = (await res.text()).slice(0, 300);
+      // endpoint does not know response_format → drop it permanently and retry once
+      if (jsonModeSupported && body.response_format && /response_format|guided|json_object|unrecognized|unexpected/i.test(errText)) {
+        jsonModeSupported = false;
+        event('llm', 'endpoint rejected JSON mode — falling back to free-form output with repair retries');
+        const { response_format, ...plain } = body;
+        return post(plain, attempt);
+      }
       if (attempt < 2 && (res.status === 429 || res.status >= 500)) {
         await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
         return post(body, attempt + 1);

@@ -27,8 +27,14 @@ function writeConfig(mutateSpec) {
     thresholds: { high: 80, low: 60, break: null },
     tempDirName: '.stryker-tmp',
     cleanTempDir: true,
-    timeoutMS: 20000,
-    concurrency: 2,
+    // CPU is cheap relative to model time, so run mutants wide. But raising
+    // concurrency ALONE corrupts the metric: Stryker counts a timed-out mutant as
+    // KILLED, so a loaded box silently inflates the mutation score. The timeout is
+    // therefore scaled with the parallelism, and timeouts are reported (below) so
+    // inflation is visible instead of silent.
+    timeoutMS: parseInt(process.env.STRYKER_TIMEOUT_MS || '60000', 10),
+    timeoutFactor: parseFloat(process.env.STRYKER_TIMEOUT_FACTOR || '2.5'),
+    concurrency: parseInt(process.env.STRYKER_CONCURRENCY || '6', 10),
     jsonReporter: { fileName: REPORT },
   };
   if (runner === 'vitest') {
@@ -106,7 +112,16 @@ function parseReport(reportAbs, file) {
   // Mutation score (stryker definition): killed+timeout / (all - ignored - compileError)
   const valid = mutants.filter((m) => !['ignored', 'compileerror'].includes(m.status));
   const killed = valid.filter((m) => ['killed', 'timeout'].includes(m.status)).length;
+  const timedOut = valid.filter((m) => m.status === 'timeout').length;
   const score = valid.length ? round2((killed / valid.length) * 100) : 100;
+  // A timeout counts as a kill in Stryker's score. On a loaded box that turns
+  // machine contention into free "improvement", so make it loud when it is a
+  // material share of the result rather than letting it flatter the metric.
+  const timeoutShare = valid.length ? timedOut / valid.length : 0;
+  if (timeoutShare > 0.1) {
+    event('stryker', `WARNING: ${timedOut}/${valid.length} mutants (${round2(timeoutShare * 100)}%) counted as killed by TIMEOUT `
+      + `on ${file} — the score may be inflated by machine load; consider raising STRYKER_TIMEOUT_MS or lowering STRYKER_CONCURRENCY`);
+  }
   const survivedList = valid.filter((m) => ['survived', 'nocoverage'].includes(m.status))
     // covered-but-surviving mutants first: they only need sharper assertions,
     // while no-coverage mutants need brand-new tests (coverage phase's job)
@@ -125,6 +140,7 @@ function parseReport(reportAbs, file) {
     file,
     totalMutants: valid.length,
     killed,
+    timedOut,
     score,
     survived: survivedList.slice(0, 100),
   };
