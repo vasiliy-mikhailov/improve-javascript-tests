@@ -5,7 +5,7 @@
 Teams own JavaScript/TypeScript repositories with tests of uneven quality. Line coverage alone
 overstates quality: a covered line whose mutants survive is weakly tested. The composite metric
 
-> **MAC (Mutation-Adjusted Coverage) = line-coverage% × mutation-score%** (Stryker)
+> **MAC (Mutation-Adjusted Coverage) = line-coverage% × mutation-score% / 100** (Stryker)
 
 captures both. Teams need a **turn-key, adaptable pipeline** they can point at their repo and get
 back **pull requests that measurably improve tests**, with **live visibility** into what the
@@ -74,7 +74,7 @@ reward = DoD_score × implementation_performance            ∈ [0, 1]
 DoD_score = (Σ Di) / 12                                    Di ∈ {0, 0.5, 1}
 
 implementation_performance = mean over eval repos of per_repo_score
-  eval set = 1 synthetic repo + 10 real-world OSS repos (11 total)
+  eval set = 1 synthetic repo + real-world OSS repos (brief asked for 10; grown to 13)
 
 per_repo_score = 0.4 × completion + 0.6 × improvement
   completion  ∈ {0, 0.5, 1}:
@@ -85,8 +85,9 @@ per_repo_score = 0.4 × completion + 0.6 × improvement
       0   — pipeline failed before producing a baseline measurement
   improvement = clamp( ΔMAC_gap_closed, 0, 1 )
       ΔMAC_gap_closed = (MAC_after − MAC_before) / (100 − MAC_before)
-      computed over the union of files the run targeted; if MAC_before = 100
-      (nothing to improve) the repo is excluded from the mean.
+      computed PER FILE and averaged over the repo's targeted files; files already
+      at MAC_before = 100 are excluded from that mean, and a measured file that was
+      not improved contributes 0 (eval/score.mjs).
 ```
 
 The 0.4/0.6 split rewards *finishing* the loop but weights *actual test-quality gain* higher.

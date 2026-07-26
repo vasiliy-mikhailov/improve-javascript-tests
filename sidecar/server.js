@@ -617,25 +617,30 @@ const routes = {
     const f = file && state.files[file];
     if (!f || !mutant) throw new Error('file and mutant are required');
     const key = mutantsMod.mutantKey(mutant);
-    const bump = (killed) => {
+    // Two different questions, so two different flags:
+    //   targetDied  → retire THIS mutant (it had its one shot)
+    //   worthKeeping→ keep the test, and do not charge the failure budget
+    // Conflating them let a test that killed only neighbours leave its target
+    // with no recorded attempt, so the target could be picked again.
+    const bump = (targetDied, worthKeeping) => {
       const attempts = { ...(f.mutantAttempts || {}) };
-      if (!killed) attempts[key] = (attempts[key] || 0) + 1;
+      if (!targetDied) attempts[key] = (attempts[key] || 0) + 1;
       S.upsertFile(file, {
         mutantAttempts: attempts,
         mutantAttemptCount: (f.mutantAttemptCount || 0) + 1,
-        mutantFailures: (f.mutantFailures || 0) + (killed ? 0 : 1),
-        mutantsKilled: (f.mutantsKilled || 0) + (killed ? 1 : 0),
+        mutantFailures: (f.mutantFailures || 0) + (worthKeeping ? 0 : 1),
+        mutantsKilled: (f.mutantsKilled || 0) + (targetDied ? 1 : 0),
       });
     };
     const drop = () => { for (const p of testPaths) repo.deleteTestFile(p); };
 
-    if (!testPaths.length) { bump(false); return { ok: true, killed: false, reason: 'no test was written' }; }
+    if (!testPaths.length) { bump(false, false); return { ok: true, killed: false, reason: 'no test was written' }; }
 
     // 1. the suite must stay green — a test that breaks the build is never worth keeping
     S.setStage('improving_mutation', `checking suite after targeting ${mutant.mutator} at line ${mutant.line}`);
     const suite = await tests.runTests(null);
     if (!suite.passed) {
-      drop(); bump(false);
+      drop(); bump(false, false);
       S.event('improving_mutation', `discarded: suite went red targeting ${mutant.mutator} at line ${mutant.line}`);
       return { ok: true, killed: false, reason: 'suite red', summary: suite.summary };
     }
@@ -672,9 +677,10 @@ const routes = {
     // three independent signals, any of which means the test did real work:
     // the target died, the survivor count fell, or the score rose.
     const worthKeeping = killedTarget || killedCount > 0 || scoreRose;
-    // The mutant is marked attempted either way: never spend a second generation
-    // on a target that already resisted one.
-    bump(worthKeeping);
+    // The TARGET is retired unless it actually died — one shot per mutant, whatever
+    // else the test achieved. The failure budget, by contrast, is only charged when
+    // the test achieved nothing at all.
+    bump(killedTarget, worthKeeping);
     if (!worthKeeping) {
       drop();
       S.event('improving_mutation', `discarded: ${mutant.mutator} at line ${mutant.line} — nothing died${note ? ' (' + note + ')' : ''}`);

@@ -98,8 +98,10 @@ UI guidance when the file is a component. One test file, named for its victim
    and the answer to "did the target die".
 3. **Keep the test if anything died** — the target or collateral. One test routinely takes
    neighbours with it, and that is real improvement.
-4. Mark the mutant attempted **either way**. A mutant that resisted a test written specifically for
-   it is not attempted again.
+4. **Retire the target unless it died.** One shot per mutant, whatever else the test achieved —
+   `mutantAttempts[key]` is keyed on `killedTarget`, so a test that killed only neighbours still
+   uses up its target's attempt. The **failure budget** is charged separately, on `worthKeeping`,
+   so a test that achieved something never costs budget.
 
 ### 2.4 Verify, rounds, PR
 
@@ -150,25 +152,31 @@ position-stable key, since Stryker ids are not stable), `mutantFailures`, `mutan
 | Only test files may be written, deleted or committed (path allowlist) | `repo.writeTestFile`, `pr.commit` |
 | A kill counts only when a mutation run says the mutant died | `mutant/verify` |
 | A mutant is retired only by evidence — never by model opinion | `mutants.resolvePick` |
-| A range run's score may never be used as the file's score | `stryker.runStryker` (`partial`) |
 | Timeouts are counted and flagged; Stryker scores a timeout as a kill, so load can inflate the metric | `stryker.parseReport` |
 | Cleanup is reverted if it costs mutation score | `test/cleanup` |
 | Secrets redacted from events, stage text, progress lines and API errors | `util.redact` |
 
 **Effort — these only bound cost and are tuned freely:**
 `SCOPE_LIMIT`, `MAX_ITERATIONS`, `MAX_ROUNDS_PER_FILE`, `MAX_ATTEMPTS_PER_FILE`,
-`MAX_MUTANTS_PER_FILE` (failures only), shortlist size, prompt/token budgets,
-`STRYKER_CONCURRENCY`.
+`MAX_MUTANTS_PER_FILE` (failures only), shortlist size, prompt/token budgets.
+
+`STRYKER_CONCURRENCY` is the exception that looks like an effort knob but is not: Stryker scores a
+timed-out mutant as killed, so raising it on a loaded box inflates the metric. Move it only together
+with `STRYKER_TIMEOUT_MS`, and watch the timeout warning.
+
+Range (partial) mutation runs were removed when kill verification became a whole-file re-run: the
+`opts.range` branch in `stryker.runStryker` and `mutants.verifyRange`/`rangeSpec` are now unreachable.
 
 ## 5. Model calls
 
 | Call | Mode | Why |
 |---|---|---|
-| decisions — mutant pick, all six rule stages | JSON mode, **thinking off** | small structured answers that must parse; the model reasons inside the `reason` field |
+| decisions — mutant pick, plus the five rule stages that consult the model (`write_test` is assembled mechanically, and each rule stage short-circuits to a default when the team set no rule text) | JSON mode, **thinking off** | small structured answers that must parse; the model reasons inside the `reason` field |
 | generation — test writing, repair, cleanup | thinking on, free-form + repair | the thinking channel is what keeps chain-of-thought out of committed tests |
 
 The two cannot be combined on this backend: with both enabled the reasoning channel consumes the
-completion budget and `content` returns empty. Every exchange is recorded — prompt, response,
+completion budget and `content` returns empty. If the endpoint ever rejects `response_format`,
+`jsonModeSupported` flips and decision calls degrade to free-form *with* thinking on. Every exchange is recorded — prompt, response,
 duration, stage, file — to `/data/dialog.jsonl` and streamed into the dashboard activity feed.
 
 ## 6. Batch driver

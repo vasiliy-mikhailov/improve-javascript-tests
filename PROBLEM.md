@@ -10,7 +10,7 @@ measurably improve the tests** — and which shows, while it works, exactly what
 The measure of "better tests" is **MAC — Mutation-Adjusted Coverage**:
 
 ```
-MAC = line-coverage % × mutation-score %        (mutation score from Stryker)
+MAC = line-coverage % × mutation-score % / 100    (both in [0,100]; MAC is on the same 0–100 scale)
 ```
 
 Coverage says the code was *reached*; mutation score says the code was *constrained*. A test that
@@ -46,12 +46,15 @@ Per file, the loop is **mutant-driven**, and every claim in it is measured rathe
 5. **Re-run mutation over the whole file.** This answers both questions at once: did the target
    die, and what is still alive now.
 6. **Keep the test only if something actually died** — the target, or a neighbour it took with it.
-   Otherwise delete it. A mutant that resisted a test written specifically for it is never
-   attempted again.
+   Otherwise delete it. The target gets **one shot**: whether or not the test achieved anything
+   else, that mutant is not attempted again.
 7. **Repeat** from the fresh survivor list until nothing killable remains or the failure budget is
    spent, then verify the file end to end and open a PR if MAC improved.
 
-The result is a **small, high-value test suite**: every committed test provably kills something.
+The result is a **small, high-value test suite**: every test the mutant loop writes provably kills
+something, or it is deleted. The one exception is the coverage bootstrap, whose tests exist to make
+a file executable at all — they are kept on a green suite, and still reach a PR only if the round
+improved a measured metric.
 
 ## The ralph loop
 
@@ -77,14 +80,17 @@ reward = DoD_score × implementation_performance                    ∈ [0, 1]
 DoD_score = (Σ Di) / N                     Di ∈ {0, 0.5, 1}, the checklist in RESEARCH.md §2
 
 implementation_performance = mean over eval repos of per_repo_score
-  eval set = 1 synthetic repo + 10 real-world OSS repos
+  eval set = 1 synthetic repo + real-world OSS repos (the brief asked for 10; the set has grown
+             to 13 as repos were added). The scorer averages over every result file present.
 
 per_repo_score = 0.4 × completion + 0.6 × improvement
   completion  ∈ {0, 0.5, 1}   1 = ran unattended to a terminal state and produced a PR per
                               improved file; 0.5 = measured but did not finish; 0 = failed
                               before a baseline
-  improvement = clamp(ΔMAC_gap_closed, 0, 1)
-                ΔMAC_gap_closed = (MAC_after − MAC_before) / (100 − MAC_before)
+  improvement = mean, over the repo's targeted files with MAC_before < 100, of
+                clamp((MAC_after − MAC_before) / (100 − MAC_before), 0, 1)
+                a measured file that was not improved contributes 0; files already at MAC 100
+                are excluded from the mean
 ```
 
 The two factors are deliberate: `DoD_score` asks *did we build the thing that was asked for*,
