@@ -15,15 +15,14 @@ export function killParseTest(resp, plan) {
   tests = tests
     .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)
     .slice(0, 1)                                  // one target, one test file
-    .map(t => {
-      let p = String(t.path || '').replace(/^\.?\//, '');
-      // both halves of what sidecar/repo.js:writeTestFile requires — a test-shaped
-      // path AND a js/ts extension. Checking only the first reported files the disk
-      // never received.
-      const safe = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/.test(p)
-        && /\.[cm]?[jt]sx?$/.test(p) && !p.includes('..');
-      const collides = p === plan.existingTestPath && plan.existingTestExists;
-      return { path: (safe && !collides) ? p : plan.targetPath, content: t.content };
-    });
+    // The path is OURS, always. It is derived from the repo's own convention and the
+    // mutant's full identity (mutator, line, column, a hash of the replacement), and
+    // the model knows nothing about placement that we do not. Honouring a proposed
+    // path let a live run write `…kill-L82-booleanliteral.test.ts` among nine siblings
+    // that all carried the identity hash — walking straight back into the collision
+    // the naming exists to prevent, where two mutants on one line overwrite each
+    // other's verified kill. The repo-owned guard does not cover this: it protects
+    // tests that existed before the run, not the ones this run just wrote.
+    .map(t => ({ path: plan.targetPath, content: t.content }));
   return { tests, paths: tests.map(t => t.path), count: tests.length };
 }

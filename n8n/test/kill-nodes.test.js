@@ -388,15 +388,15 @@ test("a path containing '..' is rejected however it is dressed up", () => {
   }
 });
 
-test('a legitimate test path from the model is honoured, with a leading ./ stripped', () => {
-  const cases = [
-    ['./tests/unit/pricing.kill.test.ts', 'tests/unit/pricing.kill.test.ts'],
-    ['/test/pricing.kill-L1-x.test.ts', 'test/pricing.kill-L1-x.test.ts'],
-    ['src/__tests__/pricing.kill.spec.tsx', 'src/__tests__/pricing.kill.spec.tsx'],
-  ];
-  for (const [given, expected] of cases) {
-    assert.deepEqual(killParseTest(reply([{ path: given, content: content(1) }]), plan).paths, [expected], given);
-  }
+test('a path the model proposes is recorded nowhere — the plan decides', () => {
+  // This once asserted the opposite: that a model path which looked like a test file
+  // was honoured, with a leading ./ stripped. A live run showed why that is wrong —
+  // see the planned-path test below. Kept as its inverse rather than deleted, because
+  // the behaviour it describes is the one a future change is most likely to restore.
+  const out = killParseTest(reply([{ path: './tests/unit/quote.spec.ts', content: content(1) }]), plan);
+  assert.deepEqual(out.paths, [plan.targetPath]);
+  assert.equal(out.count, 1, 'the CONTENT is still used — only the path is ours');
+  assert.equal(out.tests[0].content, content(1), 'passed through byte for byte');
 });
 
 test('empty, blank or stub content is dropped', () => {
@@ -540,4 +540,27 @@ test('the escalated prompt tells the model the cheap attempt already failed', ()
   const plan = killBuildPrompt(target(), { thinking: true, escalated: true });
   assert.match(plan.prompt, /already failed|previous attempt|did not kill/i,
     'otherwise it is likely to write the same test again');
+});
+
+test('the kill test always lands on the planned path, never one the model chose', () => {
+  // Live evidence: a run produced `admin-page-data.kill-L82-booleanliteral.test.ts`
+  // among nine siblings that all carry a mutant-identity hash. The model proposed that
+  // path itself and the parser accepted it, because it is test-shaped and js/ts — which
+  // walks straight back into the collision this naming exists to prevent. Two mutants
+  // on one line proposing the same name would overwrite each other's verified kill, and
+  // the repo-owned guard does not help: it protects tests that existed before the run,
+  // not the ones this run just wrote.
+  //
+  // There is nothing the model knows about placement that we do not: the planned path
+  // is derived from the repo's own convention and the mutant's full identity.
+  const cases = [
+    'tests/unit/a.kill-L82-booleanliteral.test.ts',   // plausible, and exactly the hazard
+    'test/somewhere-else.test.ts',
+    './test/relative.test.ts',
+    'src/__tests__/nested.test.tsx',
+  ];
+  for (const p of cases) {
+    const out = killParseTest(reply([{ path: p, content: content(1) }]), plan);
+    assert.deepEqual(out.paths, [plan.targetPath], `${p} must be redirected to the planned path`);
+  }
 });
