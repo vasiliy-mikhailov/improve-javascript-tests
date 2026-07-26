@@ -313,7 +313,7 @@ const routes = {
     S.upsertFile(file, {
       status: 'picked', branch, attempts: state.files[file].attempts + 1,
       rounds: 0, roundBase: null, lastSurvived: null,
-      mutantAttempts: {}, mutantAttemptCount: 0, mutantsKilled: 0,
+      mutantAttempts: {}, mutantAttemptCount: 0, mutantFailures: 0, mutantsKilled: 0,
       attemptStartedAt: Math.floor(Date.now() / 1000),
     });
     S.save();
@@ -515,10 +515,19 @@ const routes = {
     const p = q.get('path');
     const f = p && state.files[p];
     if (!f) throw new Error('unknown file: ' + p);
+    // The budget stops WASTE, not progress: a successful kill is the goal, so only
+    // failed attempts consume it. (Counting every attempt made the loop quit with
+    // 10 killable survivors still on the table.) A generous hard ceiling remains as
+    // a runaway guard.
     const budget = state.run.config.maxMutantsPerFile || 5;
+    const failures = f.mutantFailures || 0;
     const spent = f.mutantAttemptCount || 0;
-    if (spent >= budget) {
-      return { ok: true, mutant: null, done: true, reason: `attempt budget (${budget} mutants) spent for this file` };
+    const hardCeiling = budget * 6;
+    if (failures >= budget) {
+      return { ok: true, mutant: null, done: true, reason: `failure budget spent (${failures} unsuccessful attempts; ${f.mutantsKilled || 0} killed)` };
+    }
+    if (spent >= hardCeiling) {
+      return { ok: true, mutant: null, done: true, reason: `hard attempt ceiling ${hardCeiling} reached (${f.mutantsKilled || 0} killed)` };
     }
     const candidates = mutantsMod.shortlist(f.lastSurvived || [], { attempts: f.mutantAttempts || {} });
     if (!candidates.length) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
@@ -592,7 +601,7 @@ const routes = {
     return {
       ok: true, done: false, path: p, mutant: next,
       pickedBy, killIdea, candidatesConsidered: candidates.length,
-      attemptsSpent: spent, budget,
+      attemptsSpent: spent, failures, budget,
       verifyRange: mutantsMod.verifyRange(next, { fileLines }),
       source, sourceLines: fileLines,
       testPath: guess.path, testExists: guess.exists, existingTest,
@@ -614,6 +623,7 @@ const routes = {
       S.upsertFile(file, {
         mutantAttempts: attempts,
         mutantAttemptCount: (f.mutantAttemptCount || 0) + 1,
+        mutantFailures: (f.mutantFailures || 0) + (killed ? 0 : 1),
         mutantsKilled: (f.mutantsKilled || 0) + (killed ? 1 : 0),
       });
     };
