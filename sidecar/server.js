@@ -520,11 +520,49 @@ const routes = {
     if (spent >= budget) {
       return { ok: true, mutant: null, done: true, reason: `attempt budget (${budget} mutants) spent for this file` };
     }
-    const next = mutantsMod.pickNext(f.lastSurvived || [], { attempts: f.mutantAttempts || {} });
-    if (!next) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
+    const candidates = mutantsMod.shortlist(f.lastSurvived || [], { attempts: f.mutantAttempts || {} });
+    if (!candidates.length) return { ok: true, mutant: null, done: true, reason: 'no viable surviving mutants left' };
 
     const source = repo.readFileSafe(p, 24000);
     const fileLines = source ? source.split('\n').length : null;
+
+    // The model chooses. The heuristic only shortlisted: it can see "covered" and
+    // "clustered", but not whether a mutation has an observable effect a test can
+    // assert — which is what actually decides killability.
+    let next = candidates[0];
+    let pickedBy = 'heuristic (only one candidate)';
+    let killIdea = '';
+    if (candidates.length > 1) {
+      S.setStage('improving_mutation', `choosing the next mutant to attack in ${p}`);
+      try {
+        const req = mutantsMod.buildPickRequest(candidates, {
+          file: p, source, constraints: rulesMod.testWritingConstraints(),
+        });
+        const r = await llm.chat(req);
+        const resolved = mutantsMod.resolvePick(r.json, candidates);
+        if (resolved) {
+          next = resolved.mutant;
+          killIdea = resolved.killIdea;
+          pickedBy = 'llm';
+          state.decisions.pick_mutant = {
+            rule: '(pipeline decision — which surviving mutant to attack next)',
+            result: {
+              file: p, mutator: next.mutator, line: next.line,
+              reason: resolved.reason, killIdea: resolved.killIdea,
+              consideredCandidates: candidates.length,
+            },
+            ts: Date.now(),
+          };
+          S.event('improving_mutation', `LLM picked ${next.mutator} at line ${next.line} of ${candidates.length} candidates: ${resolved.reason}`);
+        } else {
+          pickedBy = 'heuristic (LLM answer unusable)';
+          S.event('improving_mutation', 'mutant choice: LLM answer unusable — falling back to the ranked top candidate');
+        }
+      } catch (e) {
+        pickedBy = 'heuristic (LLM error)';
+        S.event('improving_mutation', 'mutant choice: LLM error — falling back to the ranked top candidate: ' + e.message.slice(0, 140));
+      }
+    }
     const guess = repo.guessTestPath(p);
     let existingTest = guess.exists ? repo.readFileSafe(guess.path, 8000) : null;
     if (!existingTest) {
@@ -532,9 +570,10 @@ const routes = {
       if (ref) existingTest = `// STYLE REFERENCE — an existing test from this repo (${ref.path}).\n${ref.content}`;
     }
     S.setStage('improving_mutation', `targeting ${next.mutator} at ${p}:${next.line} (${spent + 1}/${budget})`);
-    S.event('improving_mutation', `next target: ${next.mutator} at line ${next.line} — ${next.why}`);
+    S.event('improving_mutation', `next target [${pickedBy}]: ${next.mutator} at line ${next.line} — ${next.why}`);
     return {
       ok: true, done: false, path: p, mutant: next,
+      pickedBy, killIdea, candidatesConsidered: candidates.length,
       attemptsSpent: spent, budget,
       verifyRange: mutantsMod.verifyRange(next, { fileLines }),
       source, sourceLines: fileLines,

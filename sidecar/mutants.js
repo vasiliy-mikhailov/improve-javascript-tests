@@ -75,6 +75,51 @@ function pickNext(survivors, opts = {}) {
 }
 
 /**
+ * Ask the model to choose. The heuristic above only shortlists — it is good at
+ * cheap signals (covered? clustered? tractable mutator?) and blind to the thing
+ * that actually decides killability: whether the surrounding code has an
+ * observable effect a test can assert. Prompt/parse live here so they are pure
+ * and unit-testable; the HTTP call happens in the caller.
+ */
+function buildPickRequest(shortlist, { file, source = '', constraints = [] } = {}) {
+  const rows = shortlist.map((m, i) => [
+    `#${i + 1} line ${m.line}${m.column ? ':' + m.column : ''} — ${m.mutator}`,
+    `   code becomes: ${JSON.stringify(String(m.replacement ?? '')).slice(0, 120)}`,
+    `   ${m.status === 'survived' ? 'ALREADY EXECUTED by tests (needs a sharper assertion)' : 'NOT COVERED (a test must reach it first)'}`,
+    m.context ? '   context:\n' + m.context.split('\n').map((l) => '     ' + l).join('\n') : '',
+  ].filter(Boolean).join('\n')).join('\n\n');
+
+  const system = 'You choose which surviving Stryker mutant an automated pipeline should attack next. '
+    + 'It will write ONE test for your choice, then re-run mutation to check the mutant died. '
+    + 'Choose the mutant most likely to be KILLED by a single, honest test — i.e. the mutation changes '
+    + 'behaviour a test can observe through the public API (a returned value, a thrown error, a rendered '
+    + 'output, a callback argument). Avoid mutants whose effect is unobservable (logging, defensive '
+    + 'branches that cannot be triggered, equivalent mutants that do not change behaviour at all). '
+    + 'Prefer one that also puts neighbouring survivors under test. '
+    + 'Reply ONLY with JSON: {"pick": <number from the list>, "reason": "one line", "killIdea": "one line on how to kill it"}.';
+
+  const prompt = `FILE: ${file}\n\nSOURCE:\n${String(source).slice(0, 10000)}\n\n`
+    + `SURVIVING MUTANT CANDIDATES:\n\n${rows}\n\n`
+    + (constraints.length ? `Team constraints on tests:\n${constraints.map((c) => '- ' + c).join('\n')}\n\n` : '')
+    + 'Pick the one single test can most reliably kill. JSON only.';
+
+  return { system, prompt, json: true, maxTokens: 1200, temperature: 0.2 };
+}
+
+/** Validate the model's answer against the shortlist it was actually offered. */
+function resolvePick(answer, shortlist) {
+  if (!answer || !shortlist?.length) return null;
+  const n = Number(answer.pick);
+  if (Number.isInteger(n) && n >= 1 && n <= shortlist.length) {
+    return { mutant: shortlist[n - 1], reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };
+  }
+  // tolerate a line number instead of an index
+  const byLine = shortlist.find((m) => m.line === n);
+  if (byLine) return { mutant: byLine, reason: String(answer.reason || '').slice(0, 300), killIdea: String(answer.killIdea || '').slice(0, 300) };
+  return null;
+}
+
+/**
  * Line range to re-mutate when verifying a kill. Narrow ranges make verification seconds
  * instead of minutes — Stryker accepts "file.ts:120-190" (mutation range, 9.x).
  */
@@ -90,4 +135,14 @@ function rangeSpec(file, range) {
   return `${file}:${range.from}-${range.to}`;
 }
 
-module.exports = { rank, pickNext, mutantKey, sameMutant, verifyRange, rangeSpec, TRACTABLE, NEIGHBOUR_WINDOW };
+/** Shortlist for the model: viable candidates, best-first, small enough to reason about. */
+function shortlist(survivors, { attempts = {}, maxAttemptsPerMutant = 2, size = 12 } = {}) {
+  return rank(survivors, { attempts })
+    .filter((m) => m.failedAttempts < maxAttemptsPerMutant)
+    .slice(0, size);
+}
+
+module.exports = {
+  rank, pickNext, shortlist, buildPickRequest, resolvePick,
+  mutantKey, sameMutant, verifyRange, rangeSpec, TRACTABLE, NEIGHBOUR_WINDOW,
+};

@@ -257,6 +257,7 @@ const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'
   + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'
   + '  status: ' + (m.status === 'survived' ? 'covered by existing tests, but nothing asserts the difference' : 'not covered at all — your test must reach this code') + '\\n'
   + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')
+  + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')
   + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'
   + String(t.existingTest || '(none)').slice(0, 4000)
   + '\\n\\nWrite the single test file that kills this mutant. JSON only.';

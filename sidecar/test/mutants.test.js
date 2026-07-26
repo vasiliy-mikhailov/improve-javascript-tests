@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { rank, pickNext, mutantKey, sameMutant, verifyRange, rangeSpec } = require('../mutants');
+const { rank, pickNext, shortlist, buildPickRequest, resolvePick, mutantKey, sameMutant, verifyRange, rangeSpec } = require('../mutants');
 
 const m = (over = {}) => ({ mutator: 'EqualityOperator', line: 10, column: 3, status: 'survived', replacement: '>', ...over });
 
@@ -60,4 +60,38 @@ test('verifyRange pads around the mutant and clamps to the file', () => {
 
 test('rangeSpec renders Stryker mutation-range syntax', () => {
   assert.equal(rangeSpec('src/foo.ts', { from: 120, to: 190 }), 'src/foo.ts:120-190');
+});
+
+test('shortlist drops exhausted mutants and caps the list', () => {
+  const many = Array.from({ length: 30 }, (_, i) => m({ line: i * 3 + 1 }));
+  const attempts = { [mutantKey(many[0])]: 2 };
+  const short = shortlist(many, { attempts, size: 12 });
+  assert.equal(short.length, 12);
+  assert.ok(!short.some((x) => x.line === many[0].line), 'exhausted mutant excluded');
+});
+
+test('buildPickRequest presents numbered candidates with their coverage status', () => {
+  const req = buildPickRequest([
+    m({ line: 10, status: 'survived' }),
+    m({ line: 20, status: 'nocoverage', mutator: 'StringLiteral' }),
+  ], { file: 'src/a.ts', source: 'export const x = 1;', constraints: ['no introspection'] });
+  assert.match(req.prompt, /#1 line 10/);
+  assert.match(req.prompt, /#2 line 20/);
+  assert.match(req.prompt, /ALREADY EXECUTED/);
+  assert.match(req.prompt, /NOT COVERED/);
+  assert.match(req.prompt, /no introspection/);
+  assert.equal(req.json, true);
+});
+
+test('resolvePick accepts an index and rejects out-of-range answers', () => {
+  const list = [m({ line: 10 }), m({ line: 20 })];
+  assert.equal(resolvePick({ pick: 2, reason: 'r', killIdea: 'k' }, list).mutant.line, 20);
+  assert.equal(resolvePick({ pick: 5 }, list), null);
+  assert.equal(resolvePick({}, list), null);
+  assert.equal(resolvePick(null, list), null);
+});
+
+test('resolvePick tolerates a line number instead of an index', () => {
+  const list = [m({ line: 10 }), m({ line: 42 })];
+  assert.equal(resolvePick({ pick: 42, reason: 'by line' }, list).mutant.line, 42);
 });
