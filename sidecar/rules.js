@@ -20,7 +20,14 @@ function repoContextHead() {
 function testWritingConstraints() {
   const out = [];
   const d = state.decisions || {};
-  if (d.post_clone?.constraints?.length) out.push(...d.post_clone.constraints);
+  // apply() stores every stage as { rule, result, ts }, so the constraints the
+  // post-clone stage extracted live under .result. Reading .constraints directly
+  // always found undefined, which meant everything a team's AGENTS.md said —
+  // conventions, forbidden helpers, house style — was silently dropped before the
+  // test-writing prompt ever saw it. (The pre-`result` shape is still accepted so a
+  // state.json written by an older build keeps working.)
+  const postClone = d.post_clone?.result?.constraints || d.post_clone?.constraints;
+  if (postClone?.length) out.push(...postClone);
   if (rules().write_test) out.push(rules().write_test);
   return out;
 }
