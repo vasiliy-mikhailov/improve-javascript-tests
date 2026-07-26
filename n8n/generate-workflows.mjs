@@ -14,9 +14,9 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
 
 import { emit } from './emit.js';
+import { nodeId } from './node-id.js';
 import { condition } from './nodes/conditions.js';
 import { uiGuidance } from './nodes/ui-guidance.js';
 import { commonTestRules } from './nodes/common-test-rules.js';
@@ -39,7 +39,7 @@ let _x = 0, _y = 0;
 const pos = () => { _x += 220; if (_x > 3600) { _x = 220; _y += 200; } return [_x, _y]; };
 const w = { name: 'Improve JS Tests', nodes: [], connections: {} };
 function add(type, name, parameters = {}, typeVersion = 1) {
-  w.nodes.push({ parameters, type, typeVersion, position: pos(), id: randomUUID(), name });
+  w.nodes.push({ parameters, type, typeVersion, position: pos(), id: nodeId(name), name });
   return name;
 }
 function link(from, to, out = 0) {
