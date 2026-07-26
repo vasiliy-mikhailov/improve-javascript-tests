@@ -10,7 +10,8 @@
     "coverage": "node --test --experimental-test-coverage --test-reporter=spec --test-coverage-exclude='**/test/**' --test-coverage-exclude='**/dashboard/**' --test-coverage-exclude='eval/**' --test-coverage-exclude='scripts/**' sidecar/test/*.test.js n8n/test/*.test.js",
     "coverage:check": "node --test --experimental-test-coverage --test-reporter=spec --test-coverage-exclude='**/test/**' --test-coverage-exclude='**/dashboard/**' --test-coverage-exclude='eval/**' --test-coverage-exclude='scripts/**' --test-coverage-lines=67 --test-coverage-branches=72 --test-coverage-functions=68 sidecar/test/*.test.js n8n/test/*.test.js",
     "workflow": "node n8n/generate-workflows.mjs",
-    "check": "npm test && npm run coverage:check && node n8n/generate-workflows.mjs"
+    "check": "npm test && npm run coverage:check && node n8n/generate-workflows.mjs",
+    "test:prompts": "node eval/prompt-tests/run.mjs"
   },
   "license": "MIT"
 }
