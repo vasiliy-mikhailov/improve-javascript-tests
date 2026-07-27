@@ -596,8 +596,11 @@ test('mutant/verify keeps the test and retires nothing when the target dies', ()
   assert.equal(f.mutantAttemptCount, 1);
   assert.equal(f.mutantFailures, 0);
   assert.equal(f.mutantsKilled, 1);
-  assert.equal(f.mutation, 100, 'the score and the queue are refreshed from the same run');
-  assert.equal(f.survivedTotal, 0);
+  // The window that verified this kill scored only the lines around it, so it may not
+  // set the file's score — /api/verify owns that, from a whole-file run. The queue and
+  // the per-attempt estimate are what the fast path maintains.
+  assert.equal(f.survivedTotal, 0, 'the queue loses what the window proved dead');
+  assert.equal(f.attemptMutation, 100, '1 of 1 mutant dead');
   assert.deepEqual(f.lastSurvived, []);
   assert.equal(S.state.measureLedger[sb.repoSlug][FILE].attemptMutation, 100);
 }));
@@ -652,7 +655,9 @@ test('mutant/verify treats an unverifiable kill as no kill', () => withSandbox(a
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
   const next = await sb.get('/api/mutant/next', { path: FILE });
   w.writeTest(KILL_TEST, { target: FILE, kills: [10] });
-  w.failNext('stryker', new Error('stryker produced no report (exit 137): killed'));
+  // both runs: the window check and the whole-file fallback
+  w.failAlways('stryker', new Error('stryker produced no report (exit 137): killed'));
+  sb.onCleanup(() => w.stopFailing('stryker'));
 
   const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: next.mutant, testPaths: [KILL_TEST] });
 
@@ -731,8 +736,11 @@ test('two verified kills in a row keep the counters and the survivor queue exact
   assert.equal(f.mutantAttemptCount, 2);
   assert.equal(f.mutantFailures, 0);
   assert.deepEqual(f.mutantAttempts, {});
-  assert.equal(f.mutation, 100);
-  assert.equal(f.survivedTotal, 0);
+  assert.equal(f.survivedTotal, 0, 'the queue is empty because both mutants are proven dead');
+  // The window fast path does not write the file's SCORE — that is a whole-file
+  // measurement and /api/verify owns it. What it does maintain is the survivor count,
+  // from which the dashboard's per-attempt estimate is derived.
+  assert.equal(f.attemptMutation, 100, '2 of 2 mutants dead');
 
   const done = await sb.get('/api/mutant/next', { path: FILE });
   assert.equal(done.done, true);

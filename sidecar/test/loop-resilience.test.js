@@ -84,7 +84,10 @@ test('a crashed verification run deletes the test but does not retire the mutant
   const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
   const testPath = 'test/a-kill.test.ts';
   w.writeTest(testPath, { target: FILE, kills: [target.line] });
-  w.failNext('stryker', new Error('stryker produced no report (exit 1)'));
+  // persistent, not transient: the window check and the whole-file fallback are two
+  // separate runs, and a single failure is now survivable by design
+  w.failAlways('stryker', new Error('stryker produced no report (exit 1)'));
+  sb.onCleanup(() => w.stopFailing('stryker'));
 
   const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath] });
 
@@ -298,7 +301,7 @@ test('a mutation run that executed no tests is not read as 112 kills', () => wit
   const before = sb.file(FILE).survivedTotal;
   const testPath = 'test/a-kill.test.ts';
   w.writeTest(testPath, { target: FILE, kills: [target.line] });
-  w.noTestsNext();   // the verification run finds no related tests and measures nothing
+  w.noTestsNext(2);  // both the window check and the whole-file fallback measure nothing
 
   const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath] });
 
@@ -592,3 +595,79 @@ test('each round gets its own waste budget, or round two is a no-op', () => with
   assert.equal(f.mutantGenFailures, 0);
   assert.ok((f.mutantsKilled ?? 0) >= 0, 'kills are cumulative for the file, not reset');
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  verifying a kill on a RANGE instead of the whole file
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured over a 5-hour run: the whole-file mutation re-run after every attempt is
+// 178 of 305 minutes — 58% of the entire pipeline, at a 194s median across 55 runs.
+// It answers one question ("did this mutant die?") by re-testing 126 mutants.
+//
+// A range run answers the same question over the lines around the target. What it
+// CANNOT answer is the file's score or its full survivor list, so those still come
+// from the whole-file run at the end of the round. The rule that keeps this honest:
+// a partial result may never be written as the file's mutation score.
+
+test('a kill is verified on a range, not by re-testing the whole file', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(40) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'thinking' });
+
+  assert.equal(r.killed, true);
+  const ranges = w.calls.stryker.filter((c) => c && c.range);
+  assert.ok(ranges.length >= 1, `the verification must be scoped: ${JSON.stringify(w.calls.stryker)}`);
+  const [from, to] = [ranges[0].range.from, ranges[0].range.to];
+  assert.ok(from <= target.line && to >= target.line, 'the range must contain the target');
+  assert.ok(to - from < 40, 'and be narrower than the file, or it saves nothing');
+}));
+
+test('a partial run never becomes the file\'s mutation score', () => withSandbox(async (sb) => {
+  // A range scores only the lines it mutated. Writing that as the file's score would
+  // report a number computed from a handful of mutants as if it described all 126.
+  const w = await killReady(sb, { mutants: mutantsAt(40) });
+  const before = sb.file(FILE).mutation;
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+
+  await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'thinking' });
+
+  assert.equal(sb.file(FILE).mutation, before,
+    'the score is a whole-file measurement and only /api/verify may set it');
+}));
+
+test('a mutant killed inside the range leaves the queue', () => withSandbox(async (sb) => {
+  // The whole-file run used to refresh the survivor list as a side effect. A range run
+  // cannot, so the mutants it proved dead must be removed explicitly — otherwise the
+  // next pick attacks something already dead and wastes a full attempt.
+  const w = await killReady(sb, { mutants: mutantsAt(40) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  const testPath = 'test/a-kill.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [target.line] });
+
+  await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'thinking' });
+
+  const survivors = sb.file(FILE).lastSurvived || [];
+  assert.ok(!survivors.some((s) => s.line === target.line && s.mutator === target.mutator),
+    'the dead target is still being offered as a candidate');
+}));
+
+test('a transient failure in the window check is covered by the whole-file fallback',
+  () => withSandbox(async (sb) => {
+    // The window is a fast path, not a single point of failure: if it errors, the
+    // verification falls through to the run that was happening every time before.
+    const w = await killReady(sb, { mutants: mutantsAt(6) });
+    const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+    const testPath = 'test/a-kill.test.ts';
+    w.writeTest(testPath, { target: FILE, kills: [target.line] });
+    w.failNext('stryker', new Error('transient stryker hiccup'));   // window only
+
+    const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'thinking' });
+
+    assert.equal(r.killed, true, 'the kill is real and the fallback proved it');
+    assert.equal(w.exists(testPath), true);
+  }));

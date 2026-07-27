@@ -843,52 +843,95 @@ const routes = {
       miss('the generated test failed against the unmutated code');
       return { ok: true, killed: false, retryable: cheap, reason: 'suite red', summary: suite.summary };
     }
-    // 2. Re-run mutation over the WHOLE file. This is the authoritative answer to
-    //    both questions at once: did the target die, and what is still alive now?
-    //    One test frequently kills neighbours too, so a fresh list is worth more
-    //    than a narrow check — and it keeps the score and the queue exact.
-    // untruncated counts: lastSurvived is capped at 100 entries
+    // 2. Verify the kill on a RANGE around the target, and fall back to the whole file
+    //    only when the window saw nothing die.
+    //
+    //    Measured over a 5-hour run: the whole-file re-run after every attempt was 178
+    //    of 305 minutes — 58% of the pipeline, 194s median — spent answering one
+    //    question about one mutant by re-testing every mutant in the file.
+    //
+    //    A window answers that question cheaply, but it cannot see collateral outside
+    //    itself, and a test whose only kill was distant would be discarded on its
+    //    evidence alone. So the window is a FAST PATH, not a replacement: if anything
+    //    in it died, that is enough to keep the test and we stop there. If nothing did,
+    //    we pay for the whole-file run before drawing any conclusion — which is what
+    //    used to happen every single time. About four attempts in five kill something,
+    //    so most of the 178 minutes goes away and no test is thrown out that the old
+    //    path would have kept.
+    const src = repo.readFileSafe(file, 500000);
+    const fileLines = src ? src.split('\n').length : null;
+    const range = mutantsMod.verifyRange(mutant, { pad: 30, fileLines });
+    const inRange = (m) => (m.line ?? 0) >= range.from && (m.line ?? 0) <= range.to;
     const before = f.survivedTotal ?? (f.lastSurvived || []).length;
     const beforeScore = f.mutation ?? 0;
-    let killedTarget = false, killedCount = 0, scoreRose = false, note = '';
+    let killedTarget = false, killedCount = 0, scoreRose = false, note = '', fullRun = false;
     try {
-      const r = await stryker.runStryker(file);
-      // "No tests were executed" carries survived: [] and no totals. As data that
-      // reads as "every mutant is dead"; honestly it means nothing was measured.
-      // The kill check is absence from the survivor list, so an empty list from a
-      // run that never happened once scored a single test as 112 kills.
-      if (r.noTests || r.totalMutants == null) {
-        note = 'mutation re-run executed no tests — nothing was measured';
-        throw new Error(note);
-      }
-      const alive = r.survived || [];
-      // against the FULL survivor list, never the capped one
-      killedTarget = !(r.survivedAll || alive).some((s) => mutantsMod.sameMutant(s, mutant));
-      const afterTotal = r.survivedTotal ?? alive.length;
-      killedCount = Math.max(0, before - afterTotal);
-      scoreRose = (r.score ?? 0) > beforeScore;
-      // fresh, complete survivor list + up-to-date score for the next iteration
-      S.upsertFile(file, {
-        lastSurvived: alive.slice(0, 100),
-        survivedTotal: r.survivedTotal ?? alive.length,
-        mutation: r.score,
-        totalMutants: r.totalMutants,
-        mac: mac(f.coverageAfter ?? f.coverage, r.score),
-      });
-      // Both places, deliberately. recordMeasurement writes the per-repo ledger, which
-      // outlives the run; the file record is what /api/metrics reads and the dashboard
-      // renders. Writing only the ledger meant a file three hours into a round with 85
-      // mutants dead rendered as a blank row — the progress was recorded where nothing
-      // displays it, so the pipeline looked stuck while it was working.
-      const attemptCov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
-      const attemptMac = mac(attemptCov, r.score);
-      recordMeasurement(file, { attemptMutation: r.score, attemptMac });
-      const prevBest = state.files[file]?.attemptMac ?? -1;
-      if ((attemptMac ?? 0) >= prevBest) {
-        S.upsertFile(file, { attemptCoverage: attemptCov, attemptMutation: r.score, attemptMac });
+      const r = await stryker.runStryker(file, { range });
+      // A window with no mutants is not a measurement: an empty survivor list would
+      // read as "everything in it died" — the trap that once scored one test as 112.
+      if (r.noTests || !r.totalMutants) throw new Error('window measured nothing');
+      const alive = r.survivedAll || r.survived || [];
+      killedTarget = !alive.some((x) => mutantsMod.sameMutant(x, mutant));
+      const nowDead = (f.lastSurvived || []).filter(inRange)
+        .filter((m) => !alive.some((x) => mutantsMod.sameMutant(x, m)));
+      if (killedTarget || nowDead.length) {
+        killedCount = nowDead.length || 1;
+        // the queue must lose what this run proved dead, or the next pick attacks a
+        // corpse; the whole-file run used to refresh it as a side effect
+        const pruned = (f.lastSurvived || []).filter((m) => !nowDead.some((d) => mutantsMod.sameMutant(d, m)));
+        const remaining = Math.max(0, before - nowDead.length);
+        S.upsertFile(file, { lastSurvived: pruned, survivedTotal: remaining });
+        // A window cannot measure the file's score, but the survivor COUNT is now
+        // exact for everything it saw, and the total came from the last whole-file
+        // run — so the dashboard gets a real per-attempt figure instead of a blank row.
+        const total = f.totalMutants;
+        if (total) {
+          const est = round2(((total - remaining) / total) * 100);
+          const cov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
+          const estMac = mac(cov, est);
+          recordMeasurement(file, { attemptMutation: est, attemptMac: estMac });
+          if ((estMac ?? 0) >= (state.files[file]?.attemptMac ?? -1)) {
+            S.upsertFile(file, { attemptCoverage: cov, attemptMutation: est, attemptMac: estMac });
+          }
+        }
+      } else {
+        // nothing died where we looked — that is not yet a verdict
+        fullRun = true;
       }
     } catch (e) {
-      note = note || ('mutation re-run failed: ' + e.message.slice(0, 160));
+      fullRun = true;
+      note = 'window check failed: ' + e.message.slice(0, 120);
+    }
+
+    if (fullRun) {
+      note = '';
+      try {
+        const r = await stryker.runStryker(file);
+        if (r.noTests || r.totalMutants == null) {
+          note = 'mutation re-run executed no tests — nothing was measured';
+          throw new Error(note);
+        }
+        const alive = r.survived || [];
+        killedTarget = !(r.survivedAll || alive).some((x) => mutantsMod.sameMutant(x, mutant));
+        const afterTotal = r.survivedTotal ?? alive.length;
+        killedCount = Math.max(0, before - afterTotal);
+        scoreRose = (r.score ?? 0) > beforeScore;
+        S.upsertFile(file, {
+          lastSurvived: alive.slice(0, 100),
+          survivedTotal: afterTotal,
+          mutation: r.score,
+          totalMutants: r.totalMutants,
+          mac: mac(f.coverageAfter ?? f.coverage, r.score),
+        });
+        const cov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
+        const attemptMac = mac(cov, r.score);
+        recordMeasurement(file, { attemptMutation: r.score, attemptMac });
+        if ((attemptMac ?? 0) >= (state.files[file]?.attemptMac ?? -1)) {
+          S.upsertFile(file, { attemptCoverage: cov, attemptMutation: r.score, attemptMac });
+        }
+      } catch (e) {
+        note = note || ('mutation re-run failed: ' + e.message.slice(0, 160));
+      }
     }
 
     // A test earns its place if it killed ANYTHING — collateral kills are real
