@@ -573,6 +573,9 @@ test('the kill test always lands on the planned path, never one the model chose'
 // output — so it rebuilt the same mocks and made the same mistake. The error text was
 // sitting in the verify response the whole time, unused.
 
+// The MODEL-side claim — that being shown the error actually changes the answer — is
+// prompt-tests/generated-test-quality.prompt.test.mjs. This one only proves the text
+// reaches the prompt, which is what a fast offline test can honestly assert.
 test('an escalation carries the runner output that killed the previous attempt', () => {
   const failure = "FAIL tests/unit/a.kill-L4.test.ts\n  Error: Cannot find module '@/lib/db'\n    at <anonymous>";
   const plan = killBuildPrompt(target(), { thinking: true, escalated: true, failure });
