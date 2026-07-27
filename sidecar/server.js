@@ -1022,6 +1022,14 @@ const routes = {
     S.upsertFile(file, {
       rounds,
       roundBase: { coverage: f.coverageAfter, mutation: f.mutationAfter, mac: f.macAfter },
+      // The waste budget is PER ROUND. Carrying it across meant a round that ended on
+      // the budget left the next one with nothing to spend: observed live as round 2
+      // returning STALE 168 seconds after round 1, having made no attempt at all.
+      // Rounds have their own stop rule — they continue only while a metric improves
+      // and none degrades — so the budget does not need to bound them as well.
+      // mutantAttempts is NOT reset: a mutant that resisted a targeted test has had its
+      // one shot, and that verdict holds for the whole file.
+      mutantFailures: 0, mutantGenFailures: 0, mutantAttemptCount: 0, mutantNoOutput: {},
     });
     S.event('improving_mac', `round ${rounds} accepted for ${file} (mac now ${f.macAfter}) — trying another round`);
     return { ok: true, file, rounds };

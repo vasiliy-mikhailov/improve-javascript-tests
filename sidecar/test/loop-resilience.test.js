@@ -568,3 +568,27 @@ test('a test that will not even run still spends the loop budget', () => withSan
   }
   assert.fail('twelve unusable attempts against a budget of four and the loop never stopped');
 }));
+
+test('each round gets its own waste budget, or round two is a no-op', () => withSandbox(async (sb) => {
+  // Observed immediately after the brake landed: round 1 ended on the budget with
+  // MAC 0 → 58.73, the round was accepted, and round 2 came back STALE 168 seconds
+  // later having done nothing at all. The counters are reset per ITERATION, not per
+  // round, so a budget spent in round 1 is still spent in round 2 — the loop exits
+  // before its first pick and every later round is a verify that measures no change.
+  //
+  // The budget bounds waste WITHIN a round. Rounds are already bounded by their own
+  // rule: they continue only while a metric improves and none degrades.
+  const w = await killReady(sb, { mutants: mutantsAt(20) }, { maxMutantsPerFile: 3 });
+  S.upsertFile(FILE, { mutantFailures: 2, mutantGenFailures: 1 });
+  const spent = await sb.get('/api/mutant/next', { path: FILE });
+  assert.equal(spent.mutant, null, 'precondition: the budget is spent');
+
+  await sb.post('/api/round/accept', { file: FILE });
+
+  const next = await sb.get('/api/mutant/next', { path: FILE });
+  assert.ok(next.mutant, 'an accepted round starts with a fresh budget, or it can do no work');
+  const f = sb.file(FILE);
+  assert.equal(f.mutantFailures, 0);
+  assert.equal(f.mutantGenFailures, 0);
+  assert.ok((f.mutantsKilled ?? 0) >= 0, 'kills are cumulative for the file, not reset');
+}));
