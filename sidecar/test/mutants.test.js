@@ -1,7 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { rank, pickNext, shortlist, buildPickRequest, resolvePick, mutantKey, sameMutant, verifyRange, rangeSpec } = require('../mutants');
+const mutants = require('../mutants');
+const { rank, pickNext, shortlist, buildPickRequest, resolvePick, mutantKey, sameMutant, verifyRange, rangeSpec } = mutants;
 
 const m = (over = {}) => ({ mutator: 'EqualityOperator', line: 10, column: 3, status: 'survived', replacement: '>', ...over });
 
@@ -182,4 +183,110 @@ test('an answer that is a line number is not read as an index', () => {
   const r = resolvePick({ pick: 8, line: 8, reason: 'the guard at line 8', killIdea: 'x' }, shortlist);
 
   assert.equal(r.mutant.line, 8, 'the answer named a line, and one candidate is at that line');
+});
+
+// ── attribution: which test killed which mutant ────────────────────────────
+//
+// Stryker's report carries killedBy (test ids) and a testFiles map, so ONE mutation run
+// says both what died and which file did it. That is what makes a sweep possible: write
+// many tests, verify once, keep the ones that earned their place.
+
+test('a report maps every kill back to the test file that made it', () => {
+  const report = {
+    testFiles: {
+      'test/a.mac.test.ts': { tests: [{ id: '0', name: 'kills the boundary' }, { id: '1', name: 'sums' }] },
+      'test/b.kill.test.ts': { tests: [{ id: '2', name: 'rejects empty' }] },
+    },
+    files: {
+      'src/a.ts': {
+        mutants: [
+          { id: 'm1', mutatorName: 'EqualityOperator', status: 'Killed', killedBy: ['0'], location: { start: { line: 4, column: 3 } } },
+          { id: 'm2', mutatorName: 'BooleanLiteral', status: 'Killed', killedBy: ['2'], location: { start: { line: 9, column: 1 } } },
+          { id: 'm3', mutatorName: 'StringLiteral', status: 'Survived', location: { start: { line: 12, column: 2 } } },
+        ],
+      },
+    },
+  };
+
+  const byFile = mutants.killsByTestFile(report);
+
+  assert.equal(byFile['test/a.mac.test.ts'], 1);
+  assert.equal(byFile['test/b.kill.test.ts'], 1);
+  assert.equal(byFile['test/never-killed.test.ts'], undefined);
+});
+
+test('a test file that killed nothing is visible as such, not merely absent', () => {
+  const report = {
+    testFiles: {
+      'test/useful.test.ts': { tests: [{ id: '0' }] },
+      'test/dead-weight.test.ts': { tests: [{ id: '1' }, { id: '2' }] },
+    },
+    files: { 'src/a.ts': { mutants: [{ id: 'm1', status: 'Killed', killedBy: ['0'], location: { start: { line: 1, column: 1 } } }] } },
+  };
+
+  const byFile = mutants.killsByTestFile(report);
+
+  assert.equal(byFile['test/useful.test.ts'], 1);
+  assert.equal(byFile['test/dead-weight.test.ts'], 0,
+    'a file Stryker ran and that killed nothing must report 0, so it can be dropped');
+});
+
+test('a timeout counts as a kill for attribution, exactly as it does for the score', () => {
+  const report = {
+    testFiles: { 'test/slow.test.ts': { tests: [{ id: '7' }] } },
+    files: { 'src/a.ts': { mutants: [
+      { id: 'm1', status: 'Timeout', killedBy: ['7'], location: { start: { line: 3, column: 1 } } },
+    ] } },
+  };
+  assert.equal(mutants.killsByTestFile(report)['test/slow.test.ts'], 1);
+});
+
+// ── the fast filter: what NOT to write ─────────────────────────────────────
+//
+// A thousand mutants at ~100 tokens each is hours of generation. The name of the test
+// that would kill a mutant is derivable from the mutant, so the question "does that
+// test already exist?" costs nothing and is asked BEFORE any model call.
+
+test('mutants at one site share a test name, because one test kills them all', () => {
+  const site = { line: 8, column: 7, status: 'survived' };
+  const names = [
+    mutants.testNameFor({ ...site, mutator: 'EqualityOperator', replacement: 'n > 10' }),
+    mutants.testNameFor({ ...site, mutator: 'EqualityOperator', replacement: 'n < 10' }),
+    mutants.testNameFor({ ...site, mutator: 'EqualityOperator', replacement: 'n === 10' }),
+  ];
+  assert.equal(new Set(names).size, 1, 'one boundary test kills all three, so one name');
+  assert.notEqual(mutants.testNameFor({ line: 8, column: 40, mutator: 'StringLiteral' }), names[0],
+    'a different site on the same line is a different test');
+});
+
+test('grouping puts the busiest site first — one test there retires the most', () => {
+  const surv = [
+    { mutator: 'A', line: 5, column: 1 },
+    { mutator: 'B', line: 9, column: 2 }, { mutator: 'C', line: 9, column: 2 }, { mutator: 'D', line: 9, column: 2 },
+    { mutator: 'E', line: 7, column: 3 }, { mutator: 'F', line: 7, column: 3 },
+  ];
+  const g = mutants.groupByTestName(surv);
+  assert.deepEqual(g.map((x) => x.mutants.length), [3, 2, 1]);
+  assert.equal(g[0].line, 9);
+  assert.equal(g.length, 3, 'six mutants, three tests to write');
+});
+
+test('a group whose test already exists is never sent to the model', () => {
+  const groups = mutants.groupByTestName([
+    { mutator: 'A', line: 4, column: 1 }, { mutator: 'B', line: 12, column: 6 },
+  ]);
+  const existing = [
+    "import { it } from 'vitest';\nit('kills 4:1 — boundary at the floor', () => {});\n",
+  ];
+
+  const todo = mutants.unwrittenGroups(groups, existing);
+
+  assert.equal(todo.length, 1);
+  assert.equal(todo[0].line, 12, 'only the site with no test yet');
+});
+
+test('with no existing tests every group is work', () => {
+  const groups = mutants.groupByTestName([{ mutator: 'A', line: 4, column: 1 }]);
+  assert.equal(mutants.unwrittenGroups(groups, []).length, 1);
+  assert.equal(mutants.unwrittenGroups(groups, ['it("something else", () => {})']).length, 1);
 });

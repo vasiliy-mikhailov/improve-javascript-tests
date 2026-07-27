@@ -187,6 +187,77 @@ function rangeSpec(file, range) {
   return `${file}:${range.from}-${range.to}`;
 }
 
+
+/**
+ * Which test FILE killed how many mutants, from one report.
+ *
+ * Stryker records killedBy (test ids) per mutant and a testFiles map, so a single
+ * mutation run answers both "what died" and "what killed it". That is what lets a sweep
+ * write many tests, verify once, and drop the ones that earned nothing — instead of
+ * paying a mutation run per test to find out.
+ *
+ * A file Stryker ran that killed nothing reports 0 rather than being absent, because
+ * "no entry" and "earned nothing" are different facts and only the second is a reason
+ * to delete a file.
+ */
+function killsByTestFile(report) {
+  const testToFile = {};
+  for (const [file, entry] of Object.entries(report?.testFiles || {})) {
+    for (const t of entry?.tests || []) testToFile[String(t.id)] = file;
+  }
+  const out = {};
+  for (const file of Object.keys(report?.testFiles || {})) out[file] = 0;
+  for (const d of Object.values(report?.files || {})) {
+    for (const m of d?.mutants || []) {
+      // a timeout is a kill for the score, so it is a kill for attribution too
+      if (!['killed', 'timeout'].includes(String(m.status || '').toLowerCase())) continue;
+      for (const id of m.killedBy || []) {
+        const f = testToFile[String(id)];
+        if (f !== undefined) out[f] = (out[f] || 0) + 1;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The canonical name of the test that would kill this mutant.
+ *
+ * Keyed on the SITE, not the mutation: `>` becoming `>=`, `<` and `==` are three
+ * mutants of one condition, and one boundary test kills all three. Naming by site makes
+ * that collapse explicit and — because the name is derived mechanically — lets us ask
+ * "is there already a test called this?" before spending a single token.
+ *
+ * That question is the whole economy of a sweep. A thousand mutants at ~100 tokens each
+ * is hours of generation; grouped by site and filtered against tests that already exist,
+ * most of them cost nothing at all.
+ */
+function testNameFor(m) {
+  return `kills ${m.line}:${m.column ?? 0}`;
+}
+
+/** Survivors grouped into the tests that would kill them: one entry per site. */
+function groupByTestName(survivors) {
+  const groups = new Map();
+  for (const m of survivors) {
+    const name = testNameFor(m);
+    if (!groups.has(name)) groups.set(name, { name, line: m.line, column: m.column ?? 0, mutants: [] });
+    groups.get(name).mutants.push(m);
+  }
+  // biggest sites first: one test there retires the most mutants
+  return [...groups.values()].sort((a, b) => b.mutants.length - a.mutants.length || a.line - b.line);
+}
+
+/**
+ * Drop the groups a test already exists for. Purely textual and deliberately so — it
+ * runs before any model call, over every test we can see, and a name that is present is
+ * a test that has already had its chance at that site.
+ */
+function unwrittenGroups(groups, existingTestSources = []) {
+  const haystack = existingTestSources.join('\n');
+  return groups.filter((g) => !haystack.includes(g.name));
+}
+
 /** Shortlist for the model: viable candidates, best-first, small enough to reason about. */
 function shortlist(survivors, { attempts = {}, maxAttemptsPerMutant = 1, size = 12 } = {}) {
   return rank(survivors, { attempts })
@@ -195,6 +266,7 @@ function shortlist(survivors, { attempts = {}, maxAttemptsPerMutant = 1, size = 
 }
 
 module.exports = {
+  killsByTestFile, testNameFor, groupByTestName, unwrittenGroups,
   rank, pickNext, shortlist, buildPickRequest, resolvePick,
   mutantKey, sameMutant, verifyRange, rangeSpec, TRACTABLE, NEIGHBOUR_WINDOW,
 };
