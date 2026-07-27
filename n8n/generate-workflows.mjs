@@ -25,6 +25,7 @@ import { covParseTests } from './nodes/cov-parse-tests.js';
 import { covBuildRepair } from './nodes/cov-build-repair.js';
 import { covParseRepair } from './nodes/cov-parse-repair.js';
 import { killBuildPrompt } from './nodes/kill-build-prompt.js';
+import { killBuildBatchPrompt } from './nodes/kill-build-batch-prompt.js';
 import { killParseTest } from './nodes/kill-parse-test.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -180,9 +181,28 @@ function mutantLoop(entryNode) {
   });
   IfNum('Mutant To Kill?');
 
+  // ── attempt one: ONE file, EIGHT mutants ──────────────────────────────────
+  // Measured against the real model on eight survivors: 6.0 kills per call against
+  // 3.0 for the single-target prompt, and the single-target path additionally pays a
+  // scoped test run and a mutation check for its one mutant.
+  Code('Kill: Build Batch', emit(killBuildBatchPrompt, PROMPT_DEPS, '$json', '{ thinking: false }'));
+  Http('Kill: LLM Batch', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Code('Kill: Parse Batch', emit(killParseTest, [], '$json', "$('Kill: Build Batch').first().json"));
+  Http('Kill: Write Batch', {
+    path: '/api/test/write-many',
+    body: `={{ { tests: $json.tests, stage: 'improving_mutation' } }}`,
+  });
+  Http('Kill: Verify Batch', {
+    path: '/api/mutant/verify',
+    body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Next Mutant').first().json.targets, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
+    timeout: 2400000,
+  });
+  IfNum('Kill: Batch Failed?');
+
+  // ── fallback: the single-target attempt, cold then escalated ──────────────
   // attempt one, deliberately WITHOUT reasoning: measured 21-28s against 112-186s
   Code('Kill: Build Prompt', emit(killBuildPrompt, PROMPT_DEPS,
-    '$json',                                       // response of Next Mutant
+    "$('Next Mutant').first().json",               // reached via the batch branch now
     '{ thinking: false }'));
 
   Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
@@ -230,7 +250,11 @@ function mutantLoop(entryNode) {
   NoOp('Mutant Loop Done');
 
   chain(entryNode, 'Next Mutant', 'Mutant To Kill?');
-  link('Mutant To Kill?', 'Kill: Build Prompt', 0);
+  link('Mutant To Kill?', 'Kill: Build Batch', 0);
+  chain('Kill: Build Batch', 'Kill: LLM Batch', 'Kill: Parse Batch', 'Kill: Write Batch', 'Kill: Verify Batch');
+  chain('Kill: Verify Batch', 'Kill: Batch Failed?');
+  link('Kill: Batch Failed?', 'Kill: Build Prompt', 0);   // nothing died → try one properly
+  link('Kill: Batch Failed?', 'Next Mutant', 1);          // something died → next batch
   link('Mutant To Kill?', 'Mutant Loop Done', 1);   // budget spent or nothing viable
   chain('Kill: Build Prompt', 'Kill: LLM', 'Kill: Parse Test', 'Kill: Write Test', 'Kill: Verify');
   // killed, or the cheap attempt used up the mutant's shot → next target.

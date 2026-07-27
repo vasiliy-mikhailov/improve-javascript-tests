@@ -750,13 +750,131 @@
     },
     {
       "parameters": {
-        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildPrompt(t, opts) {\n  const o = opts || {};\n  const m = t.mutant;\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  // One file per target — but the NAME has to carry the whole mutant identity, not\n  // just line + mutator. Stryker emits several distinct mutants in one place\n  // (ConditionalExpression gives a `true` and a `false` variant; `a === 1 && b === 2`\n  // gives two EqualityOperator mutants), and sidecar/mutants.js separates them by\n  // column AND replacement, so the loop attacks each of them in its own round. A name\n  // that ignores column and replacement makes round two overwrite the test that killed\n  // round one's mutant — and delete it outright when round two fails.\n  // djb2, inlined: an n8n Code node has no require().\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  const tag = hash(String(m.mutator) + '|' + m.line + '|' + (m.column ?? '') + '|' + String(m.replacement ?? '').slice(0, 60));\n  const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '-' + tag + '.test' + ext;\n  // A column of 0 is a position, not \"no column\" — so ask whether it is ABSENT.\n  const col = m.column == null || m.column === '' ? '' : ':' + m.column;\n  // What the status actually tells the test writer. This is a lookup and not a\n  // two-way ternary because 'survived' and 'nocoverage' are two members of an open\n  // set: sidecar/stryker.js filters survivors to exactly those two today, but the\n  // moment that filter widens, an \"everything else is nocoverage\" branch would tell\n  // the model its target is unreached — and it would then write a test that merely\n  // executes the code instead of one that discriminates the mutation.\n  // Stryker's own enum is PascalCase and the sidecar lower-cases it; do not depend on\n  // that having happened.\n  // null prototype: the status comes from a JSON report, and a plain object would\n  // answer 'constructor' or '__proto__' with a prototype member that then gets\n  // concatenated into the prompt as text.\n  const statusBrief = {\n    __proto__: null,\n    survived: 'covered by existing tests, but nothing asserts the difference',\n    nocoverage: 'not covered at all — your test must reach this code',\n  };\n  const rawStatus = String(m.status ?? '').trim().toLowerCase();\n  // The fallback claims only what is known: the label, and that coverage is unknown.\n  const status = statusBrief[rawStatus]\n    || (rawStatus ? 'Stryker reports this mutant as \"' + rawStatus + '\"' : 'unreported by Stryker')\n      + ' — whether any existing test reaches this code is unknown, so your test must both execute it and assert the difference';\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '\n    + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '\n    + 'Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:' + commonTestRules(1)\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  // Two different failures need two different instructions. A test that would not RUN\n  // is a mocking or import problem and the runner already said exactly what was wrong —\n  // withholding that text made one live round write 13 red tests in a row, each\n  // rebuilding the same broken scaffolding. A test that ran and killed nothing is an\n  // assertion problem, and needs the opposite advice.\n  const failure = String(o.failure || '').trim();\n  const escalation = !o.escalated ? ''\n    : failure\n      ? '\\n\\nA previous attempt at this mutant DID NOT RUN against the real code. This is what the '\n        + 'test runner said:\\n' + failure.slice(0, 2000)\n        + '\\n\\nFix that first: the imports, the module mocks and the setup have to match how this repo '\n        + 'actually wires things — copy the existing test file above rather than inventing a new shape. '\n        + 'A test that cannot run kills nothing.\\n'\n      : '\\n\\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '\n        + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '\n        + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '\n        + 'something that can, such as the arguments a collaborator is called with.\\n';\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nTARGET MUTANT — kill this one:\\n'\n    + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + col + '\\n'\n    + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'\n    + '  status: ' + status + '\\n'\n    + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')\n    + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + escalation\n    + '\\n\\nWrite the single test file that kills this mutant. JSON only.';\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    thinking: o.thinking,\n    stage: 'improving_mutation',\n    stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line\n      + (o.thinking === false ? ' (fast attempt, without reasoning)' : o.escalated ? ' (retry, with reasoning)' : ''),\n    // the parser needs to know which path belongs to the repo, or it cannot refuse it\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };\n}\nreturn [{ json: killBuildPrompt($json, { thinking: false }) }];",
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildBatchPrompt(t, opts) {\n  const o = opts || {};\n  const targets = (t.targets || []).slice(0, 8);\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  // named for the batch, not for one victim: a batch file is dropped or kept whole\n  const tag = hash(targets.map((m) => `${m.mutator}|${m.line}|${m.column ?? ''}|${String(m.replacement ?? '').slice(0, 60)}`).join(';'));\n  const targetPath = base + '.kill-batch-' + tag + '.test' + ext;\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n\n  const list = targets.map((m, i) => {\n    const col = m.column == null || m.column === '' ? '' : ':' + m.column;\n    const status = String(m.status ?? '').trim().toLowerCase() === 'nocoverage'\n      ? 'not covered at all — your test must reach this code'\n      : 'covered by existing tests, but nothing asserts the difference';\n    return `#${i + 1} ${m.mutator} at line ${m.line}${col}\\n`\n      + `    the mutation replaces that code with: ${JSON.stringify(String(m.replacement ?? '')).slice(0, 200)}\\n`\n      + `    ${status}`;\n  }).join('\\n');\n\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file that kills AS MANY as '\n    + 'possible of the Stryker mutants listed below. A mutant is killed when a test FAILS on the mutated code while '\n    + 'PASSING on the real code, so every test case must assert the precise value or behaviour one of those mutations '\n    + 'would change. Prefer several small focused test cases over one large one, and name each case after the target '\n    + 'it kills (for example: \"kills #3: returns 0 for an empty order\"). Do not write a test for anything not on the '\n    + 'list. Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:'\n    + commonTestRules(1) + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nTARGET MUTANTS — kill as many of these as you can, in one file:\\n' + list + '\\n'\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + '\\n\\nWrite the single test file. JSON only.';\n\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    thinking: o.thinking,\n    stage: 'improving_mutation',\n    stageDetail: `writing one test for ${targets.length} mutants` + (o.thinking === false ? ' (fast attempt, without reasoning)' : ''),\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists,\n    targetCount: targets.length };\n}\nreturn [{ json: killBuildBatchPrompt($json, { thinking: false }) }];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1320,
+        400
+      ],
+      "id": "e345b447-b732-241c-883a-e6fdc68c79da",
+      "name": "Kill: Build Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/llm/chat",
+        "options": {
+          "timeout": 900000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        400
+      ],
+      "id": "c59434d8-f9f2-5767-0dfe-c96acaa64909",
+      "name": "Kill: LLM Batch"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction killParseTest(resp, plan) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, 1)                                  // one target, one test file\n    // The path is OURS, always. It is derived from the repo's own convention and the\n    // mutant's full identity (mutator, line, column, a hash of the replacement), and\n    // the model knows nothing about placement that we do not. Honouring a proposed\n    // path let a live run write `…kill-L82-booleanliteral.test.ts` among nine siblings\n    // that all carried the identity hash — walking straight back into the collision\n    // the naming exists to prevent, where two mutants on one line overwrite each\n    // other's verified kill. The repo-owned guard does not cover this: it protects\n    // tests that existed before the run, not the ones this run just wrote.\n    .map(t => ({ path: plan.targetPath, content: t.content }));\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: killParseTest($json, $('Kill: Build Batch').first().json) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        400
+      ],
+      "id": "ebc38634-4b9c-9db7-813e-41aed094d131",
+      "name": "Kill: Parse Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/write-many",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { tests: $json.tests, stage: 'improving_mutation' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        400
+      ],
+      "id": "f2b71c34-6bbf-0d37-a4ee-a8ae8fa67be9",
+      "name": "Kill: Write Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/mutant/verify",
+        "options": {
+          "timeout": 2400000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, mutants: $('Next Mutant').first().json.targets, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ],
+      "id": "3d220e0c-0f21-6ef5-474a-39b6796fe2e7",
+      "name": "Kill: Verify Batch"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.retryable ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        400
+      ],
+      "id": "6d810765-8fe2-5c9a-eeae-ed1f7862d70c",
+      "name": "Kill: Batch Failed?"
+    },
+    {
+      "parameters": {
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildPrompt(t, opts) {\n  const o = opts || {};\n  const m = t.mutant;\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  // One file per target — but the NAME has to carry the whole mutant identity, not\n  // just line + mutator. Stryker emits several distinct mutants in one place\n  // (ConditionalExpression gives a `true` and a `false` variant; `a === 1 && b === 2`\n  // gives two EqualityOperator mutants), and sidecar/mutants.js separates them by\n  // column AND replacement, so the loop attacks each of them in its own round. A name\n  // that ignores column and replacement makes round two overwrite the test that killed\n  // round one's mutant — and delete it outright when round two fails.\n  // djb2, inlined: an n8n Code node has no require().\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  const tag = hash(String(m.mutator) + '|' + m.line + '|' + (m.column ?? '') + '|' + String(m.replacement ?? '').slice(0, 60));\n  const targetPath = base + '.kill-L' + m.line + '-' + String(m.mutator).toLowerCase() + '-' + tag + '.test' + ext;\n  // A column of 0 is a position, not \"no column\" — so ask whether it is ABSENT.\n  const col = m.column == null || m.column === '' ? '' : ':' + m.column;\n  // What the status actually tells the test writer. This is a lookup and not a\n  // two-way ternary because 'survived' and 'nocoverage' are two members of an open\n  // set: sidecar/stryker.js filters survivors to exactly those two today, but the\n  // moment that filter widens, an \"everything else is nocoverage\" branch would tell\n  // the model its target is unreached — and it would then write a test that merely\n  // executes the code instead of one that discriminates the mutation.\n  // Stryker's own enum is PascalCase and the sidecar lower-cases it; do not depend on\n  // that having happened.\n  // null prototype: the status comes from a JSON report, and a plain object would\n  // answer 'constructor' or '__proto__' with a prototype member that then gets\n  // concatenated into the prompt as text.\n  const statusBrief = {\n    __proto__: null,\n    survived: 'covered by existing tests, but nothing asserts the difference',\n    nocoverage: 'not covered at all — your test must reach this code',\n  };\n  const rawStatus = String(m.status ?? '').trim().toLowerCase();\n  // The fallback claims only what is known: the label, and that coverage is unknown.\n  const status = statusBrief[rawStatus]\n    || (rawStatus ? 'Stryker reports this mutant as \"' + rawStatus + '\"' : 'unreported by Stryker')\n      + ' — whether any existing test reaches this code is unknown, so your test must both execute it and assert the difference';\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing the FEWEST tests needed to kill ONE specific Stryker mutant. '\n    + 'A mutant is killed when a test FAILS on the mutated code while PASSING on the real code — so assert the precise value/behaviour the mutation would change. '\n    + 'Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:' + commonTestRules(1)\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  // Two different failures need two different instructions. A test that would not RUN\n  // is a mocking or import problem and the runner already said exactly what was wrong —\n  // withholding that text made one live round write 13 red tests in a row, each\n  // rebuilding the same broken scaffolding. A test that ran and killed nothing is an\n  // assertion problem, and needs the opposite advice.\n  const failure = String(o.failure || '').trim();\n  const escalation = !o.escalated ? ''\n    : failure\n      ? '\\n\\nA previous attempt at this mutant DID NOT RUN against the real code. This is what the '\n        + 'test runner said:\\n' + failure.slice(0, 2000)\n        + '\\n\\nFix that first: the imports, the module mocks and the setup have to match how this repo '\n        + 'actually wires things — copy the existing test file above rather than inventing a new shape. '\n        + 'A test that cannot run kills nothing.\\n'\n      : '\\n\\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '\n        + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '\n        + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '\n        + 'something that can, such as the arguments a collaborator is called with.\\n';\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nTARGET MUTANT — kill this one:\\n'\n    + '  mutator: ' + m.mutator + '\\n  line: ' + m.line + col + '\\n'\n    + '  the mutation replaces that code with: ' + JSON.stringify(m.replacement) + '\\n'\n    + '  status: ' + status + '\\n'\n    + (m.context ? '\\nSOURCE AROUND THE TARGET:\\n' + m.context + '\\n' : '')\n    + (t.killIdea ? '\\nHOW TO KILL IT (from the analysis that selected this mutant):\\n  ' + t.killIdea + '\\n' : '')\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + escalation\n    + '\\n\\nWrite the single test file that kills this mutant. JSON only.';\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    thinking: o.thinking,\n    stage: 'improving_mutation',\n    stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line\n      + (o.thinking === false ? ' (fast attempt, without reasoning)' : o.escalated ? ' (retry, with reasoning)' : ''),\n    // the parser needs to know which path belongs to the repo, or it cannot refuse it\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };\n}\nreturn [{ json: killBuildPrompt($('Next Mutant').first().json, { thinking: false }) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
         400
       ],
       "id": "b954b0cf-8b31-f182-9845-d0090963a8f4",
@@ -779,7 +897,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
+        2860,
         400
       ],
       "id": "a3c1d580-e25e-663b-ff15-dd0a991d194d",
@@ -793,7 +911,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
+        3080,
         400
       ],
       "id": "a7c70428-c5e8-6f09-4343-4522bee682eb",
@@ -816,7 +934,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1980,
+        3300,
         400
       ],
       "id": "f91ad628-d25f-f189-7e6d-a22236942863",
@@ -837,7 +955,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        2200,
+        3520,
         400
       ],
       "id": "f5ed996a-7519-45b9-0491-22809fb15e0f",
@@ -851,8 +969,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
-        400
+        220,
+        600
       ],
       "id": "0dec2f9d-01e7-97dc-9e28-333bf3fcfe8a",
       "name": "Kill: Build Prompt 2"
@@ -874,8 +992,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
-        400
+        440,
+        600
       ],
       "id": "e78ec896-d597-0dc9-0fb1-d04419e775bf",
       "name": "Kill: LLM 2"
@@ -888,8 +1006,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2860,
-        400
+        660,
+        600
       ],
       "id": "f29c939e-13a1-6a3b-697e-257c60767f99",
       "name": "Kill: Parse Test 2"
@@ -911,8 +1029,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3080,
-        400
+        880,
+        600
       ],
       "id": "e411b59e-29d6-f0bb-9830-4a7c127a2911",
       "name": "Kill: Write Test 2"
@@ -934,8 +1052,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3300,
-        400
+        1100,
+        600
       ],
       "id": "2a617422-e524-f543-3cd4-e3e826cae149",
       "name": "Kill: Verify 2"
@@ -957,8 +1075,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3520,
-        400
+        1320,
+        600
       ],
       "id": "ae173b6c-df17-1791-9c93-e3eefed62dbb",
       "name": "Kill: Verify"
@@ -968,7 +1086,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        220,
+        1540,
         600
       ],
       "id": "7fbb1d22-adc7-a9fb-6354-beacfde721ed",
@@ -991,7 +1109,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
+        1760,
         600
       ],
       "id": "20b08db2-107c-27cb-009f-09bcf0b59e85",
@@ -1012,7 +1130,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        660,
+        1980,
         600
       ],
       "id": "7a9491af-d1cf-def6-b48d-d83180d1d370",
@@ -1035,7 +1153,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        2200,
         600
       ],
       "id": "c195a047-4583-ee7e-1930-2139122a32d8",
@@ -1058,7 +1176,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        2420,
         600
       ],
       "id": "c8211682-1aab-9a91-926b-a1b4529b0533",
@@ -1081,7 +1199,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
+        2640,
         600
       ],
       "id": "5add3374-dcee-7a0f-27d8-a29efdf7b5b1",
@@ -1104,7 +1222,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
+        2860,
         600
       ],
       "id": "014af70d-d643-cb84-cb4a-bee31bcfbd82",
@@ -1125,7 +1243,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        1760,
+        3080,
         600
       ],
       "id": "bd1d66fd-d9d9-3196-dfdb-b107a09c3f38",
@@ -1148,7 +1266,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1980,
+        3300,
         600
       ],
       "id": "f4a3300c-62e0-b33d-ce5e-9ffe342fbab7",
@@ -1171,7 +1289,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
+        3520,
         600
       ],
       "id": "c61c01f7-0a6f-623c-6e54-144d1c4fc08a",
@@ -1194,8 +1312,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2420,
-        600
+        220,
+        800
       ],
       "id": "d6e1ac9e-9323-48ad-aeb4-f604bcc8fd93",
       "name": "Discard Changes"
@@ -1205,8 +1323,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        2640,
-        600
+        440,
+        800
       ],
       "id": "10a831b2-5961-1acf-57cb-45dc4b4902b1",
       "name": "Iteration Done"
@@ -1228,8 +1346,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
-        600
+        660,
+        800
       ],
       "id": "e339d30d-a9f5-0ee0-3f72-f057772e643a",
       "name": "Finish Run"
@@ -1239,8 +1357,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        3080,
-        600
+        880,
+        800
       ],
       "id": "63260fbc-1dcf-61bf-818e-62229a10a90d",
       "name": "End"
@@ -1685,7 +1803,7 @@
       "main": [
         [
           {
-            "node": "Kill: Build Prompt",
+            "node": "Kill: Build Batch",
             "type": "main",
             "index": 0
           }
@@ -1693,6 +1811,79 @@
         [
           {
             "node": "Mutant Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Build Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: LLM Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: LLM Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Parse Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Parse Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Write Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Write Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Verify Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Verify Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Batch Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Batch Failed?": {
+      "main": [
+        [
+          {
+            "node": "Kill: Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Next Mutant",
             "type": "main",
             "index": 0
           }

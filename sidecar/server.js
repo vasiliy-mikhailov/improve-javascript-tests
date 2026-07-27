@@ -37,6 +37,10 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+// How many mutants one generated file is asked to kill. Eight measured best against
+// the real model; more crowds the prompt, fewer wastes the cycle.
+const BATCH_TARGETS = 8;
+
 function needRun() { if (!state.run) throw new Error('no active run — POST /api/run/start first'); }
 function ledger() {
   const slug = slugify(state.run.config.repoUrl);
@@ -765,8 +769,15 @@ const routes = {
     }
     S.setStage('improving_mutation', `targeting ${next.mutator} at ${p}:${next.line} (${spent + 1}/${budget})`);
     S.event('improving_mutation', `next target [${pickedBy}]: ${next.mutator} at line ${next.line} — ${next.why}`);
+    // The BATCH the loop aims at first. Measured against the real model on eight
+    // survivors: one file aimed at all of them kills 6.0 on average, where the
+    // single-target prompt kills 3.0 — and a single-target attempt pays a scoped test
+    // run and a mutation check for its one mutant, so the real gap is wider. The
+    // single pick stays as the head of the list and as the fallback when a batch
+    // kills nothing.
+    const batch = [next, ...candidates.filter((m) => !mutantsMod.sameMutant(m, next))].slice(0, BATCH_TARGETS);
     return {
-      ok: true, done: false, path: p, mutant: next,
+      ok: true, done: false, path: p, mutant: next, targets: batch,
       pickedBy, killIdea, candidatesConsidered: candidates.length,
       attemptsSpent: spent, failures, budget,
       verifyRange: mutantsMod.verifyRange(next, { fileLines }),
@@ -783,8 +794,14 @@ const routes = {
     // phase 'cheap' is the no-reasoning first attempt: its failure is not a verdict on
     // the mutant, because the escalated attempt has not happened yet. Anything else
     // (including no phase at all) is the last word.
-    const { file, mutant, testPaths = [], phase } = body;
-    const cheap = phase === 'cheap';
+    const { file, testPaths = [], phase } = body;
+    // One entry point, two shapes: `mutants` is a batch aimed at many targets at once,
+    // `mutant` is the single-target attempt (and the head of any batch). The verdict
+    // machinery below is identical — only the bookkeeping differs, because a batch that
+    // kills nothing has a single-target attempt still to come.
+    const batch = Array.isArray(body.mutants) && body.mutants.length ? body.mutants : null;
+    const mutant = batch ? batch[0] : body.mutant;
+    const cheap = phase === 'cheap' || phase === 'batch';
     const f = file && state.files[file];
     if (!f || !mutant) throw new Error('file and mutant are required');
     const key = mutantsMod.mutantKey(mutant);
@@ -795,12 +812,21 @@ const routes = {
     // with no recorded attempt, so the target could be picked again.
     const bump = (targetDied, worthKeeping) => {
       const attempts = { ...(f.mutantAttempts || {}) };
-      if (!targetDied) attempts[key] = (attempts[key] || 0) + 1;
+      // Every mutant this attempt AIMED at has now had its shot: the ones that died
+      // leave the survivor list on their own, and the ones that survived a test written
+      // for them are retired. Without that, the survivors of a batch come straight back
+      // as candidates and the next batch attacks the same set for ever.
+      const aimed = batch || [mutant];
+      const dead = new Set(deadTargets.map((m) => mutantsMod.mutantKey(m)));
+      for (const m of aimed) {
+        const k = mutantsMod.mutantKey(m);
+        if (!dead.has(k)) attempts[k] = (attempts[k] || 0) + 1;
+      }
       S.upsertFile(file, {
         mutantAttempts: attempts,
         mutantAttemptCount: (f.mutantAttemptCount || 0) + 1,
         mutantFailures: (f.mutantFailures || 0) + (worthKeeping ? 0 : 1),
-        mutantsKilled: (f.mutantsKilled || 0) + (targetDied ? 1 : 0),
+        mutantsKilled: (f.mutantsKilled || 0) + (batch ? deadTargets.length : (targetDied ? 1 : 0)),
       });
     };
     const drop = () => { for (const p of testPaths) repo.deleteTestFile(p); };
@@ -860,11 +886,19 @@ const routes = {
     //    path would have kept.
     const src = repo.readFileSafe(file, 500000);
     const fileLines = src ? src.split('\n').length : null;
-    const range = mutantsMod.verifyRange(mutant, { pad: 30, fileLines });
+    // A batch spans several targets, so the window has to cover all of them — the
+    // union of each one's range, capped so a batch spread across a whole file simply
+    // becomes a whole-file run rather than a window that pretends to be one.
+    const ranges = (batch || [mutant]).map((m) => mutantsMod.verifyRange(m, { pad: 30, fileLines }));
+    const range = {
+      from: Math.min(...ranges.map((r) => r.from)),
+      to: Math.max(...ranges.map((r) => r.to)),
+    };
     const inRange = (m) => (m.line ?? 0) >= range.from && (m.line ?? 0) <= range.to;
     const before = f.survivedTotal ?? (f.lastSurvived || []).length;
     const beforeScore = f.mutation ?? 0;
     let killedTarget = false, killedCount = 0, scoreRose = false, note = '', fullRun = false;
+    let deadTargets = [];
     try {
       const r = await stryker.runStryker(file, { range });
       // A window with no mutants is not a measurement: an empty survivor list would
@@ -872,6 +906,8 @@ const routes = {
       if (r.noTests || !r.totalMutants) throw new Error('window measured nothing');
       const alive = r.survivedAll || r.survived || [];
       killedTarget = !alive.some((x) => mutantsMod.sameMutant(x, mutant));
+      // per-target verdict: which of the ones we AIMED at actually died
+      deadTargets = (batch || [mutant]).filter((m) => !alive.some((x) => mutantsMod.sameMutant(x, m)));
       const nowDead = (f.lastSurvived || []).filter(inRange)
         .filter((m) => !alive.some((x) => mutantsMod.sameMutant(x, m)));
       if (killedTarget || nowDead.length) {
@@ -912,7 +948,9 @@ const routes = {
           throw new Error(note);
         }
         const alive = r.survived || [];
-        killedTarget = !(r.survivedAll || alive).some((x) => mutantsMod.sameMutant(x, mutant));
+        const aliveAll = r.survivedAll || alive;
+        killedTarget = !aliveAll.some((x) => mutantsMod.sameMutant(x, mutant));
+        deadTargets = (batch || [mutant]).filter((m) => !aliveAll.some((x) => mutantsMod.sameMutant(x, m)));
         const afterTotal = r.survivedTotal ?? alive.length;
         killedCount = Math.max(0, before - afterTotal);
         scoreRose = (r.score ?? 0) > beforeScore;
@@ -969,6 +1007,7 @@ const routes = {
       + `— keeping ${testPaths.join(', ')} (${state.files[file].survivedTotal ?? (f.lastSurvived || []).length} survivor(s) left)`);
     return {
       ok: true, killed: true, killedTarget, killedCount, collateral, retryable: false,
+      killedTargets: deadTargets.length, aimedAt: (batch || [mutant]).length,
       testPaths, killedSoFar: state.files[file].mutantsKilled || 0,
     };
   },

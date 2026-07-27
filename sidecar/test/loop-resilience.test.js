@@ -8,7 +8,7 @@
 // a failure budget meant to stop waste, not to stop work.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { withSandbox, S } = require('./helpers/env');   // FIRST, always
+const { withSandbox, S, mutants } = require('./helpers/env');   // FIRST, always
 const { installFakes } = require('./helpers/fakes');
 
 const FILE = 'src/a.ts';
@@ -671,3 +671,72 @@ test('a transient failure in the window check is covered by the whole-file fallb
     assert.equal(r.killed, true, 'the kill is real and the fallback proved it');
     assert.equal(w.exists(testPath), true);
   }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  many mutants per attempt
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Measured against the real model on a fixture with eight survivors: one file aimed at
+// all eight kills 6.0 on average, where the single-target prompt kills 3.0 (its target
+// plus collateral). The pipeline gap is wider still, because a single-target attempt
+// also pays a scoped test run and a mutation verification for that one mutant.
+
+test('mutant/next offers a batch of targets, best-first, alongside the single pick',
+  () => withSandbox(async (sb) => {
+    await killReady(sb, { mutants: mutantsAt(20) });
+
+    const r = await sb.get('/api/mutant/next', { path: FILE });
+
+    assert.ok(Array.isArray(r.targets), 'the batch prompt needs a list');
+    assert.ok(r.targets.length >= 2 && r.targets.length <= 8, `got ${r.targets.length}`);
+    assert.deepEqual(r.targets[0], r.mutant, 'the single-target fallback aims at the best one');
+    const keys = r.targets.map((m) => `${m.mutator}|${m.line}|${m.column}`);
+    assert.equal(new Set(keys).size, keys.length, 'no duplicates — each slot must be a different mutant');
+  }));
+
+test('a batch verification counts every target that died', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(20) });
+  const { targets } = await sb.get('/api/mutant/next', { path: FILE });
+  const batch = targets.slice(0, 4);
+  const testPath = 'test/a-batch.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: batch.slice(0, 3).map((m) => m.line) });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutants: batch, testPaths: [testPath], phase: 'thinking' });
+
+  assert.equal(r.killed, true);
+  assert.equal(r.killedTargets, 3, 'three of the four aimed-at mutants died');
+  assert.equal(w.exists(testPath), true, 'a file that killed three earns its place');
+  assert.equal(sb.file(FILE).mutantsKilled, 3);
+}));
+
+test('every target in a batch spends its one shot, whether it died or not', () => withSandbox(async (sb) => {
+  // Otherwise the survivors of a batch come straight back as candidates and the next
+  // batch re-attacks them — the loop would circle the same mutants for ever.
+  const w = await killReady(sb, { mutants: mutantsAt(20) });
+  const { targets } = await sb.get('/api/mutant/next', { path: FILE });
+  const batch = targets.slice(0, 4);
+  const testPath = 'test/a-batch.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [batch[0].line] });
+
+  await sb.post('/api/mutant/verify', { file: FILE, mutants: batch, testPaths: [testPath], phase: 'thinking' });
+
+  const attempts = sb.file(FILE).mutantAttempts || {};
+  const spent = batch.slice(1).filter((m) => attempts[mutants.mutantKey(m)] > 0).length;
+  assert.equal(spent, 3, 'the three that survived the batch are retired, the one that died needs no record');
+}));
+
+test('a batch that kills nothing falls back to a single-target attempt', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(20) });
+  const { targets } = await sb.get('/api/mutant/next', { path: FILE });
+  const batch = targets.slice(0, 4);
+  const testPath = 'test/a-batch.test.ts';
+  w.writeTest(testPath, { target: FILE, kills: [] });
+
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutants: batch, testPaths: [testPath], phase: 'batch' });
+
+  assert.equal(r.killed, false);
+  assert.equal(r.retryable, true, 'the caller is told a single-target attempt is still worth making');
+  assert.equal(w.exists(testPath), false, 'the useless batch file goes');
+  assert.deepEqual(sb.file(FILE).mutantAttempts || {}, {},
+    'and a failed BATCH spends nobody\'s shot — the single attempt has not happened yet');
+}));
