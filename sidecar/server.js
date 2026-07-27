@@ -931,12 +931,15 @@ const routes = {
     // nothing, and the fallback then paid for a whole-file run on top. Past half the
     // file the window has stopped being cheaper than the thing it defers, and the whole
     // run answers more — the score and the complete survivor list, which a range cannot.
-    // A single target always gets its window — that is the case the window was built
-    // for and it is measured at 1s against 194s. A BATCH only gets one while its union
-    // is still window-shaped: no wider than about two windows, and under half the file.
-    const PAD = 30, span = union.to - union.from;
-    const wide = !!batch && batch.length > 1
-      && (span > PAD * 4 || (fileLines ? span > fileLines * 0.5 : false));
+    // A single target always gets its window — that is the case it was built for and
+    // it is measured at 1s against 194s. For a BATCH the question is not how many LINES
+    // the union spans but how many MUTANTS it re-tests: live, a union of 65 lines held
+    // 131 of a file's 190 mutants, so eleven "windows" each re-tested most of the file
+    // and seven whole-file runs happened on top when they found nothing. Lines are not
+    // the cost.
+    const known = mutantStore.all(file) || [];
+    const inUnion = known.filter((m) => m.line >= union.from && m.line <= union.to).length;
+    const wide = !!batch && batch.length > 1 && known.length > 0 && inUnion > known.length * 0.5;
     const range = wide ? null : union;
     const inRange = (m) => !range || ((m.line ?? 0) >= range.from && (m.line ?? 0) <= range.to);
     const before = f.survivedTotal ?? (f.lastSurvived || []).length;

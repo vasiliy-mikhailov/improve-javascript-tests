@@ -901,3 +901,22 @@ test('a window that covers most of the file is not a window — run the whole th
     assert.equal(ranged, 0, `a union spanning the file must not be run as a window (${ranged} ranged runs)`);
     assert.ok(whole >= 1, 'and the whole-file run must happen instead');
   }));
+
+test('a window is judged by the MUTANTS it re-tests, not the lines it spans', () => withSandbox(async (sb) => {
+  // Live on a dense file: the union spanned 65 lines — comfortably under a line-based
+  // threshold — and held 131 of the file's 190 mutants. Eleven such "windows" re-tested
+  // 70-93% of the file each, and seven whole-file runs happened on top when they found
+  // nothing. Lines are not the cost; mutants are.
+  const w = await killReady(sb, { sourceLines: 400, mutants: mutantsAt(40, 10) });   // all packed into 40 lines
+  const { groups } = await sb.get('/api/mutant/next', { path: FILE });
+  const spread = groups.slice(0, 6).flatMap((g) => g.mutants);
+  w.writeTest('test/a.kill-batch-dense.test.ts', { target: FILE, kills: [spread[0].line] });
+
+  await sb.post('/api/mutant/verify', {
+    file: FILE, mutants: spread, testPaths: ['test/a.kill-batch-dense.test.ts'], phase: 'batch',
+  });
+
+  const ranged = w.calls.stryker.filter((c) => c && c.range).length;
+  assert.equal(ranged, 0,
+    `a window holding most of the file's mutants is a whole-file run with extra steps (${ranged} ranged)`);
+}));
