@@ -216,6 +216,34 @@ function readFileSafe(rel, maxLen = 200000) {
 
 const TEST_PATH_RE = /((^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$)/;
 
+/**
+ * A test WE generated for THIS source file in this run, preferring the coverage
+ * bootstrap's — which is proven green against this exact module.
+ *
+ * This is the one place our own output is the best example available: same file, right
+ * import path, right helpers, and it demonstrably runs. Live evidence for needing it —
+ * on a zod schema model the bootstrap wrote a green safeParse test, guessTestPath went
+ * looking for `<name>.test.ts`, found nothing, and the kill prompt was handed a test
+ * from an unrelated file; every kill test then invented `._def.openapi` and died before
+ * it could kill anything. findStyleReference still refuses generated tests from OTHER
+ * files, where feeding our output back compounds whatever it got wrong.
+ */
+function ourTestFor(srcRel) {
+  const dir = repoDir();
+  const guess = guessTestPath(srcRel);
+  const base = path.basename(guess.path).replace(/\.(test|spec)\.[cm]?[jt]sx?$/, '');
+  const stem = base.replace(/\.(mac-cov(-r\d+)?|mac|kill-L\d+-[a-z0-9-]+|kill-batch-[a-z0-9]+)$/, '');
+  const folder = path.dirname(path.join(dir, guess.path));
+  let names;
+  try { names = fs.readdirSync(folder); } catch { return null; }
+  const mine = names.filter((n) => n.startsWith(stem + '.') && GENERATED_TEST_RE.test(n));
+  if (!mine.length) return null;
+  // the bootstrap first: it is the one written to make the module RUN
+  mine.sort((a, b) => (a.includes('mac-cov') ? 0 : 1) - (b.includes('mac-cov') ? 0 : 1));
+  const rel = path.relative(dir, path.join(folder, mine[0])).split(path.sep).join('/');
+  return { path: rel, content: readFileSafe(rel, 12000) };
+}
+
 /** Tests that existed in the repo before we touched it — never ours to change. */
 function isRepoOwnedTest(rel) { return (state.repoOwnedTests || []).includes(rel); }
 
@@ -344,6 +372,6 @@ function guessTestPath(srcRel) {
 }
 
 module.exports = {
-  repoDir, clone, install, detectRunner, detectUi, findStyleReference, listScopeFiles, createBranch, resetToBase, discardUncommitted,
+  repoDir, clone, install, detectRunner, detectUi, findStyleReference, ourTestFor, listScopeFiles, createBranch, resetToBase, discardUncommitted,
   readFileSafe, writeTestFile, deleteTestFile, guessTestPath, readPkg,
 };

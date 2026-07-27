@@ -740,3 +740,28 @@ test('a batch that kills nothing falls back to a single-target attempt', () => w
   assert.deepEqual(sb.file(FILE).mutantAttempts || {}, {},
     'and a failed BATCH spends nobody\'s shot — the single attempt has not happened yet');
 }));
+
+test('the kill prompt is shown OUR green test for THIS file, not a stranger\'s', () => withSandbox(async (sb) => {
+  // Root cause of the schema-file failures. The bootstrap writes a test that is proven
+  // green against this exact module — right import path, right helpers — and then the
+  // kill prompt was shown a test from an unrelated file instead, because guessTestPath
+  // looks for `<name>.test.ts` and the bootstrap wrote `<name>.mac-cov.test.ts`.
+  //
+  // Live consequence on lib/api-schemas/models/analytics.ts: every kill test reached
+  // for `AnalyticsEmployeesResponse._def.openapi?.title`, which does not exist, and
+  // died before it could kill anything — while the bootstrap's own safeParse example
+  // sat on disk unused.
+  //
+  // This is the one case where our own generated output IS the best example: same
+  // file, proven green. findStyleReference still refuses generated tests from OTHER
+  // files, where feeding our output back would compound whatever it got wrong.
+  const w = await killReady(sb, { mutants: mutantsAt(6) });
+  const bootstrapTest = 'test/a.mac-cov.test.ts';
+  w.writeTest(bootstrapTest, { target: FILE, kills: [], cases: 4, note: 'PROVEN-GREEN-FOR-THIS-FILE' });
+
+  const r = await sb.get('/api/mutant/next', { path: FILE });
+
+  assert.ok(r.existingTest, 'the prompt must carry an example at all');
+  assert.match(r.existingTest, /PROVEN-GREEN-FOR-THIS-FILE/,
+    `the example should be our bootstrap test for this file, got: ${String(r.existingTest).slice(0, 120)}`);
+}));

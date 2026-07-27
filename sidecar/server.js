@@ -762,7 +762,14 @@ const routes = {
       }
     }
     const guess = repo.guessTestPath(p);
-    let existingTest = guess.exists ? repo.readFileSafe(guess.path, 8000) : null;
+    // Prefer a test WE already wrote for THIS file — the bootstrap's is proven green
+    // against this exact module, and a working example is worth more than a stylistic
+    // one from a stranger.
+    const ours = repo.ourTestFor(p);
+    let existingTest = ours?.content
+      ? `// A test already generated for THIS file, and it RUNS. Follow its imports, its\n`
+        + `// helpers and its setup exactly; only the assertions need to be new (${ours.path}).\n${ours.content}`
+      : (guess.exists ? repo.readFileSafe(guess.path, 8000) : null);
     if (!existingTest) {
       const ref = repo.findStyleReference(p);
       if (ref) existingTest = `// STYLE REFERENCE — an existing test from this repo (${ref.path}).\n${ref.content}`;
