@@ -1056,6 +1056,7 @@ const routes = {
         S.event('improving_mac', `nothing to verify for ${file} — this round changed no files`);
         return {
           ok: true, improved: false, improvedAny: false, degradedAny: false, testsGreen: true,
+          pendingSites: mutantStore.pending(file).length, anotherRoundWorthIt: false,
           reason: 'no changes in this round', rounds: f.rounds || 0,
           maxRounds: state.run.config.maxRoundsPerFile, file,
         };
@@ -1103,6 +1104,12 @@ const routes = {
       const changed = await pr.changedFiles();
       // round criterion: keep the round iff ≥1 metric improves AND none degrades
       const rb = f.roundBase || { coverage: f.coverageBefore, mutation: f.mutationBefore, mac: f.macBefore };
+      // Rounds exist to keep improving while improvement is possible. One shot per
+      // mutant means that after the first round nothing is untried, so a second round
+      // re-measures a settled file: five files, five times, +0.00 MAC — and up to 25
+      // minutes each. The gate is therefore a fact about the queue rather than a
+      // constant, so retries returning would bring rounds back with them.
+      const pendingSites = mutantStore.pending(file).length;
       const improvedAny = changed.length > 0 && ((coverageAfter ?? 0) > (rb.coverage ?? 0)
         || (st.score ?? 0) > (rb.mutation ?? 0) || (macAfter ?? 0) > (rb.mac ?? 0));
       const degradedAny = (coverageAfter ?? 0) < (rb.coverage ?? 0)
@@ -1122,7 +1129,10 @@ const routes = {
         mutationBefore: f.mutationBefore, mutationAfter: st.score,
         macBefore: f.macBefore, macAfter,
         improved,
-        improvedAny, degradedAny,
+        improvedAny, degradedAny, pendingSites,
+        // a second round can only re-measure what the first one settled unless a site
+        // is still untried — measured +0.00 MAC on five files out of five
+        anotherRoundWorthIt: pendingSites > 0 && improvedAny && !degradedAny,
         rounds: f.rounds || 0,
         maxRounds: state.run.config.maxRoundsPerFile || 5,
         totalCoverage: cov.totalPct,

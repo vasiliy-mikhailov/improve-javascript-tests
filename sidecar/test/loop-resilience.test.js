@@ -813,3 +813,29 @@ test('the round-end run drops test files that killed nothing', () => withSandbox
   assert.equal(w.exists('test/a.handwritten.test.ts'), true,
     'and a file we did not generate is never ours to delete, whatever it killed');
 }));
+
+test('another round is only worth measuring if a site is still untried', () => withSandbox(async (sb) => {
+  // Measured across every file the pipeline has processed: round 1 gained +70 MAC on
+  // average, round 2 gained 0.00 — not smaller, ZERO, five times out of five. The cause
+  // is structural rather than statistical. Rounds came from the amendment that said keep
+  // improving while metrics improve; one-shot-per-mutant came later and says every site
+  // gets exactly one attempt. After round 1 nothing is untried, so round 2's loop exits
+  // at once and the round-end verify — full suite, coverage, Stryker — runs anyway to
+  // measure a change that cannot exist. On one file that was 25 minutes for +0.0.
+  //
+  // So the gate is a fact, not a constant: if a future change brings retries back,
+  // rounds come back with it.
+  const w = await killReady(sb, { mutants: mutantsAt(4) });
+  const before = await sb.post('/api/verify', { file: FILE });
+  assert.ok(before.pendingSites > 0, 'nothing has been attempted yet, so a round is worth having');
+
+  const groups = (await sb.get('/api/mutant/next', { path: FILE })).groups;
+  await sb.post('/api/mutant/written', { file: FILE, names: groups.map((g) => g.name) });
+  w.writeTest('test/a.kill-batch-x.test.ts', { target: FILE, kills: [1] });
+
+  const after = await sb.post('/api/verify', { file: FILE });
+
+  assert.equal(after.pendingSites, 0, 'every site has had its one shot');
+  assert.equal(after.anotherRoundWorthIt, false,
+    'a second round can only re-measure what the first one already settled');
+}));
