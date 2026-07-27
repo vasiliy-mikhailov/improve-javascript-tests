@@ -280,10 +280,18 @@ test('Mutant To Kill? loops on a target and leaves when the sidecar hands back n
 // =============================================================================
 // Another Round?   $json = POST /api/verify
 // =============================================================================
-const verify = (over = {}) => ({
-  ok: true, file: 'src/a.ts', testsGreen: true, improved: true,
-  improvedAny: true, degradedAny: false, rounds: 0, maxRounds: 5, ...over,
-});
+const verify = (over = {}) => {
+  const base = {
+    ok: true, file: 'src/a.ts', testsGreen: true, improved: true,
+    improvedAny: true, degradedAny: false, rounds: 0, maxRounds: 5, pendingSites: 3, ...over,
+  };
+  // /api/verify computes this from the three facts below; the fixture derives it the
+  // same way unless a case sets it explicitly, so the two cannot drift apart.
+  if (!('anotherRoundWorthIt' in over)) {
+    base.anotherRoundWorthIt = (base.pendingSites ?? 0) > 0 && base.improvedAny && !base.degradedAny;
+  }
+  return base;
+};
 const round = (over) => branchOf('Another Round?', { json: verify(over) });
 // for the missing-field cases: the key must be absent, not overridden with undefined
 const roundOn = (json) => branchOf('Another Round?', { json });
@@ -311,8 +319,11 @@ test('Another Round? falls back to rounds=0 / maxRounds=5 when the fields are mi
   assert.equal(roundOn(without(verify(), 'rounds', 'maxRounds')), 0);
   assert.equal(roundOn(without(verify({ rounds: 4 }), 'maxRounds')), 0, 'default cap of 5: round 5 still allowed');
   assert.equal(roundOn(without(verify({ rounds: 5 }), 'maxRounds')), 1, 'default cap of 5: round 6 refused');
-  assert.equal(roundOn(without(verify(), 'improvedAny')), 1, 'no verdict ⇒ do not spend another round');
-  assert.equal(roundOn(without(verify(), 'degradedAny')), 0, 'no degradation reported ⇒ treated as none');
+  // The verdict the graph now reads is anotherRoundWorthIt — /api/verify derives it
+  // from improvedAny, degradedAny and what is still untried, so a response missing the
+  // verdict must not buy a round.
+  assert.equal(roundOn(without(verify(), 'anotherRoundWorthIt')), 1, 'no verdict ⇒ do not spend another round');
+  assert.equal(roundOn(verify({ anotherRoundWorthIt: false })), 1, 'nothing untried ⇒ nothing to do');
   assert.equal(branchOf('Another Round?', { json: {} }), 1);
 });
 
@@ -445,4 +456,23 @@ test('Baseline OK? routes a file whose baseline could not be measured to the nex
   assert.equal(branchOf('Baseline OK?', { json: { ok: true, score: 42, survived: [], totalMutants: 10 } }), 0);
   assert.equal(branchOf('Baseline OK?', { json: { ok: true, score: 0, survived: [], noTests: true } }), 0,
     'a file with no tests yet is NOT a failure — that is what the coverage bootstrap is for');
+});
+
+test('Another Round? asks the sidecar whether another round can DO anything', () => {
+  // This is a seam, and it failed silently once: /api/verify computed
+  // anotherRoundWorthIt and returned it, the condition never referenced it, and each
+  // side's tests passed — one asserts the response field, the other asserts branch
+  // wiring, and neither asserts they are talking about the same thing. Live cost was
+  // twelve minutes of measuring a file that had nothing left to try.
+  const expr = CONDITIONS['Another Round?'];
+  assert.match(expr, /anotherRoundWorthIt/,
+    'the decision belongs to the side that knows what is left in the queue');
+
+  // and it must still respect the cap
+  assert.match(expr, /maxRounds/);
+  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: true, rounds: 0, maxRounds: 5 }) }), 0);
+  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: false, rounds: 0, maxRounds: 5 }) }), 1,
+    'nothing untried means another round can only re-measure a settled file');
+  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: true, rounds: 5, maxRounds: 5 }) }), 1,
+    'the cap still stops it');
 });

@@ -35,7 +35,13 @@ export const CONDITIONS = {
   // The cap uses `??`, not `||`: a team configuring MAX_ROUNDS_PER_FILE=0 ("one pass per
   // file, no extra rounds") means it, and `|| 5` would hand them five rounds instead.
   // `($json.rounds || 0)` keeps its `||` — 0 is that field's intended default anyway.
-  'Another Round?': '={{ ($json.improvedAny && !$json.degradedAny && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}',
+  // Keep going only if another round can DO something. improvedAny/degradedAny say the
+  // last round went well; anotherRoundWorthIt says a site is still untried, which is
+  // what makes the rest reachable — one shot per mutant means a second round otherwise
+  // finds nothing to attempt and merely re-measures a settled file. Measured: round 1
+  // gained +70 MAC on average, round 2 gained +0.00 five times out of five, at up to 25
+  // minutes each.
+  'Another Round?': '={{ ($json.anotherRoundWorthIt && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}',
   // the rules engine approving is not enough — the round must also have improved something
   'Approved?': "={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}",
 };

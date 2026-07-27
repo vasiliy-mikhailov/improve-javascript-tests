@@ -1143,7 +1143,7 @@
         "conditions": {
           "number": [
             {
-              "value1": "={{ ($json.improvedAny && !$json.degradedAny && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}",
+              "value1": "={{ ($json.anotherRoundWorthIt && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}",
               "value2": 1,
               "operation": "equal"
             }
