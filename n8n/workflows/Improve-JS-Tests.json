@@ -825,6 +825,29 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "http://127.0.0.1:3000/api/mutant/written",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, names: $('Kill: Build Batch').first().json.siteNames } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ],
+      "id": "1575da08-634d-b7a3-4dba-609e5565fb09",
+      "name": "Kill: Sites Written"
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "http://127.0.0.1:3000/api/mutant/verify",
         "options": {
           "timeout": 2400000,
@@ -839,7 +862,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
+        2420,
         400
       ],
       "id": "3d220e0c-0f21-6ef5-474a-39b6796fe2e7",
@@ -860,7 +883,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        2420,
+        2640,
         400
       ],
       "id": "6d810765-8fe2-5c9a-eeae-ed1f7862d70c",
@@ -874,7 +897,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2640,
+        2860,
         400
       ],
       "id": "b954b0cf-8b31-f182-9845-d0090963a8f4",
@@ -897,7 +920,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
+        3080,
         400
       ],
       "id": "a3c1d580-e25e-663b-ff15-dd0a991d194d",
@@ -911,7 +934,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3080,
+        3300,
         400
       ],
       "id": "a7c70428-c5e8-6f09-4343-4522bee682eb",
@@ -934,7 +957,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3300,
+        3520,
         400
       ],
       "id": "f91ad628-d25f-f189-7e6d-a22236942863",
@@ -955,8 +978,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        3520,
-        400
+        220,
+        600
       ],
       "id": "f5ed996a-7519-45b9-0491-22809fb15e0f",
       "name": "Kill: Escalate?"
@@ -969,7 +992,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        220,
+        440,
         600
       ],
       "id": "0dec2f9d-01e7-97dc-9e28-333bf3fcfe8a",
@@ -992,7 +1015,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
+        660,
         600
       ],
       "id": "e78ec896-d597-0dc9-0fb1-d04419e775bf",
@@ -1006,7 +1029,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        660,
+        880,
         600
       ],
       "id": "f29c939e-13a1-6a3b-697e-257c60767f99",
@@ -1029,7 +1052,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        1100,
         600
       ],
       "id": "e411b59e-29d6-f0bb-9830-4a7c127a2911",
@@ -1052,7 +1075,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1320,
         600
       ],
       "id": "2a617422-e524-f543-3cd4-e3e826cae149",
@@ -1075,7 +1098,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
+        1540,
         600
       ],
       "id": "ae173b6c-df17-1791-9c93-e3eefed62dbb",
@@ -1086,7 +1109,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1540,
+        1760,
         600
       ],
       "id": "7fbb1d22-adc7-a9fb-6354-beacfde721ed",
@@ -1109,7 +1132,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
+        1980,
         600
       ],
       "id": "20b08db2-107c-27cb-009f-09bcf0b59e85",
@@ -1130,7 +1153,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        1980,
+        2200,
         600
       ],
       "id": "7a9491af-d1cf-def6-b48d-d83180d1d370",
@@ -1153,7 +1176,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
+        2420,
         600
       ],
       "id": "c195a047-4583-ee7e-1930-2139122a32d8",
@@ -1176,7 +1199,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2420,
+        2640,
         600
       ],
       "id": "c8211682-1aab-9a91-926b-a1b4529b0533",
@@ -1199,7 +1222,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
+        2860,
         600
       ],
       "id": "5add3374-dcee-7a0f-27d8-a29efdf7b5b1",
@@ -1222,7 +1245,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
+        3080,
         600
       ],
       "id": "014af70d-d643-cb84-cb4a-bee31bcfbd82",
@@ -1243,7 +1266,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        3080,
+        3300,
         600
       ],
       "id": "bd1d66fd-d9d9-3196-dfdb-b107a09c3f38",
@@ -1266,7 +1289,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3300,
+        3520,
         600
       ],
       "id": "f4a3300c-62e0-b33d-ce5e-9ffe342fbab7",
@@ -1289,8 +1312,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3520,
-        600
+        220,
+        800
       ],
       "id": "c61c01f7-0a6f-623c-6e54-144d1c4fc08a",
       "name": "Create PR"
@@ -1312,7 +1335,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        220,
+        440,
         800
       ],
       "id": "d6e1ac9e-9323-48ad-aeb4-f604bcc8fd93",
@@ -1323,7 +1346,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        440,
+        660,
         800
       ],
       "id": "10a831b2-5961-1acf-57cb-45dc4b4902b1",
@@ -1346,7 +1369,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        660,
+        880,
         800
       ],
       "id": "e339d30d-a9f5-0ee0-3f72-f057772e643a",
@@ -1357,7 +1380,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        880,
+        1100,
         800
       ],
       "id": "63260fbc-1dcf-61bf-818e-62229a10a90d",
@@ -1851,6 +1874,17 @@
       ]
     },
     "Kill: Write Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Sites Written",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Sites Written": {
       "main": [
         [
           {

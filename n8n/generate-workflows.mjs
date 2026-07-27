@@ -192,6 +192,13 @@ function mutantLoop(entryNode) {
     path: '/api/test/write-many',
     body: `={{ { tests: $json.tests, stage: 'improving_mutation' } }}`,
   });
+  // Every site we just wrote a test for is spent, whatever that test turns out to be
+  // worth. Recorded before verification, because the guarantee is one shot per site —
+  // without this the next sweep offers the same sites for ever.
+  Http('Kill: Sites Written', {
+    path: '/api/mutant/written',
+    body: `={{ { file: $('Start Iteration').first().json.file, names: $('Kill: Build Batch').first().json.siteNames } }}`,
+  });
   Http('Kill: Verify Batch', {
     path: '/api/mutant/verify',
     body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Next Mutant').first().json.targets, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
@@ -251,7 +258,8 @@ function mutantLoop(entryNode) {
 
   chain(entryNode, 'Next Mutant', 'Mutant To Kill?');
   link('Mutant To Kill?', 'Kill: Build Batch', 0);
-  chain('Kill: Build Batch', 'Kill: LLM Batch', 'Kill: Parse Batch', 'Kill: Write Batch', 'Kill: Verify Batch');
+  chain('Kill: Build Batch', 'Kill: LLM Batch', 'Kill: Parse Batch', 'Kill: Write Batch',
+    'Kill: Sites Written', 'Kill: Verify Batch');
   chain('Kill: Verify Batch', 'Kill: Batch Failed?');
   link('Kill: Batch Failed?', 'Kill: Build Prompt', 0);   // nothing died → try one properly
   link('Kill: Batch Failed?', 'Next Mutant', 1);          // something died → next batch
