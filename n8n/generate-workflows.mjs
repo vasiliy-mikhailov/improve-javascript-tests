@@ -200,8 +200,11 @@ function mutantLoop(entryNode) {
   IfNum('Kill: Escalate?');
 
   // ── second attempt, with reasoning ────────────────────────────────────────
+  // the escalation is handed the runner output from the attempt that just failed:
+  // /api/mutant/verify returns it as `summary` when the test was red
   Code('Kill: Build Prompt 2', emit(killBuildPrompt, PROMPT_DEPS,
-    "$('Next Mutant').first().json", '{ thinking: true, escalated: true }'));
+    "$('Next Mutant').first().json",
+    "{ thinking: true, escalated: true, failure: $('Kill: Verify').first().json.summary }"));
   Http('Kill: LLM 2', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
   Code('Kill: Parse Test 2', emit(killParseTest, [], '$json', "$('Kill: Build Prompt 2').first().json"));
   Http('Kill: Write Test 2', {

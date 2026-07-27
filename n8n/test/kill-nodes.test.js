@@ -564,3 +564,36 @@ test('the kill test always lands on the planned path, never one the model chose'
     assert.deepEqual(out.paths, [plan.targetPath], `${p} must be redirected to the planned path`);
   }
 });
+
+// ── the escalation is told WHY the cheap attempt failed ─────────────────────
+//
+// Live evidence from lib/api-schemas/models/allocation.ts: 14 tests written in one
+// round, 13 of them red against the UNMUTATED code, 0 kills, 25 minutes. Every
+// escalation was told only "a previous attempt already failed" — never the runner
+// output — so it rebuilt the same mocks and made the same mistake. The error text was
+// sitting in the verify response the whole time, unused.
+
+test('an escalation carries the runner output that killed the previous attempt', () => {
+  const failure = "FAIL tests/unit/a.kill-L4.test.ts\n  Error: Cannot find module '@/lib/db'\n    at <anonymous>";
+  const plan = killBuildPrompt(target(), { thinking: true, escalated: true, failure });
+
+  assert.match(plan.prompt, /Cannot find module/, 'the model cannot fix what it is not shown');
+  assert.match(plan.prompt, /did not run|failed against|error/i, 'and it must be labelled as the failure, not as context');
+});
+
+test('an escalation after a test that RAN but killed nothing says so instead', () => {
+  // Two different failures need two different instructions: a test that would not run
+  // is a mocking problem, a test that ran and killed nothing is an assertion problem.
+  const plan = killBuildPrompt(target(), { thinking: true, escalated: true });
+
+  assert.doesNotMatch(plan.prompt, /Cannot find module/);
+  assert.match(plan.prompt, /already failed|did not kill|survived/i);
+});
+
+test('a long failure summary is truncated, not pasted whole', () => {
+  const failure = 'FAIL something\n'.repeat(500);
+  const plan = killBuildPrompt(target(), { thinking: true, escalated: true, failure });
+
+  const section = plan.prompt.slice(plan.prompt.indexOf('FAIL something'));
+  assert.ok(section.length < 3000, `a 7KB stack trace crowds out the source: ${section.length}ch`);
+});

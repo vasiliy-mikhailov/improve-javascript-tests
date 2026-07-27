@@ -15,7 +15,7 @@ import { commonTestRules } from './common-test-rules.js';
 // the cheap attempt — which is exactly where it might be worth six times the wait.
 //
 // @param t     response of the "Next Mutant" node: { mutant, path, testPath, source, ... }
-// @param opts  { thinking, escalated } — the second attempt sets both
+// @param opts  { thinking, escalated, failure } — the second attempt sets all three
 export function killBuildPrompt(t, opts) {
   const o = opts || {};
   const m = t.mutant;
@@ -64,12 +64,23 @@ export function killBuildPrompt(t, opts) {
     + 'Reply ONLY with JSON: {"tests":[{"path":"' + targetPath + '","content":"full test file content"}]}. Rules:' + commonTestRules(1)
     + ui
     + (constraints ? '\nTeam constraints:\n' + constraints : '');
-  const escalation = o.escalated
-    ? '\n\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '
-      + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '
-      + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '
-      + 'something that can, such as the arguments a collaborator is called with.\n'
-    : '';
+  // Two different failures need two different instructions. A test that would not RUN
+  // is a mocking or import problem and the runner already said exactly what was wrong —
+  // withholding that text made one live round write 13 red tests in a row, each
+  // rebuilding the same broken scaffolding. A test that ran and killed nothing is an
+  // assertion problem, and needs the opposite advice.
+  const failure = String(o.failure || '').trim();
+  const escalation = !o.escalated ? ''
+    : failure
+      ? '\n\nA previous attempt at this mutant DID NOT RUN against the real code. This is what the '
+        + 'test runner said:\n' + failure.slice(0, 2000)
+        + '\n\nFix that first: the imports, the module mocks and the setup have to match how this repo '
+        + 'actually wires things — copy the existing test file above rather than inventing a new shape. '
+        + 'A test that cannot run kills nothing.\n'
+      : '\n\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '
+        + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '
+        + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '
+        + 'something that can, such as the arguments a collaborator is called with.\n';
   const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\n'
     + String(t.source || '').slice(0, 12000)
     + '\n\nTARGET MUTANT — kill this one:\n'
