@@ -765,3 +765,51 @@ test('the kill prompt is shown OUR green test for THIS file, not a stranger\'s',
   assert.match(r.existingTest, /PROVEN-GREEN-FOR-THIS-FILE/,
     `the example should be our bootstrap test for this file, got: ${String(r.existingTest).slice(0, 120)}`);
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  the sweep: write per site, verify once
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('mutant/next serves SITES from the durable queue, busiest first', () => withSandbox(async (sb) => {
+  await killReady(sb, { mutants: [
+    { line: 9, column: 2 }, { line: 9, column: 2 }, { line: 9, column: 2 },
+    { line: 7, column: 3 }, { line: 7, column: 3 },
+    { line: 5, column: 1 },
+  ] });
+
+  const r = await sb.get('/api/mutant/next', { path: FILE });
+
+  assert.ok(Array.isArray(r.groups), 'the sweep prompt needs sites, not a flat list');
+  assert.deepEqual(r.groups.map((g) => g.mutants.length), [3, 2, 1]);
+  assert.equal(r.groups[0].name, 'kills 9:2', 'the name is the contract with the skip filter');
+}));
+
+test('a site with a test already written is never offered again', () => withSandbox(async (sb) => {
+  await killReady(sb, { mutants: [{ line: 9, column: 2 }, { line: 7, column: 3 }] });
+  const first = await sb.get('/api/mutant/next', { path: FILE });
+  await sb.post('/api/mutant/written', { file: FILE, names: [first.groups[0].name] });
+
+  const second = await sb.get('/api/mutant/next', { path: FILE });
+
+  assert.ok(!second.groups.some((g) => g.name === first.groups[0].name),
+    'that site had its shot — offering it again is the retry the design forbids');
+}));
+
+test('the round-end run drops test files that killed nothing', () => withSandbox(async (sb) => {
+  // The whole point of a sweep: write broadly, verify ONCE, and let the single mutation
+  // run say which files earned their place. Stryker's killedBy makes that answerable
+  // without a run per file.
+  const w = await killReady(sb, { mutants: [{ line: 10 }, { line: 20 }] });
+  // generated names, because the prune only ever deletes files WE wrote
+  w.writeTest('test/a.kill-batch-earned.test.ts', { target: FILE, kills: [10] });
+  w.writeTest('test/a.kill-batch-nothing.test.ts', { target: FILE, kills: [] });
+  w.writeTest('test/a.handwritten.test.ts', { target: FILE, kills: [] });
+
+  await sb.post('/api/verify', { file: FILE });
+
+  assert.equal(w.exists('test/a.kill-batch-earned.test.ts'), true, 'it killed something');
+  assert.equal(w.exists('test/a.kill-batch-nothing.test.ts'), false,
+    'it killed nothing and the run already knew that — D12 without a second measurement');
+  assert.equal(w.exists('test/a.handwritten.test.ts'), true,
+    'and a file we did not generate is never ours to delete, whatever it killed');
+}));

@@ -14,6 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { killBuildPrompt } from '../nodes/kill-build-prompt.js';
 import { killParseTest } from '../nodes/kill-parse-test.js';
+import { killBuildBatchPrompt } from '../nodes/kill-build-batch-prompt.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 // Shaped after the real 'GET /api/mutant/next' payload, not invented.
@@ -599,4 +600,62 @@ test('a long failure summary is truncated, not pasted whole', () => {
 
   const section = plan.prompt.slice(plan.prompt.indexOf('FAIL something'));
   assert.ok(section.length < 3000, `a 7KB stack trace crowds out the source: ${section.length}ch`);
+});
+
+// ── group-level sweep prompt ────────────────────────────────────────────────
+//
+// One test per SITE, not per mutant. Stryker's report gives location.start.{line,column}
+// for every mutation, so `>` becoming `>=`, `<` and `==` are three mutants of one
+// condition — and one boundary test kills all three. Naming the test after the site is
+// what lets us ask "does that test already exist?" before spending a token, and what
+// stops us writing three tests where one does.
+
+const GROUPS = [
+  { name: 'kills 8:7', line: 8, column: 7, mutants: [
+    { mutator: 'EqualityOperator', line: 8, column: 7, replacement: 'n > 10', status: 'survived' },
+    { mutator: 'EqualityOperator', line: 8, column: 7, replacement: 'n < 10', status: 'survived' },
+    { mutator: 'EqualityOperator', line: 8, column: 7, replacement: 'true', status: 'survived' },
+  ] },
+  { name: 'kills 12:3', line: 12, column: 3, mutants: [
+    { mutator: 'StringLiteral', line: 12, column: 3, replacement: '""', status: 'nocoverage' },
+  ] },
+];
+
+const sweepInput = (over = {}) => ({
+  ok: true, path: 'src/a.ts', runner: 'vitest', packageJson: 'x (type=module)',
+  source: 'export const f = (n) => (n >= 10 ? "big" : "small");\n',
+  testPath: 'test/a.test.ts', testExists: false, existingTest: null,
+  constraints: [], ui: null, groups: GROUPS, ...over,
+});
+
+test('the sweep prompt asks for one test per SITE, named so it can be found again', () => {
+  const p = killBuildBatchPrompt(sweepInput(), { thinking: false });
+
+  assert.match(p.prompt, /kills 8:7/, 'the exact name we will look for later');
+  assert.match(p.prompt, /kills 12:3/);
+  assert.match(p.system, /exactly that name|name each test/i,
+    'the name is the contract — a different one and the skip filter never finds it');
+});
+
+test('a site lists every mutation the one test has to kill', () => {
+  const p = killBuildBatchPrompt(sweepInput(), { thinking: false });
+
+  const section = p.prompt.slice(p.prompt.indexOf('kills 8:7'));
+  for (const r of ['n > 10', 'n < 10', 'true']) {
+    assert.ok(section.includes(JSON.stringify(r)) || section.includes(r),
+      `the test must be told about ${r}, or it kills one variant and leaves two`);
+  }
+});
+
+test('the sweep names its file for the batch, not for one victim', () => {
+  const a = killBuildBatchPrompt(sweepInput(), { thinking: false }).targetPath;
+  const b = killBuildBatchPrompt(sweepInput({ groups: [GROUPS[0]] }), { thinking: false }).targetPath;
+  assert.match(a, /\.kill-batch-[a-z0-9]+\.test\.ts$/);
+  assert.notEqual(a, b, 'different work, different file — a sweep is kept or dropped whole');
+});
+
+test('a flat list of mutants still works, so the single-target path is unaffected', () => {
+  const p = killBuildBatchPrompt(sweepInput({ groups: undefined, targets: GROUPS[0].mutants }), { thinking: false });
+  assert.equal(p.targetCount, 3);
+  assert.match(p.prompt, /n > 10/);
 });

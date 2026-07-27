@@ -246,6 +246,26 @@ function installFakes(sb, opts = {}) {
       })),
       survived: survivors.slice(0, 100),
     };
+    // Stryker's own report, as far as the sidecar reads it: which test file killed
+    // what. Without this the fake cannot express "this file earned nothing", which is
+    // the fact the round-end prune acts on.
+    {
+      const files = allTestFiles();
+      const idOf = new Map(files.map((t, i) => [t.path, String(i)]));
+      out.report = {
+        testFiles: Object.fromEntries(files.map((t) => [t.path, { tests: [{ id: idOf.get(t.path), name: t.path }] }])),
+        files: { [file]: { mutants: pool.map((m) => {
+          const killer = files.find((t) => t.target === file && (t.kills || []).includes(m.line));
+          return {
+            id: String(m.line) + ':' + (m.column ?? 0),
+            mutatorName: m.mutator,
+            status: isDead(m) ? 'Killed' : 'Survived',
+            ...(killer ? { killedBy: [idOf.get(killer.path)] } : {}),
+            location: { start: { line: m.line, column: m.column ?? 0 } },
+          };
+        }) } },
+      };
+    }
     if (stOpts.range) {
       out.partial = true;
       out.range = stOpts.range;

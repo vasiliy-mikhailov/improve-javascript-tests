@@ -14,6 +14,7 @@ const pr = require('./pr');
 const llm = require('./llm');
 const timesheet = require('./timesheet');
 const mutantsMod = require('./mutants');
+const mutantStore = require('./mutant-store');
 const { run } = require('./exec');
 const { mac, fileSlug, round2, clamp, slugify } = require('./util');
 
@@ -454,6 +455,9 @@ const routes = {
       survivedTotal: r.survivedTotal ?? (r.survived || []).length,
       lastSurvived: (r.survived || []).slice(0, 100),
     });
+    // state.json keeps the first hundred for the dashboard; the QUEUE keeps all of
+    // them, on disk, with what has already been tried at each site.
+    mutantStore.replace(file, r.survivedAll || r.survived || []);
     if (body.phase === 'baseline') {
       S.upsertFile(file, {
         macBefore: fileMac, coverageBefore: f.coverage, mutationBefore: r.score,
@@ -783,8 +787,13 @@ const routes = {
     // single pick stays as the head of the list and as the fallback when a batch
     // kills nothing.
     const batch = [next, ...candidates.filter((m) => !mutantsMod.sameMutant(m, next))].slice(0, BATCH_TARGETS);
+    // Sites, not mutants: one test per place in the source, busiest first. The queue
+    // holds every survivor and remembers which sites already have a test, so a file with
+    // a thousand mutants costs one generation per SITE and nothing at all for the sites
+    // already covered.
+    const groups = mutantStore.nextGroups(p, 12);
     return {
-      ok: true, done: false, path: p, mutant: next, targets: batch,
+      ok: true, done: false, path: p, mutant: next, targets: batch, groups,
       pickedBy, killIdea, candidatesConsidered: candidates.length,
       attemptsSpent: spent, failures, budget,
       verifyRange: mutantsMod.verifyRange(next, { fileLines }),
@@ -794,6 +803,17 @@ const routes = {
       constraints: rulesMod.testWritingConstraints(),
       packageJson: (repo.readPkg().name || '') + ' (type=' + (repo.readPkg().type || 'commonjs') + ')',
     };
+  },
+
+  // A site now has a test, whatever that test turns out to be worth. Recorded before
+  // any verification, because the guarantee is "one shot per site" and a shot fired is a
+  // shot spent — otherwise the next sweep offers the same sites for ever.
+  'POST /api/mutant/written': async (q, body) => {
+    needRun();
+    const { file, names = [] } = body;
+    if (!file || !state.files[file]) throw new Error('unknown file: ' + file);
+    mutantStore.markWritten(file, names);
+    return { ok: true, written: names.length, pending: mutantStore.pending(file).length };
   },
 
   'POST /api/mutant/verify': async (q, body) => {
@@ -1062,6 +1082,23 @@ const routes = {
       state.run.result.mutationPct = st.score;
       state.run.result.mac = mac(cov.totalPct, st.score);
       S.save();
+      // ONE mutation run has just told us which test file killed what. A file that
+      // killed nothing is dead weight by D12's definition, and this is the only moment
+      // we can say so without paying for another measurement.
+      if (st.report) {
+        const byFile = mutantsMod.killsByTestFile(st.report);
+        const ours = /\.(kill-L\d+-[a-z0-9-]+|kill-batch-[a-z0-9]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/;
+        for (const [testFile, kills] of Object.entries(byFile)) {
+          if (kills > 0 || !ours.test(testFile)) continue;
+          // the coverage bootstrap is exempt: its job is to make the file execute at
+          // all, and it is measured by coverage rather than by kills
+          if (/mac-cov/.test(testFile)) continue;
+          if (repo.deleteTestFile(testFile)) {
+            S.event('improving_mac', `dropped ${testFile}: the mutation run credits it with no kills`);
+          }
+        }
+        mutantStore.recordOutcome(file, { killed: [] });
+      }
       const diff = await pr.diffAgainstBase();
       const changed = await pr.changedFiles();
       // round criterion: keep the round iff ≥1 metric improves AND none degrades

@@ -79,6 +79,9 @@ async function runStryker(file, opts = {}) {
     throw new Error(`stryker produced no report (exit ${r.code}): ` + out.slice(-800));
   }
   const parsed = parseReport(reportAbs, file);
+  // the caller needs killedBy/testFiles to say which test earned its place, and the
+  // report is already on disk and parsed — handing it over costs nothing
+  try { parsed.report = JSON.parse(fs.readFileSync(reportAbs, 'utf8')); } catch { }
   if (opts.range) {
     // A range run scores ONLY those lines. It answers "did this mutant die?", never
     // "what is this file's mutation score" — callers must not write it into metrics.
