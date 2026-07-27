@@ -140,9 +140,16 @@ async function chat(opts) {
 // of failing every call.
 let jsonModeSupported = String(process.env.LLM_JSON_MODE || 'auto') !== 'off';
 
+/**
+ * How long a call may take before we give up on it. Reasoning legitimately runs long —
+ * measured 112-186s median and past 280s at the tail — so a single ceiling turned the
+ * slowest and therefore HARDEST calls into guaranteed failures.
+ */
+function timeoutFor(thinking) { return thinking ? 900000 : 300000; }
+
 async function post(body, attempt = 0) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 300000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutFor(body.chat_template_kwargs?.enable_thinking));
   try {
     const res = await fetch(BASE + '/chat/completions', {
       method: 'POST',
@@ -179,7 +186,12 @@ async function post(body, attempt = 0) {
       reasoning: choice.message?.reasoning || choice.message?.reasoning_content || '',
     };
   } catch (e) {
-    if (attempt < 2 && /abort|network|fetch failed|ECONN/i.test(String(e.message))) {
+    // Never retry an abort WE caused: the same request takes the same time and hits the
+    // same ceiling. Live, that turned two slow escalations into 631s and 447s of
+    // nothing — three attempts each, all identical, all aborted. Transport failures are
+    // different and still worth a second go.
+    const ours = e.name === 'AbortError' || /operation was aborted/i.test(String(e.message));
+    if (!ours && attempt < 2 && /network|fetch failed|ECONN|socket/i.test(String(e.message))) {
       await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
       return post(body, attempt + 1);
     }
@@ -187,4 +199,4 @@ async function post(body, attempt = 0) {
   } finally { clearTimeout(timer); }
 }
 
-module.exports = { chat };
+module.exports = { chat, timeoutFor };

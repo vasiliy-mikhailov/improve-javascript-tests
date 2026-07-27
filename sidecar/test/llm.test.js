@@ -291,3 +291,36 @@ test('forcing thinking off also forces the retry to think — the cheap try alre
       'a second cheap attempt would repeat the first one');
   } finally { f.restore(); }
 });
+
+test('a call we aborted ourselves is not retried — it would take the same time again', async () => {
+  // Live: two escalated calls burned 631s and 447s. The 300s AbortController fired,
+  // the retry logic saw "aborted" alongside network errors and tried twice more at the
+  // same ceiling, and each attempt aborted at exactly the same point. Eighteen minutes,
+  // no answer. A timeout WE set is deterministic; only a transport failure is worth
+  // retrying.
+  let calls = 0;
+  const real = global.fetch;
+  global.fetch = async () => { calls += 1; const e = new Error('This operation was aborted'); e.name = 'AbortError'; throw e; };
+  try {
+    await assert.rejects(() => llm.chat({ prompt: 'x', maxTokens: 500 }), /aborted/);
+    assert.equal(calls, 1, `an abort must not be retried — the endpoint was called ${calls} times`);
+  } finally { global.fetch = real; }
+});
+
+test('a thinking call gets longer to answer than a cold one', async () => {
+  // The ceiling has to clear the measured tail: escalations run 112-186s median and
+  // past 280s at the top, so a 300s limit turns the slowest — and therefore hardest —
+  // calls into guaranteed failures.
+  const seen = [];
+  const real = global.fetch;
+  global.fetch = async (url, init) => {
+    seen.push({ body: JSON.parse(init.body), signal: init.signal });
+    return { ok: true, async json() { return { choices: [{ message: { content: GOOD } }] }; } };
+  };
+  try {
+    await llm.chat({ prompt: 'x', json: true, maxTokens: 4000, thinking: true });
+    await llm.chat({ prompt: 'x', json: true, maxTokens: 4000, thinking: false });
+    assert.ok(llm.timeoutFor(true) > llm.timeoutFor(false), 'reasoning needs more wall clock than no reasoning');
+    assert.ok(llm.timeoutFor(true) >= 600000, `${llm.timeoutFor(true)}ms does not clear the measured tail`);
+  } finally { global.fetch = real; }
+});
