@@ -10,6 +10,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { withSandbox, S, mutants } = require('./helpers/env');   // FIRST, always
 const { installFakes } = require('./helpers/fakes');
+const store = require('../mutant-store');
 
 const FILE = 'src/a.ts';
 
@@ -839,3 +840,64 @@ test('another round is only worth measuring if a site is still untried', () => w
   assert.equal(after.anotherRoundWorthIt, false,
     'a second round can only re-measure what the first one already settled');
 }));
+
+test('the queue is filled by whatever measured the survivors, not only the baseline',
+  () => withSandbox(async (sb) => {
+    // Live: the queue file existed and held nothing. It was written only by
+    // /api/stryker/run, and on a file with no tests that run reports "no tests executed"
+    // with an empty survivor list — so the queue was initialised to []. The measurement
+    // that actually finds the survivors is the post-bootstrap re-measure inside
+    // mutant/next, and it never touched the queue. Everything downstream then quietly
+    // fell back to the old behaviour: the same eight sites offered again and again,
+    // the same batch file written twice with the same hash.
+    const w = installFakes(sb);
+    await sb.start();
+    w.addFile({ path: FILE, mutants: mutantsAt(9), coverageWithTests: 90, coverageWithout: 0 });
+    await sb.post('/api/coverage/run', { phase: 'baseline' });
+    await sb.post('/api/iteration/start', { file: FILE });
+    w.noTestsNext();                                   // the baseline measures nothing
+    await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+    assert.equal(store.all(FILE).length, 0, 'precondition: nothing measured yet');
+
+    w.writeTest('test/a.mac-cov.test.ts', { target: FILE, kills: [1] });
+    S.upsertFile(FILE, { survivorsStale: true });
+    await sb.get('/api/mutant/next', { path: FILE });   // the re-measure
+
+    assert.ok(store.all(FILE).length >= 8,
+      `the re-measure must fill the queue — it holds ${store.all(FILE).length}`);
+  }));
+
+test('a verified round refreshes the queue too, so the next round sees what is left',
+  () => withSandbox(async (sb) => {
+    const w = await killReady(sb, { mutants: mutantsAt(9) });
+    w.writeTest('test/a.kill-batch-x.test.ts', { target: FILE, kills: [1, 2, 3] });
+
+    await sb.post('/api/verify', { file: FILE });
+
+    const left = store.all(FILE).map((r) => r.line);
+    assert.ok(!left.includes(1) && !left.includes(2) && !left.includes(3),
+      `the three that died must leave the queue — still holding ${JSON.stringify(left)}`);
+  }));
+
+test('a window that covers most of the file is not a window — run the whole thing',
+  () => withSandbox(async (sb) => {
+    // Eight sites spread over a file produce a union spanning three quarters of it:
+    // measured 143 of 190 mutants in "range", at 120-260s a check. That is a whole-file
+    // run wearing a window's name, and it gives up the score and the full survivor list
+    // for nothing.
+    const w = await killReady(sb, { mutants: mutantsAt(40) });
+    const { groups } = await sb.get('/api/mutant/next', { path: FILE });
+    const spread = [groups[0], ...groups.slice(-1)].filter(Boolean);
+    w.writeTest('test/a.kill-batch-y.test.ts', { target: FILE, kills: [spread[0].line] });
+
+    await sb.post('/api/mutant/verify', {
+      file: FILE, mutants: spread.flatMap((g) => g.mutants), testPaths: ['test/a.kill-batch-y.test.ts'], phase: 'batch',
+    });
+
+    // it must go STRAIGHT to the whole file: a wide window costs a full run and then
+    // the fallback costs another, so the pointless one is pure waste
+    const ranged = w.calls.stryker.filter((c) => c && c.range).length;
+    const whole = w.calls.stryker.filter((c) => c && !c.range).length;
+    assert.equal(ranged, 0, `a union spanning the file must not be run as a window (${ranged} ranged runs)`);
+    assert.ok(whole >= 1, 'and the whole-file run must happen instead');
+  }));

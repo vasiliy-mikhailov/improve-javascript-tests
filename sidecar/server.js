@@ -696,6 +696,11 @@ const routes = {
         // bootstrap just made the file executable. One coverage run, once per file.
         try { await coverage.runCoverage(); } catch { }
         const fresh = await stryker.runStryker(p);
+        // the queue must be filled by whatever MEASURED the survivors. Filling it only
+        // from the baseline left it empty on every file that started with no tests —
+        // and then the sweep silently fell back to the flat shortlist and offered the
+        // same eight sites for ever.
+        mutantStore.replace(p, fresh.survivedAll || fresh.survived || []);
         const cov = state.files[p]?.coverage ?? f.coverage;
         S.upsertFile(p, {
           mutation: fresh.score, mac: mac(cov, fresh.score), totalMutants: fresh.totalMutants,
@@ -917,16 +922,30 @@ const routes = {
     // union of each one's range, capped so a batch spread across a whole file simply
     // becomes a whole-file run rather than a window that pretends to be one.
     const ranges = (batch || [mutant]).map((m) => mutantsMod.verifyRange(m, { pad: 30, fileLines }));
-    const range = {
+    const union = {
       from: Math.min(...ranges.map((r) => r.from)),
       to: Math.max(...ranges.map((r) => r.to)),
     };
-    const inRange = (m) => (m.line ?? 0) >= range.from && (m.line ?? 0) <= range.to;
+    // A sweep's targets are spread across the file, so their union is not a window: one
+    // live check reported 143 of 190 mutants "in range", took four minutes, found
+    // nothing, and the fallback then paid for a whole-file run on top. Past half the
+    // file the window has stopped being cheaper than the thing it defers, and the whole
+    // run answers more — the score and the complete survivor list, which a range cannot.
+    // A single target always gets its window — that is the case the window was built
+    // for and it is measured at 1s against 194s. A BATCH only gets one while its union
+    // is still window-shaped: no wider than about two windows, and under half the file.
+    const PAD = 30, span = union.to - union.from;
+    const wide = !!batch && batch.length > 1
+      && (span > PAD * 4 || (fileLines ? span > fileLines * 0.5 : false));
+    const range = wide ? null : union;
+    const inRange = (m) => !range || ((m.line ?? 0) >= range.from && (m.line ?? 0) <= range.to);
     const before = f.survivedTotal ?? (f.lastSurvived || []).length;
     const beforeScore = f.mutation ?? 0;
     let killedTarget = false, killedCount = 0, scoreRose = false, note = '', fullRun = false;
     let deadTargets = [];
+    if (wide) fullRun = true;
     try {
+      if (wide) throw new Error('window skipped: the union spans most of the file');
       const r = await stryker.runStryker(file, { range });
       // A window with no mutants is not a measurement: an empty survivor list would
       // read as "everything in it died" — the trap that once scored one test as 112.
@@ -963,7 +982,7 @@ const routes = {
       }
     } catch (e) {
       fullRun = true;
-      note = 'window check failed: ' + e.message.slice(0, 120);
+      note = wide ? '' : 'window check failed: ' + e.message.slice(0, 120);
     }
 
     if (fullRun) {
@@ -1098,7 +1117,11 @@ const routes = {
             S.event('improving_mac', `dropped ${testFile}: the mutation run credits it with no kills`);
           }
         }
-        mutantStore.recordOutcome(file, { killed: [] });
+      }
+      // the whole-file run at round end is the most authoritative survivor list there
+      // is; the queue takes it, keeping what each site has already been through
+      mutantStore.replace(file, st.survivedAll || st.survived || []);
+      if (st.report) {
       }
       const diff = await pr.diffAgainstBase();
       const changed = await pr.changedFiles();
