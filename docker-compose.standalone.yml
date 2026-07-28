@@ -1,0 +1,36 @@
+# Standalone run: one container, two published ports, no proxy and no TLS.
+#
+# The default docker-compose.yml is the deployed shape — it publishes nothing and
+# expects an external Caddy on `proxy-net` to terminate TLS and inject the n8n auth
+# cookie. That is deliberate there and useless on a laptop, so this file is the
+# self-contained equivalent:
+#
+#   docker compose -f docker-compose.standalone.yml up -d --build
+#
+#   dashboard  http://localhost:3000/dashboard/
+#   n8n editor http://localhost:5678/     (password: docker exec ijst-standalone cat /data/.owner_password)
+#   start a run  curl -X POST http://localhost:5678/webhook/improve-run -H 'content-type: application/json' -d '{}'
+#
+# Everything the run produces — the clone, the mutant queues, the ledgers, n8n's own
+# database — lives in the named volume, so `down` without `-v` keeps it and `down -v`
+# starts genuinely clean.
+services:
+  improve-javascript-tests:
+    build: .
+    image: improve-javascript-tests:latest
+    container_name: ijst-standalone
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:5678:5678"   # n8n: editor + the improve-run webhook
+      - "127.0.0.1:3000:3000"   # sidecar: /dashboard and the HTTP API
+    environment:
+      # n8n builds webhook/editor links from these; the defaults in .env point at the
+      # deployed hostname, which produces links that do not resolve on a laptop
+      WEBHOOK_URL: http://localhost:5678/
+      N8N_EDITOR_BASE_URL: http://localhost:5678/
+    volumes:
+      - ijst_data:/data
+
+volumes:
+  ijst_data:

@@ -7,7 +7,57 @@ dashboard showing exactly what the pipeline is doing right now.
 
 See [RESEARCH.md](RESEARCH.md) for the problem statement, Definition of Done, and reward formula.
 
-## Quick start (a team adapting this to their repo)
+## Run it yourself, on your own repo, with nothing but Docker
+
+`docker-compose.yml` is the *deployed* shape: it publishes no ports and expects an
+external Caddy on `proxy-net` to terminate TLS and inject the n8n auth cookie. On your
+own machine use the standalone file instead — one container, two ports, no proxy.
+
+```bash
+cp .env.example .env
+```
+
+Four lines in `.env` decide the run; the rest have working defaults:
+
+| key | what to put there |
+| :-- | :-- |
+| `REPO_URL` / `REPO_BRANCH` | the repo to improve. Public repos need no token to clone |
+| `GH_TOKEN` | PAT with `repo` scope — to push the branch and open the PR. Leave empty and set `PR_MODE=local` to keep everything on disk instead |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | any OpenAI-compatible `/v1` endpoint (vLLM, Ollama, OpenAI, …) |
+| `SCOPE_GLOB` / `SCOPE_LIMIT` | which source files are eligible, and how many to process (`1` for a first run, `0` for the whole repo) |
+
+```bash
+docker compose -f docker-compose.standalone.yml up -d --build
+```
+
+- Dashboard — live stage, per-file MAC, model transcript: <http://localhost:3000/dashboard/>
+- n8n editor: <http://localhost:5678/> — user `admin@ijst.local`, password from
+  `docker exec ijst-standalone cat /data/.owner_password`
+- Start a run — hit *Execute* on **Improve JS Tests** in the editor, or:
+
+```bash
+curl -X POST http://localhost:5678/webhook/improve-run -H 'content-type: application/json' -d '{"scopeLimit": 1}'
+```
+
+Any `.env` key can be overridden per run in that JSON body, camelCased
+(`{"repoUrl": "...", "scopeGlob": "lib/**/*.ts"}`) — no restart needed.
+
+Notes:
+
+- **Ports already taken?** Change the left-hand side of the `ports:` mappings; also set
+  `WEBHOOK_URL`/`N8N_EDITOR_BASE_URL` to the port you picked, or n8n's copy-link buttons
+  point at the wrong place.
+- **The target repo's own toolchain must work in the container.** It runs
+  `npm ci || npm install` and needs Vitest or Jest; Stryker is injected. If the repo
+  needs a build step first, set `SETUP_SCRIPT=build`.
+- **State lives in the `ijst_data` volume** — clone, mutant queues, ledgers, n8n's
+  database. `down` keeps it; `down -v` gives you a genuinely clean run.
+- **Watch it work**: `docker logs -f ijst-standalone`, or the dashboard, or
+  `curl -s localhost:3000/api/events?limit=40`.
+- The first run on a fresh repo spends its first minutes on `npm install` and a baseline
+  coverage + mutation measurement before any model call — that is expected, not a hang.
+
+## Quick start (this deployment)
 
 ```bash
 cp .env.example .env      # set REPO_URL, REPO_BRANCH, GH_TOKEN, SCOPE_GLOB, rules
