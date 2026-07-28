@@ -1,6 +1,0 @@
-{
-  "name": "improve-javascript-tests-n8n",
-  "private": true,
-  "type": "module",
-  "description": "Workflow generator + the node logic it inlines. ESM; the sidecar next door stays CommonJS, so the marker lives here rather than in the root package.json."
-}

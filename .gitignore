@@ -13,3 +13,7 @@ node_modules/
 .DS_Store
 .env.deploy
 .claude/
+
+# mutation testing of our own code: sandbox copies and reports are build output
+.stryker-tmp/
+reports/
