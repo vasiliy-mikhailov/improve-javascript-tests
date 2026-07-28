@@ -104,7 +104,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/repo/prepare",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -127,7 +127,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/coverage/run",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -336,7 +336,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/stryker/run",
         "options": {
-          "timeout": 2700000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -435,7 +435,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/llm/chat",
         "options": {
-          "timeout": 900000,
+          "timeout": 1020000,
           "redirect": {
             "redirect": {}
           }
@@ -451,7 +451,8 @@
         200
       ],
       "id": "8a7dd918-73d5-cbad-b5fc-30569c1beecb",
-      "name": "Cov: LLM Write Tests"
+      "name": "Cov: LLM Write Tests",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -495,7 +496,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/test/run",
         "options": {
-          "timeout": 1200000,
+          "timeout": 1920000,
           "redirect": {
             "redirect": {}
           }
@@ -574,7 +575,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/llm/chat",
         "options": {
-          "timeout": 900000,
+          "timeout": 1020000,
           "redirect": {
             "redirect": {}
           }
@@ -590,7 +591,8 @@
         200
       ],
       "id": "12f15cd7-bdb7-5338-2ada-4e31e3ffd11a",
-      "name": "Cov: LLM Repair"
+      "name": "Cov: LLM Repair",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -634,7 +636,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/test/run",
         "options": {
-          "timeout": 1200000,
+          "timeout": 1920000,
           "redirect": {
             "redirect": {}
           }
@@ -712,7 +714,7 @@
         "method": "GET",
         "url": "=http://127.0.0.1:3000/api/mutant/next?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -767,7 +769,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/llm/chat",
         "options": {
-          "timeout": 900000,
+          "timeout": 1020000,
           "redirect": {
             "redirect": {}
           }
@@ -783,7 +785,8 @@
         400
       ],
       "id": "c59434d8-f9f2-5767-0dfe-c96acaa64909",
-      "name": "Kill: LLM Batch"
+      "name": "Kill: LLM Batch",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -850,7 +853,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/mutant/verify",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -908,7 +911,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/llm/chat",
         "options": {
-          "timeout": 900000,
+          "timeout": 1020000,
           "redirect": {
             "redirect": {}
           }
@@ -924,7 +927,8 @@
         400
       ],
       "id": "a3c1d580-e25e-663b-ff15-dd0a991d194d",
-      "name": "Kill: LLM"
+      "name": "Kill: LLM",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -1003,7 +1007,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/llm/chat",
         "options": {
-          "timeout": 900000,
+          "timeout": 1020000,
           "redirect": {
             "redirect": {}
           }
@@ -1019,7 +1023,8 @@
         600
       ],
       "id": "e78ec896-d597-0dc9-0fb1-d04419e775bf",
-      "name": "Kill: LLM 2"
+      "name": "Kill: LLM 2",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -1063,7 +1068,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/mutant/verify",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -1086,7 +1091,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/mutant/verify",
         "options": {
-          "timeout": 2400000,
+          "timeout": 2520000,
           "redirect": {
             "redirect": {}
           }
@@ -1120,7 +1125,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/verify",
         "options": {
-          "timeout": 3600000,
+          "timeout": 4320000,
           "redirect": {
             "redirect": {}
           }
@@ -1231,7 +1236,7 @@
         "method": "POST",
         "url": "http://127.0.0.1:3000/api/test/cleanup",
         "options": {
-          "timeout": 3600000,
+          "timeout": 4320000,
           "redirect": {
             "redirect": {}
           }

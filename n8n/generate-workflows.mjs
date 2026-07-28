@@ -56,7 +56,16 @@ const Code = (name, jsCode) => add('n8n-nodes-base.code', name, { jsCode, mode: 
 // condition must never exist in two places
 const IfNum = (name) => add('n8n-nodes-base.if', name, { conditions: { number: [condition(name)] } }, 1);
 
-function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000 }) {
+// The sidecar's own budgets. Every node that waits on one of these must outlive it,
+// or n8n aborts the request first and the graph never sees the answer.
+export const LLM_BUDGET_MS = 900000;        // sidecar/llm.js  timeoutFor(thinking)
+export const STRYKER_BUDGET_MS = 2400000;   // sidecar/stryker.js  run(..., timeoutMs)
+export const COVERAGE_BUDGET_MS = 1800000;  // sidecar/coverage.js run(..., timeoutMs)
+// Enough for the sidecar to notice its own deadline, unwind and reply.
+const MARGIN_MS = 120000;
+const outlives = (budget) => budget + MARGIN_MS;
+
+function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000, onError }) {
   const params = {
     method,
     url: urlExpr || API + path,
@@ -67,7 +76,12 @@ function Http(name, { method = 'POST', path, urlExpr, body, timeout = 600000 }) 
     params.specifyBody = 'json';
     params.jsonBody = body || '={{ {} }}';
   }
-  return add('n8n-nodes-base.httpRequest', name, params, 4.2);
+  const n = add('n8n-nodes-base.httpRequest', name, params, 4.2);
+  // A node that errors ends the ENTIRE execution — one dropped connection cost a
+  // 496-file run after 5 files. Where the graph downstream already branches on `ok`,
+  // hand it the failure as data instead.
+  if (onError) w.nodes[w.nodes.length - 1].onError = onError;
+  return n;
 }
 
 // Shared prompt fragments both builders call. Passed to `emit` as deps so their
@@ -86,8 +100,8 @@ w.nodes[w.nodes.length - 1].webhookId = 'aa11bb22-ijst-4run-9000-improverun001';
 Http('Start Run', { path: '/api/run/start', body: '={{ $json.body || {} }}' });
 Http('Clone Repo', { path: '/api/repo/clone', timeout: 900000 });
 Http('Rules: post-clone', { path: '/api/rules/apply', body: `={{ { stage: 'post_clone' } }}` });
-Http('Install & Detect', { path: '/api/repo/prepare', timeout: 2400000 });
-Http('Baseline Coverage', { path: '/api/coverage/run', body: `={{ { phase: 'baseline', stage: 'measuring_baseline' } }}`, timeout: 2400000 });
+Http('Install & Detect', { path: '/api/repo/prepare', timeout: outlives(STRYKER_BUDGET_MS) });
+Http('Baseline Coverage', { path: '/api/coverage/run', body: `={{ { phase: 'baseline', stage: 'measuring_baseline' } }}`, timeout: outlives(STRYKER_BUDGET_MS) });
 Http('Rules: pre-pick', { path: '/api/rules/apply', body: `={{ { stage: 'pre_pick' } }}` });
 Http('Rules: write-test', { path: '/api/rules/apply', body: `={{ { stage: 'write_test' } }}` });
 
@@ -98,7 +112,7 @@ Http('Rules: pick file', { path: '/api/rules/apply', body: `={{ { stage: 'pick_f
 IfNum('File Picked?');
 IfNum('Pick Retryable?');
 Http('Start Iteration', { path: '/api/iteration/start', body: `={{ { file: $('Rules: pick file').first().json.result.file } }}` });
-Http('Baseline Mutation', { path: '/api/stryker/run', body: `={{ { file: $('Start Iteration').first().json.file, phase: 'baseline', stage: 'improving_mutation' } }}`, timeout: 2700000 });
+Http('Baseline Mutation', { path: '/api/stryker/run', body: `={{ { file: $('Start Iteration').first().json.file, phase: 'baseline', stage: 'improving_mutation' } }}`, timeout: outlives(STRYKER_BUDGET_MS) });
 Http('Coverage Gaps', { method: 'GET', urlExpr: `=${API}/api/files/gaps?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}` });
 
 chain('Start (manual)', 'Start Run');
@@ -120,12 +134,12 @@ function phase(prefix, buildPromptCode, entryNode) {
   const stage = prefix === 'Cov' ? 'improving_coverage' : 'improving_mutation';
   Code(B('Build Prompt'), buildPromptCode);
   IfNum(B('Has Work?'));
-  Http(B('LLM Write Tests'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Http(B('LLM Write Tests'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
   Code(B('Parse Tests'), emit(covParseTests, [],
     '$json',                                       // the LLM response
     `$('${B('Build Prompt')}').first().json`));    // the plan it was asked to follow
   Http(B('Write Tests'), { path: '/api/test/write-many', body: `={{ { tests: $json.tests, stage: '${stage}' } }}` });
-  Http(B('Run Tests'), { path: '/api/test/run', body: `={{ { stage: '${stage}' } }}`, timeout: 1200000 });
+  Http(B('Run Tests'), { path: '/api/test/run', body: `={{ { stage: '${stage}' } }}`, timeout: outlives(COVERAGE_BUDGET_MS) });
   IfNum(B('Green?'));
   IfNum(B('Wrote Any?'));
   Code(B('Build Repair'), emit(covBuildRepair, [],
@@ -133,12 +147,12 @@ function phase(prefix, buildPromptCode, entryNode) {
     `$('${B('Parse Tests')}').first().json`,       // the files we wrote
     `$('Coverage Gaps').first().json`,             // the source, for reference
     `'${stage}'`));
-  Http(B('LLM Repair'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Http(B('LLM Repair'), { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
   Code(B('Parse Repair'), emit(covParseRepair, [],
     '$json',                                       // the repaired files
     `$('${B('Parse Tests')}').first().json`));    // the only paths a repair may touch
   Http(B('Write Repair'), { path: '/api/test/write-many', body: `={{ { tests: $json.tests } }}` });
-  Http(B('Re-run Tests'), { path: '/api/test/run', body: `={{ {} }}`, timeout: 1200000 });
+  Http(B('Re-run Tests'), { path: '/api/test/run', body: `={{ {} }}`, timeout: outlives(COVERAGE_BUDGET_MS) });
   IfNum(B('Green After Repair?'));
   Http(B('Delete Broken Tests'), {
     path: '/api/test/delete-many',
@@ -177,7 +191,7 @@ function mutantLoop(entryNode) {
     method: 'GET',
     urlExpr: `=${API}/api/mutant/next?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}`,
     // may re-run mutation testing when the survivor list is stale (post-bootstrap)
-    timeout: 2400000,
+    timeout: outlives(STRYKER_BUDGET_MS),
   });
   IfNum('Mutant To Kill?');
 
@@ -186,7 +200,7 @@ function mutantLoop(entryNode) {
   // 3.0 for the single-target prompt, and the single-target path additionally pays a
   // scoped test run and a mutation check for its one mutant.
   Code('Kill: Build Batch', emit(killBuildBatchPrompt, PROMPT_DEPS, '$json', '{ thinking: false }'));
-  Http('Kill: LLM Batch', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Http('Kill: LLM Batch', { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
   Code('Kill: Parse Batch', emit(killParseTest, [], '$json', "$('Kill: Build Batch').first().json"));
   Http('Kill: Write Batch', {
     path: '/api/test/write-many',
@@ -202,7 +216,7 @@ function mutantLoop(entryNode) {
   Http('Kill: Verify Batch', {
     path: '/api/mutant/verify',
     body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Kill: Build Batch').first().json.aimed, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
-    timeout: 2400000,
+    timeout: outlives(STRYKER_BUDGET_MS),
   });
   IfNum('Kill: Batch Failed?');
 
@@ -212,7 +226,7 @@ function mutantLoop(entryNode) {
     "$('Next Mutant').first().json",               // reached via the batch branch now
     '{ thinking: false }'));
 
-  Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
 
   Code('Kill: Parse Test', emit(killParseTest, [],
     '$json',                                       // the LLM response
@@ -232,7 +246,7 @@ function mutantLoop(entryNode) {
   Code('Kill: Build Prompt 2', emit(killBuildPrompt, PROMPT_DEPS,
     "$('Next Mutant').first().json",
     "{ thinking: true, escalated: true, failure: $('Kill: Verify').first().json.summary }"));
-  Http('Kill: LLM 2', { path: '/api/llm/chat', body: '={{ $json }}', timeout: 900000 });
+  Http('Kill: LLM 2', { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
   Code('Kill: Parse Test 2', emit(killParseTest, [], '$json', "$('Kill: Build Prompt 2').first().json"));
   Http('Kill: Write Test 2', {
     path: '/api/test/write-many',
@@ -241,7 +255,7 @@ function mutantLoop(entryNode) {
   Http('Kill: Verify 2', {
     path: '/api/mutant/verify',
     body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test 2').first().json.written, phase: 'thinking' } }}`,
-    timeout: 2400000,
+    timeout: outlives(STRYKER_BUDGET_MS),
   });
 
   Http('Kill: Verify', {
@@ -252,7 +266,7 @@ function mutantLoop(entryNode) {
     // that does not exist — a scoped run that passes vacuously and a mutation run
     // spent proving nothing died.
     body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written, phase: 'cheap' } }}`,
-    timeout: 2400000,
+    timeout: outlives(STRYKER_BUDGET_MS),
   });
   NoOp('Mutant Loop Done');
 
@@ -279,12 +293,12 @@ const mutDone = mutantLoop(covDone);
 // =============================================================================
 // VERIFY → CHECK RULES → PR / DISCARD → LOOP
 // =============================================================================
-Http('Verify', { path: '/api/verify', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: 3600000 });
+Http('Verify', { path: '/api/verify', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: outlives(COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS) });
 IfNum('Round Kept?');
 IfNum('Another Round?');
 Http('Accept Round', { path: '/api/round/accept', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Drop Last Round', { path: '/api/round/drop', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
-Http('Cleanup Tests', { path: '/api/test/cleanup', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: 3600000 });
+Http('Cleanup Tests', { path: '/api/test/cleanup', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: outlives(COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS) });
 Http('Rules: check changes', { path: '/api/rules/apply', body: `={{ { stage: 'check_changes', context: $('Drop Last Round').first().json } }}`, timeout: 600000 });
 IfNum('Approved?');
 Http('Rules: make PR', { path: '/api/rules/apply', body: `={{ { stage: 'make_pr', context: $('Drop Last Round').first().json } }}`, timeout: 600000 });

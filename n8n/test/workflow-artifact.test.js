@@ -100,3 +100,59 @@ test('Kill: Verify Batch is told what the prompt aimed at, not the picker\'s sho
   assert.doesNotMatch(body, /Next Mutant'\)\.first\(\)\.json\.targets/,
     'the ranked shortlist is a picking aid, not the set under test');
 });
+
+// ── a call that runs its full budget must not kill the run ───────────────────
+// A 496-file run stopped after 5. The escalated kill call ran to the sidecar's
+// 900s reasoning budget; the n8n node's timeout was also 900000, and n8n starts its
+// clock first, so the HTTP node errored a moment before the sidecar could answer
+// {ok:false} — and an errored node aborts the whole execution. 491 files never
+// happened, and the event log's last line was "LLM error: fetch failed".
+//
+// Both halves are needed. The margin lets the sidecar always be the one to answer,
+// and onError keeps a transport blip from ending a run the graph could carry on with,
+// since every consumer of an LLM response already branches on `ok`.
+const LLM_BUDGET_MS = 900000;      // sidecar/llm.js timeoutFor(thinking)
+const STRYKER_BUDGET_MS = 2400000; // sidecar/stryker.js run(..., timeoutMs)
+const COVERAGE_BUDGET_MS = 1800000; // sidecar/coverage.js run(..., timeoutMs)
+
+const httpNodes = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.httpRequest');
+const timeoutOf = (n) => n.parameters?.options?.timeout;
+
+test('every model call gives the sidecar room to answer, and survives it not answering', () => {
+  const llm = httpNodes.filter((n) => String(n.parameters.url).includes('/api/llm/chat'));
+  assert.ok(llm.length >= 4, `expected the model-calling nodes, found ${llm.length}`);
+  for (const n of llm) {
+    assert.ok(timeoutOf(n) > LLM_BUDGET_MS,
+      `${n.name}: timeout ${timeoutOf(n)} must exceed the sidecar's ${LLM_BUDGET_MS}ms budget, or n8n aborts first`);
+    assert.equal(n.onError, 'continueRegularOutput',
+      `${n.name}: a failed model call is one lost attempt, not the end of the run`);
+  }
+});
+
+test('every suite run outlives the suite runner', () => {
+  // the inverse of the same mistake: these waited 1200000 on a runner the sidecar
+  // gives 1800000, so n8n gave up first on any repo whose suite is slow
+  for (const n of httpNodes.filter((x) => String(x.parameters.url).includes('/api/test/run'))) {
+    assert.ok(timeoutOf(n) > COVERAGE_BUDGET_MS,
+      `${n.name}: timeout ${timeoutOf(n)} must exceed the runner's ${COVERAGE_BUDGET_MS}ms budget`);
+  }
+});
+
+test('a stage that runs coverage AND mutation outlives both together', () => {
+  // /api/verify and /api/test/cleanup do a coverage pass and then a mutation run
+  for (const name of ['Verify', 'Cleanup Tests']) {
+    const n = wf.nodes.find((x) => x.name === name);
+    assert.ok(timeoutOf(n) > COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS,
+      `${name}: ${timeoutOf(n)} must exceed ${COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS}ms — it waits on both`);
+  }
+});
+
+test('every mutation-run call outlives the mutation run it is waiting for', () => {
+  const waits = httpNodes.filter((n) => /\/api\/(mutant\/verify|stryker\/run|verify)\b/.test(String(n.parameters.url))
+    || /Verify|Baseline Mutation/.test(n.name));
+  assert.ok(waits.length >= 4);
+  for (const n of waits) {
+    assert.ok(timeoutOf(n) > STRYKER_BUDGET_MS,
+      `${n.name}: timeout ${timeoutOf(n)} must exceed Stryker's ${STRYKER_BUDGET_MS}ms budget`);
+  }
+});
