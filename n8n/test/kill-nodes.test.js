@@ -514,20 +514,20 @@ test('a path the sidecar would refuse to write is rewritten to the planned targe
   }
 });
 
-// ── two-phase kill ──────────────────────────────────────────────────────────
-// The same prompt, asked cheaply first. Measured on a prompt taken from the run's own
-// dialog log: 21-28s without reasoning, 112-186s with it, and on everything that could
-// be checked mechanically the cheap answer was no worse. So reasoning is spent only on
-// the mutants that survive the cheap attempt.
+// ── one attempt, without reasoning ──────────────────────────────────────────
+// Measured on a prompt taken from the run's own dialog log: 21-28s without reasoning,
+// 112-186s with it, and on everything that could be checked mechanically the fast
+// answer was no worse. A reasoning retry used to follow a failure and was removed —
+// 25.3% of a five-hour run's wall clock for about 8% of the kills.
 
-test('the cheap attempt asks the endpoint not to think, and says so in the stage detail', () => {
+test('the attempt asks the endpoint not to think, and says so in the stage detail', () => {
   const plan = killBuildPrompt(target(), { thinking: false });
   assert.equal(plan.thinking, false);
   assert.match(plan.stageDetail, /without reasoning|cheap|fast/i,
-    'the dashboard should show which of the two attempts is running');
+    'the dashboard should show that this is the fast attempt');
 });
 
-test('both attempts plan the SAME file — the cheap one was deleted when it failed', () => {
+test('the plan names the file the mutant identity implies, so a failed attempt is trivial to drop', () => {
   assert.equal(killBuildPrompt(target(), { thinking: false }).targetPath,
     killBuildPrompt(target(), { thinking: true }).targetPath);
 });

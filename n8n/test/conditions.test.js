@@ -1,4 +1,4 @@
-// UNIT TESTS for the 10 IF conditions — the branch semantics the pipeline depends on.
+// UNIT TESTS for the 13 IF conditions — the branch semantics the pipeline depends on.
 //
 // An IF node is two things: an expression, and the wiring of its two outputs. A test
 // that only checked the expression would happily pass while the workflow sent "green"
@@ -405,7 +405,7 @@ test('no condition throws on an empty response from its own node', () => {
     // Cov: Has Work? (write tests anyway) and Baseline OK? (an absent `failed` flag
     // means the run did not crash). All three are self-limiting: the pick fails, the
     // prompt is nonsense and gets deleted, or the empty survivor list ends the loop.
-    // The other nine fail CLOSED: no repair, no kill, no round kept, no extra round, no PR.
+    // The other ten fail CLOSED: no repair, no kill, no round kept, no extra round, no PR.
     const expected = ['More Work?', 'Cov: Has Work?', 'Baseline OK?'].includes(name) ? 0 : 1;
     assert.equal(idx, expected, `${name}: empty input changed which way it fails`);
   }

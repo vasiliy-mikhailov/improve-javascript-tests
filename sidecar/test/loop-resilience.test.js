@@ -274,13 +274,15 @@ test('a generated test that fails is still deleted, and its scope is what was ch
   assert.equal(r.killed, false);
   assert.equal(r.reason, 'suite red');
   assert.equal(w.exists(testPath), false, 'a red test never survives its own attempt');
-  // A test that fails on the REAL code is a broken test, not proof that the mutant
-  // resists testing — the same distinction as an empty answer. It is capped by the
-  // per-target miss limit instead of spending the mutant's one shot.
+  // A test that fails on the REAL code is a broken test rather than proof that the
+  // mutant resists testing, so it is still counted as a generation miss — but it
+  // retires the target too. An identical prompt cannot produce a different answer, and
+  // the second look only ever made sense while the escalation supplied the runner's
+  // output to go with it.
   const f = sb.file(FILE);
-  assert.deepEqual(f.mutantAttempts || {}, {}, 'the target keeps its shot');
-  assert.equal(f.mutantFailures || 0, 0, 'and the failure budget is untouched');
-  assert.equal(f.mutantGenFailures, 1, 'it is counted as a generation miss');
+  assert.equal(Object.keys(f.mutantAttempts || {}).length, 1, 'the target had its shot');
+  assert.equal(f.mutantFailures || 0, 0, 'charged once — miss() already counted it');
+  assert.equal(f.mutantGenFailures, 1, 'it is counted as a generation miss as well');
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -317,7 +319,7 @@ test('a mutation run that executed no tests is not read as 112 kills', () => wit
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  two-phase kill: cheap first, reasoning only when the cheap one failed
+//  one attempt per mutant, and what each kind of failure costs
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // Measured on the same prompt from the run's own dialog log: without reasoning the
@@ -921,4 +923,37 @@ test('a window is judged by the MUTANTS it re-tests, not the lines it spans', ()
   const ranged = w.calls.stryker.filter((c) => c && c.range).length;
   assert.equal(ranged, 0,
     `a window holding most of the file's mutants is a whole-file run with extra steps (${ranged} ranged)`);
+}));
+
+// A red test used to be forgiven because the escalation would try again — with the
+// runner's output in the prompt, so the second attempt knew something the first did
+// not. With one attempt per mutant that forgiveness re-prompts the SAME target with a
+// byte-identical prompt, up to the miss ceiling of three, and a deterministic model
+// makes the same class of mistake each time. The other misses are different: an empty
+// answer or a crashed verification really can come good on a retry.
+test('a mutant whose test would not run is not re-prompted with the same prompt',
+  () => withSandbox(async (sb) => {
+    const w = await killReady(sb, { mutants: mutantsAt(6, 12) });
+    const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+    const testPath = 'test/a-kill.test.ts';
+    w.writeTest(testPath, { target: FILE, kills: [target.line], red: true });
+
+    await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'single' });
+
+    const again = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+    assert.ok(!again || again.line !== target.line,
+      'the same mutant came back for an identical second try');
+    const f = sb.file(FILE);
+    assert.equal(Object.keys(f.mutantAttempts || {}).length, 1, 'the shot is spent');
+  }));
+
+test('an empty answer or a crash is still forgiven — those can come good', () => withSandbox(async (sb) => {
+  const w = await killReady(sb, { mutants: mutantsAt(6, 12) });
+  const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+
+  await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [], phase: 'single' });
+
+  const again = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
+  assert.equal(again.line, target.line, 'nothing was written, so nothing was learned about this mutant');
+  assert.deepEqual(sb.file(FILE).mutantAttempts || {}, {});
 }));

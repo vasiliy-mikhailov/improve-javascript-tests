@@ -619,7 +619,7 @@ const routes = {
         system: body.system, prompt: body.prompt, messages: body.messages,
         maxTokens: clamp(parseInt(body.maxTokens || '4096', 10), 64, 12000),
         temperature: body.temperature, json: !!body.json, decision: !!body.decision,
-        // explicit override from the workflow: the cheap kill attempt asks for no reasoning
+        // explicit override from the workflow: kill attempts ask for no reasoning
         thinking: body.thinking,
       });
       return { ok: true, text: r.text, json: r.json ?? null };
@@ -879,8 +879,8 @@ const routes = {
     // 'batch' is the only phase whose failure condemns nobody: a sweep writes one test
     // per SITE, so a batch that kills nothing says nothing about any individual mutant
     // and the single-target attempt is still worth making. Every other phase IS that
-    // mutant's verdict — there used to be a reasoning retry after the cheap attempt,
-    // and while it existed a cheap failure deliberately cost nothing. It is gone, so a
+    // mutant's verdict — there used to be a reasoning retry after the first attempt,
+    // and while it existed a first failure deliberately cost nothing. It is gone, so a
     // failure that costs nothing would simply offer the same mutant for ever.
     const { file, testPaths = [], phase } = body;
     // One entry point, two shapes: `mutants` is a batch aimed at many targets at once,
@@ -889,7 +889,7 @@ const routes = {
     // kills nothing has a single-target attempt still to come.
     const batch = Array.isArray(body.mutants) && body.mutants.length ? body.mutants : null;
     const mutant = batch ? batch[0] : body.mutant;
-    const cheap = phase === 'batch';
+    const sweep = phase === 'batch';
     const f = file && state.files[file];
     if (!f || !mutant) throw new Error('file and mutant are required');
     const key = mutantsMod.mutantKey(mutant);
@@ -898,6 +898,9 @@ const routes = {
     //   worthKeeping→ keep the test, and do not charge the failure budget
     // Conflating them let a test that killed only neighbours leave its target
     // with no recorded attempt, so the target could be picked again.
+    // declared before bump() closes over it: a failure can spend a mutant's shot
+    // before any mutation run has happened, and then nothing has died yet
+    let deadTargets = [];
     const bump = (targetDied, worthKeeping) => {
       const attempts = { ...(f.mutantAttempts || {}) };
       // Every mutant this attempt AIMED at has now had its shot: the ones that died
@@ -937,7 +940,7 @@ const routes = {
 
     if (!testPaths.length) {
       miss('no usable test was generated');
-      return { ok: true, killed: false, noTest: true, retryable: cheap, reason: 'no test was written' };
+      return { ok: true, killed: false, noTest: true, retryable: sweep, reason: 'no test was written' };
     }
 
     // 1. The new test must pass — one that fails is never worth keeping.
@@ -959,10 +962,25 @@ const routes = {
       // and red tests are the dominant failure on schema-heavy files — so put it where
       // a human reading the event log can see it.
       miss('the generated test failed against the unmutated code');
+      // ...and the mutant's shot is spent, because nothing about a next attempt would
+      // differ. An empty answer or a crashed run can come good on a retry; a test that
+      // will not run against the real code is the same prompt producing the same class
+      // of answer, and it was only ever forgiven because the escalation followed it
+      // with the runner's output in hand.
+      if (!sweep) {
+        const attempts = { ...(f.mutantAttempts || {}) };
+        for (const m of (batch || [mutant])) {
+          const k2 = mutantsMod.mutantKey(m);
+          attempts[k2] = (attempts[k2] || 0) + 1;
+        }
+        // retire the target, but charge the budget ONCE: miss() has already counted
+        // this as a generation failure, and it is one event, not two
+        S.upsertFile(file, { mutantAttempts: attempts });
+      }
       if (suite.summary) {
         S.event('improving_mutation', 'runner said: ' + String(suite.summary).replace(/\s+/g, ' ').slice(0, 240));
       }
-      return { ok: true, killed: false, retryable: cheap, reason: 'suite red', summary: suite.summary };
+      return { ok: true, killed: false, retryable: sweep, reason: 'suite red', summary: suite.summary };
     }
     // 2. Verify the kill on a RANGE around the target, and fall back to the whole file
     //    only when the window saw nothing die.
@@ -1008,7 +1026,6 @@ const routes = {
     const before = f.survivedTotal ?? (f.lastSurvived || []).length;
     const beforeScore = f.mutation ?? 0;
     let killedTarget = false, killedCount = 0, scoreRose = false, note = '', fullRun = false;
-    let deadTargets = [];
     if (wide) fullRun = true;
     try {
       if (wide) throw new Error('window skipped: the union spans most of the file');
@@ -1091,18 +1108,18 @@ const routes = {
     if (note) {
       drop();
       miss(note);
-      return { ok: true, killed: false, killedCount: 0, retryable: cheap, reason: note, testPaths };
+      return { ok: true, killed: false, killedCount: 0, retryable: sweep, reason: note, testPaths };
     }
     const worthKeeping = killedTarget || killedCount > 0 || scoreRose;
-    // A cheap attempt that achieved nothing is not the mutant's verdict — the
-    // reasoning attempt is still to come, and retiring the target here would leave it
-    // with nothing to aim at. Charge nothing, keep the target on the queue, and tell
-    // the caller to escalate.
-    if (cheap && !worthKeeping) {
+    // A SWEEP that achieved nothing is not any single mutant's verdict: it wrote one
+    // test per SITE, so no individual target ever got a test of its own. Charge
+    // nothing, keep the targets on the queue, and tell the caller the single-target
+    // attempt is still worth making.
+    if (sweep && !worthKeeping) {
       drop();
       S.upsertFile(file, { mutantAttemptCount: (f.mutantAttemptCount || 0) + 1 });
-      S.event('improving_mutation', `no kill without reasoning for ${mutant.mutator} at line ${mutant.line} — escalating to a thinking attempt`);
-      return { ok: true, killed: false, killedCount: 0, retryable: true, reason: 'no mutant died (cheap attempt)', testPaths };
+      S.event('improving_mutation', `the sweep killed nothing at ${mutant.mutator} line ${mutant.line} — trying it on its own`);
+      return { ok: true, killed: false, killedCount: 0, retryable: true, reason: 'no mutant died (batch attempt)', testPaths };
     }
     // The TARGET is retired unless it actually died — one shot per mutant, whatever
     // else the test achieved. The failure budget, by contrast, is only charged when

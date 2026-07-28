@@ -172,7 +172,7 @@ docker exec ijst-n8n node /data/eval/score.mjs               # implementation_pe
 ```
 one container (ijst-n8n)
 ┌───────────────────────────────────────────────────────────────┐
-│  n8n :5678 — workflow "Improve JS Tests" (62 native nodes:    │
+│  n8n :5678 — workflow "Improve JS Tests" (64 native nodes:    │
 │  Webhook/Manual triggers, HTTP Request, Code, IF, NoOp only)  │
 │        │  every OS-touching operation = plain HTTP call       │
 │        ▼                                                      │
@@ -219,7 +219,7 @@ anything that executes on the OS. The sidecar owns all execution behind a small 
 
 ### 3.3 The workflow in depth
 
-The canvas has 62 nodes, but only five node *types* and a lot of repetition — it decomposes
+The canvas has 64 nodes, but only five node *types* and a lot of repetition — it decomposes
 into five functional blocks and two instantiations of one template. This section walks each
 block. First, the conventions that make the whole thing tick:
 
@@ -453,7 +453,7 @@ Everything in §2 — target repo, scope, limits, rules, PR mode, setup script, 
 
 ### 4.2 Edit the workflow in n8n
 
-![The Improve JS Tests workflow in the n8n editor: 62 native nodes — trigger spine, coverage and mutation improvement rows with repair branches, verify/round loop, PR tail](img/n8n-workflow.png)
+![The Improve JS Tests workflow in the n8n editor: 64 native nodes — trigger spine, coverage and mutation improvement rows with repair branches, verify/round loop, PR tail](img/n8n-workflow.png)
 
 Open *Improve JS Tests* in the editor. Useful edits:
 

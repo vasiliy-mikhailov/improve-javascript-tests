@@ -551,7 +551,7 @@ test('mutant/next tells the picker what already resisted a targeted test', () =>
 //  mutant/verify
 // ═══════════════════════════════════════════════════════════════════════════
 
-test('mutant/verify deletes a test that fails, without spending the mutant\'s one shot', () => withSandbox(async (sb) => {
+test('mutant/verify deletes a test that fails, and spends the mutant\'s one shot', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: [{ line: 10 }] });
   const next = await sb.get('/api/mutant/next', { path: FILE });
   w.writeTest(KILL_TEST, { target: FILE, kills: [10], red: true });
@@ -566,13 +566,14 @@ test('mutant/verify deletes a test that fails, without spending the mutant\'s on
   assert.equal(w.calls.stryker.length, strykerRuns, 'no point measuring mutants against a red suite');
 
   const f = sb.file(FILE);
-  // A test that fails against the UNMUTATED code is a broken test. That says nothing
-  // about whether the mutant can be killed, so it is counted as a generation miss —
-  // capped per target and by its own ceiling — rather than retiring the target and
-  // charging the budget that exists to stop wasted tests.
-  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], undefined, 'the target keeps its shot');
+  // A test that fails against the UNMUTATED code is a broken test, and it is still
+  // counted as a generation miss — that is what it is. But it also retires the target,
+  // because the only thing that used to justify a second look was the escalation, which
+  // came back with the runner's output. Without it the next attempt would send the same
+  // prompt and get the same class of answer, three times over.
+  assert.equal(f.mutantAttempts[mutants.mutantKey(next.mutant)], 1, 'the target had its shot');
   assert.equal(f.mutantAttemptCount, 1);
-  assert.equal(f.mutantFailures || 0, 0);
+  assert.equal(f.mutantFailures || 0, 0, 'charged once, as the generation miss it is');
   assert.equal(f.mutantGenFailures, 1);
   assert.equal(f.mutantsKilled, 0);
 }));

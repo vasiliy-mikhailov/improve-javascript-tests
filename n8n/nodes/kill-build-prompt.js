@@ -8,11 +8,11 @@ import { commonTestRules } from './common-test-rules.js';
 // single victim and the file it goes in is named after that victim — a failed
 // attempt is then trivial to drop.
 //
-// Asked twice at most. The first attempt runs WITHOUT reasoning: measured on a prompt
-// from the pipeline's own dialog log, the model answers in 21-28s that way against
-// 112-186s with reasoning, and on everything that could be checked mechanically the
-// cheap answer was no worse. Reasoning is then spent only on the mutants that survive
-// the cheap attempt — which is exactly where it might be worth six times the wait.
+// Asked ONCE. The attempt runs without reasoning: measured on a prompt from the
+// pipeline's own dialog log, the model answers in 21-28s that way against 112-186s
+// with reasoning, and on everything that could be checked mechanically the fast answer
+// was no worse. A reasoning retry used to follow a failure; attribution put it at
+// 25.3% of a five-hour run for about 8% of the kills, so it was removed.
 //
 // @param t     response of the "Next Mutant" node: { mutant, path, testPath, source, ... }
 // @param opts  { thinking } — the one attempt this mutant gets, without reasoning

@@ -70,7 +70,7 @@ imports the module. The model writes at most 2 test files; if the suite goes red
 repair attempt, then the files are deleted. Once any coverage exists this phase is skipped
 entirely — killing mutants raises coverage as a side effect.
 
-**Mutant loop** — the core. Two attempts per mutant at most, and the first one is cheap:
+**Mutant loop** — the core. One attempt per mutant, without reasoning:
 
 ```
 Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
