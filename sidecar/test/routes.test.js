@@ -808,7 +808,9 @@ test('verify records the round result and calls it progress', () => withSandbox(
   assert.equal(f.survivorsStale, false);
   assert.equal(S.state.run.result.mutationPct, 50);
   assert.equal(S.state.measureLedger[sb.repoSlug][FILE].attemptMac, 40);
-  assert.match(log(sb), /PROGRESS \(another round\)/);
+  // the verdict states what happens NEXT, because the same line used to promise a
+  // round the graph then declined to run
+  assert.match(log(sb), /PROGRESS \(keep, (another round|no site left untried — settle)\)/);
 }));
 
 test('verify calls a round degraded when any metric fell below the round base', () => withSandbox(async (sb) => {
@@ -820,7 +822,7 @@ test('verify calls a round degraded when any metric fell below the round base', 
 
   assert.equal(r.degradedAny, true);
   assert.equal(r.improvedAny, false);
-  assert.match(log(sb), /DEGRADED \(stop, drop round\)/);
+  assert.match(log(sb), /DEGRADED \(drop round\)/);
 }));
 
 test('verify does not measure a round that produced nothing', () => withSandbox(async (sb) => {

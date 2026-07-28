@@ -1162,7 +1162,7 @@ const routes = {
       if ((macAfter ?? 0) >= (prev.attemptMac ?? -1)) {
         recordMeasurement(file, { attemptCoverage: coverageAfter, attemptMutation: st.score, attemptMac: macAfter });
       }
-      S.event('improving_mac', `round ${(f.rounds || 0) + 1} of ${file}: cov ${rb.coverage}→${coverageAfter}, mut ${rb.mutation}→${st.score}, mac ${rb.mac}→${macAfter} — ${improvedAny && !degradedAny ? 'PROGRESS (another round)' : degradedAny ? 'DEGRADED (stop, drop round)' : 'STALE (stop)'}`);
+      S.event('improving_mac', `round ${(f.rounds || 0) + 1} of ${file}: cov ${rb.coverage}→${coverageAfter}, mut ${rb.mutation}→${st.score}, mac ${rb.mac}→${macAfter} — ${improvedAny && !degradedAny ? `PROGRESS (keep${pendingSites > 0 ? ', another round' : ', no site left untried — settle'})` : degradedAny ? 'DEGRADED (drop round)' : 'STALE (drop round)'}`);
       return {
         ok: true, file, testsGreen: true,
         coverageBefore: f.coverageBefore, coverageAfter,
