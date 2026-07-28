@@ -198,6 +198,15 @@ test('a kill mid-round shows up on the dashboard before the round ends', () => w
   assert.ok((row.attemptMutation ?? 0) > 0,
     `the row must show the score this attempt reached — got ${JSON.stringify(row.attemptMutation)}`);
   assert.ok((row.attemptMac ?? 0) > 0, 'and the MAC that follows from it');
+
+  // The ledger is the record that OUTLIVES the run: /api/metrics falls back to it for
+  // any file the current state no longer holds. attemptMutation and attemptMac were
+  // written there and attemptCoverage was not, so a restart kept two thirds of a
+  // measurement and the coverage column of a finished attempt went blank.
+  const led = S.state.measureLedger[sb.repoSlug]['src/a.ts'];
+  assert.ok((led.attemptCoverage ?? 0) > 0,
+    `the permanent record must keep the coverage too — got ${JSON.stringify(led.attemptCoverage)}`);
+  assert.equal(led.attemptCoverage, row.attemptCoverage, 'and agree with what the dashboard just showed');
 }));
 
 // ── a run that says it starts clean must actually start clean ────────────────

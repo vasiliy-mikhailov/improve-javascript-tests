@@ -1027,7 +1027,7 @@ const routes = {
           const est = round2(((total - remaining) / total) * 100);
           const cov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
           const estMac = mac(cov, est);
-          recordMeasurement(file, { attemptMutation: est, attemptMac: estMac });
+          recordMeasurement(file, { attemptCoverage: cov, attemptMutation: est, attemptMac: estMac });
           if ((estMac ?? 0) >= (state.files[file]?.attemptMac ?? -1)) {
             S.upsertFile(file, { attemptCoverage: cov, attemptMutation: est, attemptMac: estMac });
           }
@@ -1065,7 +1065,7 @@ const routes = {
         });
         const cov = state.files[file]?.coverageAfter ?? state.files[file]?.coverage;
         const attemptMac = mac(cov, r.score);
-        recordMeasurement(file, { attemptMutation: r.score, attemptMac });
+        recordMeasurement(file, { attemptCoverage: cov, attemptMutation: r.score, attemptMac });
         if ((attemptMac ?? 0) >= (state.files[file]?.attemptMac ?? -1)) {
           S.upsertFile(file, { attemptCoverage: cov, attemptMutation: r.score, attemptMac });
         }
