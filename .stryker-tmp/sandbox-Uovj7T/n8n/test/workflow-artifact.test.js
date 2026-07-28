@@ -1,3 +1,4 @@
+// @ts-nocheck
 // UNIT TESTS for the generated artifact itself — the file n8n actually imports.
 //
 // The generator gave every node a fresh randomUUID() on every run, so regenerating

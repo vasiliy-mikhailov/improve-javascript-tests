@@ -1,0 +1,1858 @@
+{
+  "id": "ijstImproveTests1",
+  "name": "Improve JS Tests",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "1d84cc6e-5773-2fb7-f288-a590f2ffd759",
+      "name": "Start (manual)"
+    },
+    {
+      "parameters": {
+        "path": "improve-run",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "cf24a66d-97c5-f4ae-db70-687b8492d434",
+      "name": "Start (webhook)",
+      "webhookId": "aa11bb22-ijst-4run-9000-improverun001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/run/start",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body || {} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "f4811bb8-ef47-4037-9baa-c68ad37b4d19",
+      "name": "Start Run"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/repo/clone",
+        "options": {
+          "timeout": 900000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "dd9d0c00-6e7f-2c6d-722c-995210f932c7",
+      "name": "Clone Repo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'post_clone' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "302528b6-d60b-5571-d42a-8030ba81fbf3",
+      "name": "Rules: post-clone"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/repo/prepare",
+        "options": {
+          "timeout": 2520000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "c6be185b-b1ed-b70a-cb10-a729337c8f98",
+      "name": "Install & Detect"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/coverage/run",
+        "options": {
+          "timeout": 2520000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { phase: 'baseline', stage: 'measuring_baseline' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "2f59101a-7fc0-f0e1-9449-a5e4de619913",
+      "name": "Baseline Coverage"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'pre_pick' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "9510a851-9057-719a-b690-ceb32eaf4d8c",
+      "name": "Rules: pre-pick"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'write_test' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        0
+      ],
+      "id": "83f9a292-b2ee-5b95-19bb-e8143995791f",
+      "name": "Rules: write-test"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        0
+      ],
+      "id": "257a40f9-6f07-f2b4-0d08-93afacf59d9a",
+      "name": "Next Iteration"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:3000/api/files/candidates",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        0
+      ],
+      "id": "e8b168fd-54e0-f738-c79c-ee130a278a9e",
+      "name": "Get Candidates"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.done ? 0 : 1 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        0
+      ],
+      "id": "680e0c84-bca0-7999-2554-f2de353005ab",
+      "name": "More Work?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'pick_file' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "5dc4df81-6a00-97f8-87f1-6e5fb0901096",
+      "name": "Rules: pick file"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.result && $json.result.file ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3080,
+        0
+      ],
+      "id": "de230428-f423-cc19-418b-3e7efaa1c64f",
+      "name": "File Picked?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($json.result && $json.result.retry) ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3300,
+        0
+      ],
+      "id": "88630491-9dda-5ffe-762f-83bbb5eb78f8",
+      "name": "Pick Retryable?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/iteration/start",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Rules: pick file').first().json.result.file } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        0
+      ],
+      "id": "0ff64a7e-4722-95bd-55df-f64c810d056b",
+      "name": "Start Iteration"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/stryker/run",
+        "options": {
+          "timeout": 2520000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, phase: 'baseline', stage: 'improving_mutation' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        200
+      ],
+      "id": "56f27767-3c04-7eb4-5a42-2acd1bd1354a",
+      "name": "Baseline Mutation"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:3000/api/files/gaps?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        200
+      ],
+      "id": "dcb6e80a-a038-00e5-84c9-19309aa1a7e3",
+      "name": "Coverage Gaps"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.failed ? 0 : 1 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        660,
+        200
+      ],
+      "id": "c22ec347-4fdf-7a72-4402-1cc506daf9f8",
+      "name": "Baseline OK?"
+    },
+    {
+      "parameters": {
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    // Measured on what this pipeline shipped: in the one Prisma-backed file among five\n    // PRs, 11 of 28 tests asserted ONLY on toHaveBeenCalledWith/mock.calls and never\n    // looked at what the function returned — and every table was mocked to [], which is\n    // what made the output meaningless in the first place. On a clean fixture the model\n    // does the right thing unprompted (3/3), so this ranks a preference rather than\n    // fixing a defect: assert on the code, fall back to the collaborator only when the\n    // mutation is genuinely invisible in the output.\n    + '\\n- Assert on what the module DOES: its return value, what it throws, what it renders.'\n    + '\\n- Assert on how a collaborator was CALLED (toHaveBeenCalledWith, mock.calls) only when the'\n    + ' mutation cannot be observed in the output at all. A test that only checks a mock was called'\n    + ' passes mutation testing while proving nothing about behaviour.'\n    + '\\n- When you must mock, return REALISTIC data. Mocking a source to [] or {} switches off the'\n    + ' logic under test, and then the query is the only thing left to assert on.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction covBuildPrompt(gaps, file) {\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const u = gaps.uncovered || {};\n  const fullyUncovered = u.lines === 'all';\n  const nothingToCover = !gaps.needsBootstrap\n    || (!fullyUncovered && (!u.lines || !u.lines.length) && (!u.functions || !u.functions.length) && (!u.branches || !u.branches.length));\n  const base = gaps.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  const roundSuffix = (gaps.rounds || 0) > 0 ? '-r' + ((gaps.rounds || 0) + 1) : '';\n  const targetPath = base + '.mac-cov' + roundSuffix + '.test' + ext;\n  if (nothingToCover) return { skip: true, reason: gaps.needsBootstrap ? 'file fully covered' : 'already executed by tests — mutant loop takes it from here', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n  const constraints = (gaps.constraints || []).map(c => '- ' + c).join('\\n');\n  const ui = uiGuidance(file, gaps);\n  const system = 'You are an expert JavaScript/TypeScript test engineer writing ' + gaps.runner + ' tests to INCREASE LINE COVERAGE of one source file. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full test file content\"}]}. Create NEW test files only — never modify existing files. Preferred new file path: ' + targetPath + '. Rules:' + commonTestRules()\n    + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n  const prompt = 'SOURCE FILE: ' + gaps.path + ' (package: ' + gaps.packageJson + ')\\n'\n    + String(gaps.source || '').slice(0, 14000)\n    + '\\n\\nUNCOVERED: ' + (fullyUncovered ? 'ENTIRE FILE (never imported by any test)' :\n        'lines ' + JSON.stringify((u.lines || []).slice(0, 120))\n        + '; functions ' + JSON.stringify((u.functions || []).slice(0, 30))\n        + '; branches ' + JSON.stringify((u.branches || []).slice(0, 40)))\n    + '\\n\\nEXISTING TEST FILE (' + gaps.testPath + ', style reference — do not rewrite it):\\n'\n    + String(gaps.existingTest || '(none)').slice(0, 6000)\n    + '\\n\\nWrite tests that execute the uncovered lines/functions/branches. JSON only.';\n  // Cold, like the first kill attempt. Measured on three real prompts from the\n  // pipeline's own dialog log, three samples each: parsing, syntactic validity and\n  // \"imports and exercises the module\" were 9/9 in BOTH arms, the cold arm ran 2.5-3.7x\n  // faster and wrote more tests on the hardest file, and on the case that could be\n  // executed both arms were green with identical coverage. With reasoning on, that\n  // hardest file used 85-98% of its budget — the same wall that returned two empty\n  // completions in a live run, ~400s each to recover. The one measured loss is a\n  // chain-of-thought comment in 1 of 9 files, which the cleanup stage strips.\n  // The repair turn keeps reasoning: by then the cheap attempt has already failed.\n  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.3, thinking: false, stage: 'improving_coverage', stageDetail: 'writing tests for uncovered code (fast attempt, without reasoning)', targetPath, existingTestPath: gaps.testPath, existingTestExists: gaps.testExists };\n}\nreturn [{ json: covBuildPrompt($json, $('Start Iteration').first().json.file) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ],
+      "id": "bb92ba1d-8084-1252-d6d3-24cb80c4d110",
+      "name": "Cov: Build Prompt"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.skip ? 0 : 1 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ],
+      "id": "fbc590bf-8cdf-03ea-6aff-09950bf12b90",
+      "name": "Cov: Has Work?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/llm/chat",
+        "options": {
+          "timeout": 1020000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        200
+      ],
+      "id": "8a7dd918-73d5-cbad-b5fc-30569c1beecb",
+      "name": "Cov: LLM Write Tests",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction covParseTests(resp, plan) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, 2)\n    .map((t, i) => {\n      let p = (typeof t.path === 'string' ? t.path : '').replace(/^\\.?\\//, '');\n      const safe = /((^|\\/)(tests?|__tests__|spec)\\/|\\.(test|spec)\\.[cm]?[jt]sx?$)/.test(p)\n        && /\\.[cm]?[jt]sx?$/.test(p) && !p.includes('..');\n      const collides = p === plan.existingTestPath && plan.existingTestExists;\n      if (!safe || collides) p = i === 0 ? plan.targetPath : plan.targetPath.replace('.test.', '-' + i + '.test.');\n      return { path: p, content: t.content };\n    })\n    .filter((t, i, all) => all.findIndex(o => o.path === t.path) === i);\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: covParseTests($json, $('Cov: Build Prompt').first().json) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        200
+      ],
+      "id": "c45c160f-64b6-9cbe-b94c-2f155b12046c",
+      "name": "Cov: Parse Tests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/write-many",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { tests: $json.tests, stage: 'improving_coverage' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        200
+      ],
+      "id": "beae623f-db29-1e7e-693a-de6578b51424",
+      "name": "Cov: Write Tests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/run",
+        "options": {
+          "timeout": 1920000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'improving_coverage' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        200
+      ],
+      "id": "571359e5-394e-5fe4-cf3d-88a333d2a5a2",
+      "name": "Cov: Run Tests"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.passed ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        200
+      ],
+      "id": "af6c08a3-4860-d638-e663-4e95d86fa552",
+      "name": "Cov: Green?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $('Cov: Parse Tests').first().json.count }}",
+              "value2": 0,
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        200
+      ],
+      "id": "66924287-51c7-0770-e141-ce654f3ec046",
+      "name": "Cov: Wrote Any?"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction covBuildRepair(fail, parsed, gaps, stage) {\n  const filesTxt = parsed.tests.map(t => 'PATH: ' + t.path + '\\n' + t.content.slice(0, 6000)).join('\\n\\n---\\n\\n');\n  // Ask only for what the sub-graph can act on. \"Cov: Write Repair\" writes what came\n  // back and nothing else, so an omitted file is NOT deleted — it keeps its failing\n  // content, \"Cov: Re-run Tests\" stays red, and \"Cov: Delete Broken Tests\" then throws\n  // away the files that WERE repaired along with it. Every path must come back; an\n  // assertion that cannot be saved is dropped as a test CASE inside a returned file.\n  const system = 'You are an expert test engineer. Tests you previously wrote FAIL against the current implementation. Fix them. Keep the SAME file paths. Reply ONLY with JSON: {\"tests\":[{\"path\":\"...\",\"content\":\"full corrected file content\"}]}. Return EVERY file you were given, one entry per path, no renames and no new files. Omitting a file does not delete it: the failing version stays on disk, the whole run stays red, and every file you did repair is thrown away with it. If a test asserts wrong expected values, correct the expectations to match the real behavior of the source. If one test case cannot be fixed, delete that case and return the rest of the file; if a whole file is beyond saving, return it holding one small test that really passes against the source — never an empty file and never a skipped or placeholder test, because a file with no runnable test fails the run too.';\n  const n = parsed.tests.length;\n  const prompt = 'TEST RUNNER OUTPUT (failures):\\n' + String(fail.summary || '').slice(0, 3500)\n    + '\\n\\nYOUR TEST FILES:\\n' + filesTxt\n    + '\\n\\nSOURCE FILE ' + gaps.path + ' (for reference):\\n' + String(gaps.source || '').slice(0, 10000)\n    + '\\n\\nReply with corrected JSON now: all ' + n + (n === 1 ? ' file' : ' files')\n    + ', on these exact paths: ' + parsed.tests.map(t => t.path).join(', ');\n  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.2, stage, stageDetail: 'repairing failing generated tests' };\n}\nreturn [{ json: covBuildRepair($json, $('Cov: Parse Tests').first().json, $('Coverage Gaps').first().json, 'improving_coverage') }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        200
+      ],
+      "id": "61707a2e-d0e3-c1b1-05b7-7ee4dca4de7f",
+      "name": "Cov: Build Repair"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/llm/chat",
+        "options": {
+          "timeout": 1020000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        200
+      ],
+      "id": "12f15cd7-bdb7-5338-2ada-4e31e3ffd11a",
+      "name": "Cov: LLM Repair",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction covParseRepair(resp, prev) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, prev.paths.length)\n    .map((t) => ({ path: prev.paths.includes(t.path) ? t.path : null, content: t.content }));\n  // fill the unrecognised paths from whatever is still unclaimed, in order\n  const free = prev.paths.filter(p => !tests.some(t => t.path === p));\n  tests = tests.map(t => (t.path ? t : { ...t, path: free.shift() || null })).filter(t => t.path);\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: covParseRepair($json, $('Cov: Parse Tests').first().json) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        200
+      ],
+      "id": "0de30bf3-ddcf-d988-ed61-2c75d83e3f42",
+      "name": "Cov: Parse Repair"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/write-many",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { tests: $json.tests } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        200
+      ],
+      "id": "d61a50a3-a489-4448-66fd-6705c4c048da",
+      "name": "Cov: Write Repair"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/run",
+        "options": {
+          "timeout": 1920000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        200
+      ],
+      "id": "c5dc00d3-402b-9d38-b3c8-9ef1507659ee",
+      "name": "Cov: Re-run Tests"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.passed ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        220,
+        400
+      ],
+      "id": "f92d9e4e-fb66-568f-e463-6afc7870750d",
+      "name": "Cov: Green After Repair?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/delete-many",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { paths: ($('Cov: Parse Tests').first().json.paths || []).concat($('Cov: Parse Repair').first().json.paths || []) } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        400
+      ],
+      "id": "eb9b4104-8839-df35-ca95-b1eed0a3fb2f",
+      "name": "Cov: Delete Broken Tests"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        660,
+        400
+      ],
+      "id": "3657d923-4d78-ce0c-f975-8b756f340996",
+      "name": "Cov: Done"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:3000/api/mutant/next?path={{ encodeURIComponent($('Start Iteration').first().json.file) }}",
+        "options": {
+          "timeout": 2520000,
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        400
+      ],
+      "id": "a61afb9d-c64e-acca-b56b-82af7b817cd4",
+      "name": "Next Mutant"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.mutant ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ],
+      "id": "6a0357dc-135a-d2f7-c7e1-82f6d041cca9",
+      "name": "Mutant To Kill?"
+    },
+    {
+      "parameters": {
+        "jsCode": "function uiGuidance(file, gaps) {\n  const ui = gaps.ui;\n  // The guidance below names ui.framework and ui.testingLibrary, so the file has to\n  // use THAT framework: firing on a vue import in a react-first repo would tell the\n  // model to render a vue module with @testing-library/react. react and preact are\n  // the one pair that answer for each other — preact/compat aliases the \"react\"\n  // specifier, so a preact repo's own components import it under that name.\n  const fw = String((ui && ui.framework) || '').trim().toLowerCase();\n  // sanitised, because `framework` arrives as JSON and is spliced into a RegExp\n  const pkgs = (fw === 'react' || fw === 'preact') ? 'react|preact' : fw.replace(/[^a-z]/g, '');\n\n  const importsFramework = () => {\n    if (!pkgs) return false;\n    // The WHOLE file, not a window. The old 2000-character limit missed every\n    // component whose import sat behind a licence header or a block of type\n    // declarations — i.e. exactly the files a company actually ships. The ceiling\n    // here only bounds a caller that hands us a bundle: the sidecar reads at most\n    // 24 000 characters into `source` (repo.readFileSafe), so it never binds.\n    const src = (typeof gaps.source === 'string' ? gaps.source : '').slice(0, 200000);\n\n    // Comments come out before matching. A file that merely MENTIONS the framework —\n    // a note, a commented-out import, a JSDoc `@type {import('react').FC}` — does not\n    // use it, and dressing it up as a component sends the model looking for a DOM\n    // that will never exist. Strings need no scanner: the shapes below require a\n    // statement boundary, and a specifier quoted inside someone else's string sits in\n    // the middle of an expression, never at one.\n    const lines = [];\n    let inBlock = false;\n    for (let raw of src.split('\\n')) {\n      if (inBlock) {\n        const close = raw.indexOf('*/');\n        if (close < 0) continue;\n        inBlock = false;\n        raw = raw.slice(close + 2);\n      }\n      // `//` ends the line — unless it is the `//` of a URL, which would cut real code\n      const slashes = raw.match(/(^|[^:])\\/\\//);\n      if (slashes) raw = raw.slice(0, slashes.index + slashes[1].length);\n      const open = raw.indexOf('/*');\n      if (open >= 0) {\n        const close = raw.indexOf('*/', open + 2);\n        if (close >= 0) raw = raw.slice(0, open) + ' ' + raw.slice(close + 2);\n        // Only a block comment that OPENS a line is followed across lines. A `/*`\n        // appearing mid-line may be inside a string literal, and treating that as a\n        // comment would swallow the rest of the file — a silent miss, the very bug\n        // this rewrite exists to remove. Erring towards detection is the safe side.\n        else if (!raw.slice(0, open).trim()) { inBlock = true; continue; }\n      }\n      if (raw.trim().charAt(0) === '*') continue; // JSDoc continuation line\n      lines.push(raw);\n    }\n    const code = lines.join('\\n');\n\n    const spec = \"['\\\"](?:\" + pkgs + \")['\\\"]\";\n    // `import <clause> from 'react'`. The clause may contain neither a quote, a\n    // backtick nor a semicolon, so one match can never run across the neighbouring\n    // statement — which is what makes the type-only verdict below trustworthy.\n    // The {0,2000} bound is not cosmetic: an unbounded lazy run turns this quadratic\n    // (measured 1.2 s on 200 000 characters of quote-free `import` lines) because\n    // every candidate start rescans to the end of the file. No real import clause is\n    // anywhere near 2000 characters — react's entire public API is ~40 names.\n    const esm = new RegExp(\"(?:^|[;\\\\n])[ \\\\t]*import\\\\s+([^'\\\"`;]{0,2000}?)from\\\\s*\" + spec, 'g');\n    // Type imports are erased at compile time: such a file borrows the framework's\n    // SIGNATURES (a props interface, a ReactNode parameter) and renders nothing.\n    const typeOnly = (clause) => {\n      const c = clause.trim();\n      if (/^type\\b/.test(c)) return true;\n      const named = c.match(/^\\{([\\s\\S]*)\\}$/);\n      if (!named) return false; // a default or namespace binding is a value\n      const parts = named[1].split(',').map((s) => s.trim()).filter(Boolean);\n      return parts.length > 0 && parts.every((p) => /^type\\s/.test(p));\n    };\n    // every match, not the first: a type-only import must not mask a real one below it\n    let m;\n    while ((m = esm.exec(code))) if (!typeOnly(m[1])) return true;\n    // Side-effect import, CommonJS and dynamic import: all three are value imports by\n    // construction and have no clause to inspect. `require` was the reported miss —\n    // a CommonJS component used to be handed logic-test guidance, and the model then\n    // wrote assertions about internals instead of about rendered output.\n    if (new RegExp(\"(?:^|[;\\\\n])\\\\s*import\\\\s*\" + spec).test(code)) return true;\n    if (new RegExp(\"\\\\brequire\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    if (new RegExp(\"\\\\bimport\\\\(\\\\s*\" + spec + \"\\\\s*\\\\)\").test(code)) return true;\n    return false;\n  };\n\n  // extension first: a .tsx file never pays for the scan\n  const isComponent = /\\.[jt]sx$/.test(String(file || '')) || importsFramework();\n  return (ui && isComponent) ? '\\nThis file is a UI COMPONENT (' + ui.framework + '). Component-testing rules:'\n    + '\\n- Render it with ' + (ui.testingLibrary || \"the repo's established component-testing approach\") + ' and assert on VISIBLE behavior: roles, accessible names, text, attributes — never on implementation internals or state.'\n    + '\\n- Prefer accessible queries (getByRole, getByLabelText, getByText) over test ids.'\n    + (ui.userEvent ? \"\\n- Simulate clicks/typing with @testing-library/user-event and assert the resulting DOM and callback invocations.\" : '')\n    + (ui.jestDom ? '\\n- jest-dom matchers (toBeInTheDocument, toBeDisabled, toHaveAttribute, ...) are available.' : '')\n    + '\\n- Cover props/variants, conditional rendering branches, and event-handler callbacks (pass vi/jest mocks as handlers).'\n    + '\\n- Do not snapshot; do not shallow-render; do not reach into component internals.'\n    : '';\n}\nfunction commonTestRules(maxFiles = 2) {\n  return '\\n- Tests must be deterministic (no timing races, no network, no randomness without seeding).'\n    + '\\n- Code must satisfy strict linters: no `any` types, no unused imports or variables, no non-null assertions.'\n    + '\\n- Import the module under test via its public path exactly as existing tests do.'\n    + '\\n- Never inspect function source code (no fn.toString() introspection).'\n    + '\\n- No snapshot tests. Prefer precise value assertions.'\n    // Measured on what this pipeline shipped: in the one Prisma-backed file among five\n    // PRs, 11 of 28 tests asserted ONLY on toHaveBeenCalledWith/mock.calls and never\n    // looked at what the function returned — and every table was mocked to [], which is\n    // what made the output meaningless in the first place. On a clean fixture the model\n    // does the right thing unprompted (3/3), so this ranks a preference rather than\n    // fixing a defect: assert on the code, fall back to the collaborator only when the\n    // mutation is genuinely invisible in the output.\n    + '\\n- Assert on what the module DOES: its return value, what it throws, what it renders.'\n    + '\\n- Assert on how a collaborator was CALLED (toHaveBeenCalledWith, mock.calls) only when the'\n    + ' mutation cannot be observed in the output at all. A test that only checks a mock was called'\n    + ' passes mutation testing while proving nothing about behaviour.'\n    + '\\n- When you must mock, return REALISTIC data. Mocking a source to [] or {} switches off the'\n    + ' logic under test, and then the query is the only thing left to assert on.'\n    + '\\n- The tests MUST pass against the CURRENT implementation of the source file.'\n    + (maxFiles === 1 ? '\\n- Output EXACTLY ONE test file.' : '\\n- Output at most ' + maxFiles + ' test files.');\n}\nfunction killBuildBatchPrompt(t, opts) {\n  const o = opts || {};\n  // groups are the shape the sweep uses; a flat list still works for the batch path\n  const groups = (t.groups && t.groups.length)\n    ? t.groups.slice(0, 12)\n    : (t.targets || []).slice(0, 8).map((m) => ({\n      name: `kills ${m.line}:${m.column ?? 0}`, line: m.line, column: m.column ?? 0, mutants: [m],\n    }));\n  const targets = groups.flatMap((g) => g.mutants);\n  const file = t.path;\n  const ext = (file.match(/\\.[cm]?[jt]sx?$/) || ['.ts'])[0];\n  const base = t.testPath.replace(/\\.(test|spec)\\.[cm]?[jt]sx?$/, '').replace(/\\.[cm]?[jt]sx?$/, '');\n  const hash = (str) => { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x * 33) ^ str.charCodeAt(i)) >>> 0; return x.toString(36); };\n  // named for the batch, not for one victim: a batch file is dropped or kept whole\n  const tag = hash(groups.map((g) => g.name).join(';'));\n  const targetPath = base + '.kill-batch-' + tag + '.test' + ext;\n  const gaps = { ui: t.ui, source: t.source, runner: t.runner, constraints: t.constraints };\n  const ui = uiGuidance(file, gaps);\n  const constraints = (t.constraints || []).map(c => '- ' + c).join('\\n');\n\n  const list = groups.map((g) => {\n    const status = g.mutants.every((m) => String(m.status ?? '').toLowerCase() === 'nocoverage')\n      ? 'not covered at all — this test must reach the code first'\n      : 'covered by existing tests, but nothing asserts the difference';\n    const variants = g.mutants.map((m) => `      - ${m.mutator}: the code becomes `\n      + `${JSON.stringify(String(m.replacement ?? '')).slice(0, 200)}`).join('\\n');\n    return `  \"${g.name}\"  (line ${g.line}, column ${g.column}) — ${g.mutants.length} mutation(s), `\n      + `${status}\\n${variants}`;\n  }).join('\\n\\n');\n\n  const system = 'You are an expert test engineer. Write EXACTLY ONE ' + t.runner + ' test file containing one test '\n    + 'case per SITE listed below. Each site is one place in the source that several mutations attack, and one sharp '\n    + 'test case can kill all of them at once — a boundary test kills >, < and == on the same condition. A mutation is '\n    + 'killed when the test FAILS on the mutated code while PASSING on the real code, so assert the precise value or '\n    + 'behaviour every listed mutation would change. Name each test case with EXACTLY THE NAME GIVEN for its site, '\n    + 'optionally followed by a short description — for example it(\"kills 8:7 — returns \\'small\\' at the boundary\"). '\n    + 'That name is how the site is recognised later, so it must appear verbatim. Do not write tests for anything not '\n    + 'listed. Reply ONLY with JSON: {\"tests\":[{\"path\":\"' + targetPath + '\",\"content\":\"full test file content\"}]}. Rules:'\n    + commonTestRules(1) + ui\n    + (constraints ? '\\nTeam constraints:\\n' + constraints : '');\n\n  const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\\n'\n    + String(t.source || '').slice(0, 12000)\n    + '\\n\\nSITES — one test case each, named exactly as shown:\\n' + list + '\\n'\n    + '\\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\\n'\n    + String(t.existingTest || '(none)').slice(0, 4000)\n    + '\\n\\nWrite the single test file. JSON only.';\n\n  return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,\n    thinking: o.thinking,\n    stage: 'improving_mutation',\n    stageDetail: `writing ${groups.length} test(s) for ${targets.length} mutants`\n      + (o.thinking === false ? ' (fast attempt, without reasoning)' : ''),\n    targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists,\n    targetCount: targets.length, siteCount: groups.length,\n    siteNames: groups.map((g) => g.name),\n    // What this prompt ACTUALLY attacked. /api/mutant/next offers two work lists —\n    // `groups` (sites from the durable queue, what we write tests for) and `targets`\n    // (the picker's ranked shortlist) — and verification used to be handed the second\n    // one. Charging a failed attempt to a mutant no test was written for spends the\n    // single shot it gets, so those mutants left the shortlist unattacked and the\n    // file's mutation loop ended early with sites still pending.\n    aimed: targets.map((m) => ({\n      mutator: m.mutator, line: m.line, column: m.column ?? 0,\n      endLine: m.endLine, replacement: m.replacement, id: m.id, status: m.status,\n    })) };\n}\nreturn [{ json: killBuildBatchPrompt($json, { thinking: false }) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        400
+      ],
+      "id": "e345b447-b732-241c-883a-e6fdc68c79da",
+      "name": "Kill: Build Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/llm/chat",
+        "options": {
+          "timeout": 1020000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        400
+      ],
+      "id": "c59434d8-f9f2-5767-0dfe-c96acaa64909",
+      "name": "Kill: LLM Batch",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction killParseTest(resp, plan) {\n  let tests = (resp.ok && resp.json && Array.isArray(resp.json.tests)) ? resp.json.tests : [];\n  tests = tests\n    .filter(t => t && typeof t.content === 'string' && t.content.trim().length > 10)\n    .slice(0, 1)                                  // one target, one test file\n    // The path is OURS, always. It is derived from the repo's own convention and the\n    // mutant's full identity (mutator, line, column, a hash of the replacement), and\n    // the model knows nothing about placement that we do not. Honouring a proposed\n    // path let a live run write `…kill-L82-booleanliteral.test.ts` among nine siblings\n    // that all carried the identity hash — walking straight back into the collision\n    // the naming exists to prevent, where two mutants on one line overwrite each\n    // other's verified kill. The repo-owned guard does not cover this: it protects\n    // tests that existed before the run, not the ones this run just wrote.\n    .map(t => ({ path: plan.targetPath, content: t.content }));\n  return { tests, paths: tests.map(t => t.path), count: tests.length };\n}\nreturn [{ json: killParseTest($json, $('Kill: Build Batch').first().json) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        400
+      ],
+      "id": "ebc38634-4b9c-9db7-813e-41aed094d131",
+      "name": "Kill: Parse Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/write-many",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { tests: $json.tests, stage: 'improving_mutation' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        400
+      ],
+      "id": "f2b71c34-6bbf-0d37-a4ee-a8ae8fa67be9",
+      "name": "Kill: Write Batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/mutant/written",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, names: $('Kill: Build Batch').first().json.siteNames } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ],
+      "id": "1575da08-634d-b7a3-4dba-609e5565fb09",
+      "name": "Kill: Sites Written"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/mutant/verify",
+        "options": {
+          "timeout": 2520000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, mutants: $('Kill: Build Batch').first().json.aimed, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        400
+      ],
+      "id": "3d220e0c-0f21-6ef5-474a-39b6796fe2e7",
+      "name": "Kill: Verify Batch"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        400
+      ],
+      "id": "7fbb1d22-adc7-a9fb-6354-beacfde721ed",
+      "name": "Mutant Loop Done"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/verify",
+        "options": {
+          "timeout": 4320000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        400
+      ],
+      "id": "20b08db2-107c-27cb-009f-09bcf0b59e85",
+      "name": "Verify"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($('Verify').first().json.improvedAny && !$('Verify').first().json.degradedAny) ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3080,
+        400
+      ],
+      "id": "dd21ef08-5f3f-0787-793f-29a67976ba4d",
+      "name": "Round Kept?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/round/accept",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        400
+      ],
+      "id": "c195a047-4583-ee7e-1930-2139122a32d8",
+      "name": "Accept Round"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/round/drop",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        400
+      ],
+      "id": "c8211682-1aab-9a91-926b-a1b4529b0533",
+      "name": "Drop Last Round"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/test/cleanup",
+        "options": {
+          "timeout": 4320000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        600
+      ],
+      "id": "5add3374-dcee-7a0f-27d8-a29efdf7b5b1",
+      "name": "Cleanup Tests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'check_changes', context: $('Drop Last Round').first().json } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        600
+      ],
+      "id": "014af70d-d643-cb84-cb4a-bee31bcfbd82",
+      "name": "Rules: check changes"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        660,
+        600
+      ],
+      "id": "bd1d66fd-d9d9-3196-dfdb-b107a09c3f38",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/rules/apply",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { stage: 'make_pr', context: $('Drop Last Round').first().json } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        600
+      ],
+      "id": "f4a3300c-62e0-b33d-ce5e-9ffe342fbab7",
+      "name": "Rules: make PR"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/pr/create",
+        "options": {
+          "timeout": 300000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, title: $json.result.title, body: $json.result.body, labels: $json.result.labels } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        600
+      ],
+      "id": "c61c01f7-0a6f-623c-6e54-144d1c4fc08a",
+      "name": "Create PR"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/iteration/discard",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { file: $('Start Iteration').first().json.file, reason: $('Rules: check changes').first().json.result.reason || 'not approved' } }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        600
+      ],
+      "id": "d6e1ac9e-9323-48ad-aeb4-f604bcc8fd93",
+      "name": "Discard Changes"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        600
+      ],
+      "id": "10a831b2-5961-1acf-57cb-45dc4b4902b1",
+      "name": "Iteration Done"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/run/finish",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        600
+      ],
+      "id": "e339d30d-a9f5-0ee0-3f72-f057772e643a",
+      "name": "Finish Run"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        600
+      ],
+      "id": "63260fbc-1dcf-61bf-818e-62229a10a90d",
+      "name": "End"
+    }
+  ],
+  "connections": {
+    "Start (manual)": {
+      "main": [
+        [
+          {
+            "node": "Start Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Start Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Run": {
+      "main": [
+        [
+          {
+            "node": "Clone Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clone Repo": {
+      "main": [
+        [
+          {
+            "node": "Rules: post-clone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: post-clone": {
+      "main": [
+        [
+          {
+            "node": "Install & Detect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Install & Detect": {
+      "main": [
+        [
+          {
+            "node": "Baseline Coverage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baseline Coverage": {
+      "main": [
+        [
+          {
+            "node": "Rules: pre-pick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: pre-pick": {
+      "main": [
+        [
+          {
+            "node": "Rules: write-test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: write-test": {
+      "main": [
+        [
+          {
+            "node": "Next Iteration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Iteration": {
+      "main": [
+        [
+          {
+            "node": "Get Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Candidates": {
+      "main": [
+        [
+          {
+            "node": "More Work?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Work?": {
+      "main": [
+        [
+          {
+            "node": "Rules: pick file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: pick file": {
+      "main": [
+        [
+          {
+            "node": "File Picked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File Picked?": {
+      "main": [
+        [
+          {
+            "node": "Start Iteration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pick Retryable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Iteration": {
+      "main": [
+        [
+          {
+            "node": "Baseline Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baseline Mutation": {
+      "main": [
+        [
+          {
+            "node": "Baseline OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baseline OK?": {
+      "main": [
+        [
+          {
+            "node": "Coverage Gaps",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Iteration Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coverage Gaps": {
+      "main": [
+        [
+          {
+            "node": "Cov: Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Cov: Has Work?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Has Work?": {
+      "main": [
+        [
+          {
+            "node": "Cov: LLM Write Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cov: Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: LLM Write Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Parse Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Parse Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Write Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Write Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Run Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Run Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Green?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Green?": {
+      "main": [
+        [
+          {
+            "node": "Cov: Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cov: Wrote Any?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Wrote Any?": {
+      "main": [
+        [
+          {
+            "node": "Cov: Build Repair",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cov: Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Build Repair": {
+      "main": [
+        [
+          {
+            "node": "Cov: LLM Repair",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: LLM Repair": {
+      "main": [
+        [
+          {
+            "node": "Cov: Parse Repair",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Parse Repair": {
+      "main": [
+        [
+          {
+            "node": "Cov: Write Repair",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Write Repair": {
+      "main": [
+        [
+          {
+            "node": "Cov: Re-run Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Re-run Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Green After Repair?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Green After Repair?": {
+      "main": [
+        [
+          {
+            "node": "Cov: Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cov: Delete Broken Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Delete Broken Tests": {
+      "main": [
+        [
+          {
+            "node": "Cov: Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cov: Done": {
+      "main": [
+        [
+          {
+            "node": "Next Mutant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Mutant": {
+      "main": [
+        [
+          {
+            "node": "Mutant To Kill?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mutant To Kill?": {
+      "main": [
+        [
+          {
+            "node": "Kill: Build Batch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mutant Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Build Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: LLM Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: LLM Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Parse Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Parse Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Write Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Write Batch": {
+      "main": [
+        [
+          {
+            "node": "Kill: Sites Written",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Sites Written": {
+      "main": [
+        [
+          {
+            "node": "Kill: Verify Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill: Verify Batch": {
+      "main": [
+        [
+          {
+            "node": "Mutant Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mutant Loop Done": {
+      "main": [
+        [
+          {
+            "node": "Verify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify": {
+      "main": [
+        [
+          {
+            "node": "Round Kept?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Round Kept?": {
+      "main": [
+        [
+          {
+            "node": "Accept Round",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Drop Last Round",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Round": {
+      "main": [
+        [
+          {
+            "node": "Drop Last Round",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drop Last Round": {
+      "main": [
+        [
+          {
+            "node": "Rules: check changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: check changes": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discard Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Tests": {
+      "main": [
+        [
+          {
+            "node": "Rules: make PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules: make PR": {
+      "main": [
+        [
+          {
+            "node": "Create PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PR": {
+      "main": [
+        [
+          {
+            "node": "Iteration Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discard Changes": {
+      "main": [
+        [
+          {
+            "node": "Iteration Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iteration Done": {
+      "main": [
+        [
+          {
+            "node": "Next Iteration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Retryable?": {
+      "main": [
+        [
+          {
+            "node": "Next Iteration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish Run": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "tags": []
+}

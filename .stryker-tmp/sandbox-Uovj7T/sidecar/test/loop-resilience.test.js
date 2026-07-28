@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use strict';
 // UNIT TESTS for what the loop does when the machinery — not the mutant — fails.
 //
@@ -932,41 +933,3 @@ test('an empty answer or a crash is still forgiven — those can come good', () 
   assert.equal(again.line, target.line, 'nothing was written, so nothing was learned about this mutant');
   assert.deepEqual(sb.file(FILE).mutantAttempts || {}, {});
 }));
-
-// ── a file its own repo excludes from coverage ───────────────────────────────
-// Live on the target repo, lib/db.ts ended a run at mutation 68.18% and coverage 0%,
-// which is arithmetically impossible: mutants only die when tests execute the code.
-// The repo's vitest.config.ts says `coverage: { exclude: ['lib/db.ts'] }`, so the file
-// is absent from every coverage summary and we recorded 0. MAC is coverage × mutation,
-// so it stayed pinned at 0, the round was judged "no improvement", and tests that
-// killed 68% of the file's mutants were discarded — 25.9k/27.6k tokens for nothing.
-//
-// Mutation above zero is proof the tests run. When coverage contradicts that, coverage
-// is the unmeasurable one, and the round is judged on the number we can trust.
-test('tests that kill mutants are kept even when the repo hides the file from coverage',
-  () => withSandbox(async (sb) => {
-    const w = installFakes(sb);
-    await sb.start();
-    w.addFile({ path: 'lib/db.ts', existingTest: 'test/db.test.ts',
-      // the signature of an excluded file: tests exist and run, coverage never moves
-      coverageWithTests: 0, coverageWithout: 0,
-      mutants: [{ line: 10 }, { line: 20 }, { line: 30 }, { line: 40 }] });
-    await sb.post('/api/coverage/run', { phase: 'baseline' });
-    await sb.post('/api/iteration/start', { file: 'lib/db.ts' });
-    await sb.post('/api/stryker/run', { file: 'lib/db.ts', phase: 'baseline' });
-    const target = (await sb.get('/api/mutant/next', { path: 'lib/db.ts' })).mutant;
-    w.writeTest('test/db-kill.test.ts', { target: 'lib/db.ts', kills: [target.line] });
-    await sb.post('/api/mutant/verify', { file: 'lib/db.ts', mutant: target, testPaths: ['test/db-kill.test.ts'], phase: 'batch' });
-
-    const v = await sb.post('/api/verify', { file: 'lib/db.ts' });
-
-    assert.equal(v.coverageAfter, 0, 'the repo still reports no coverage for it');
-    assert.ok((v.mutationAfter ?? 0) > 0, 'but mutants died, so the tests certainly run');
-    assert.equal(v.coverageBlind, true, 'and the contradiction is recorded, not averaged away');
-    assert.equal(v.improvedAny, true, 'a round that raised the only measurable number is progress');
-
-    await sb.post('/api/round/accept', { file: 'lib/db.ts' });
-    const d = await sb.post('/api/round/drop', { file: 'lib/db.ts' });
-    assert.equal(d.improved, true,
-      'and it reaches the PR: judging it on MAC alone throws away tests that kill 68% of a file');
-  }));

@@ -1221,7 +1221,20 @@ const routes = {
       const degradedAny = (coverageAfter ?? 0) < (rb.coverage ?? 0)
         || (st.score ?? 0) < (rb.mutation ?? 0) || (macAfter ?? 0) < (rb.mac ?? 0);
       // no changed files → any measured delta is stryker flakiness, not improvement
-      const improved = (macAfter ?? 0) > (f.macBefore ?? 0) && changed.length > 0;
+      // Mutants die only when tests execute the code, so mutation above zero with
+      // coverage at zero is not a fact about the file — it is the repo excluding it
+      // from its own coverage config (live: lib/db.ts, `coverage: { exclude: [...] }`,
+      // 68.18% mutation against 0% coverage). MAC is coverage × mutation, so such a
+      // file is pinned at 0 for ever and every round it wins is thrown away.
+      const coverageBlind = (st.score ?? 0) > 0 && (coverageAfter ?? 0) === 0;
+      const improved = changed.length > 0 && (coverageBlind
+        ? (st.score ?? 0) > (f.mutationBefore ?? 0)
+        : (macAfter ?? 0) > (f.macBefore ?? 0));
+      if (coverageBlind) {
+        S.upsertFile(file, { coverageBlind: true });
+        S.event('improving_mac', `${file}: ${st.score}% of mutants die but coverage reads 0% — the repo excludes `
+          + 'this file from its own coverage config, so MAC cannot move; judging the round on mutation alone');
+      }
       // remember the best result any attempt reached, even if it is not kept —
       // "we tried and got this far" is information worth showing
       const prev = measured()[file] || {};
@@ -1235,7 +1248,7 @@ const routes = {
         mutationBefore: f.mutationBefore, mutationAfter: st.score,
         macBefore: f.macBefore, macAfter,
         improved,
-        improvedAny, degradedAny, pendingSites,
+        improvedAny, degradedAny, pendingSites, coverageBlind,
         rounds: f.rounds || 0,
         totalCoverage: cov.totalPct,
         changedFiles: changed,
@@ -1294,7 +1307,11 @@ const routes = {
         coverageAfter: null, mutationAfter: null, macAfter: null });
     const diff = await pr.diffAgainstBase();
     const changed = diff.match(/^\+\+\+ b\/(.+)$/gm)?.map((l) => l.slice(6)) || [];
-    const improved = (f.rounds || 0) > 0 && (rb.mac ?? 0) > (f.macBefore ?? 0);
+    // same rule as /api/verify: a file its repo hides from coverage is judged on the
+    // number that still means something
+    const improved = (f.rounds || 0) > 0 && (f.coverageBlind
+      ? (rb.mutation ?? 0) > (f.mutationBefore ?? 0)
+      : (rb.mac ?? 0) > (f.macBefore ?? 0));
     return {
       ok: true, file, testsGreen: true,
       coverageBefore: f.coverageBefore, coverageAfter: rb.coverage,
