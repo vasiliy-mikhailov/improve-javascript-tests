@@ -457,7 +457,7 @@ test('a merge that would drop a test is rejected before anything is re-measured'
   assert.equal(w.exists(KILL_B), true);
   assert.equal(w.calls.coverage.length, before.cov, 'and no measurement was spent proving it');
   assert.equal(w.calls.stryker.length, before.stryker);
-  assert.match(sb.events().join('\n'), /merge rejected/i);
+  assert.match(sb.events().join('\n'), /merge chunk rejected/i);
 }));
 
 test('the pick prompt names a failed mutant by its full identity, not just line and mutator',

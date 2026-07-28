@@ -191,42 +191,80 @@ function candidates() {
  * Verified exactly like the cleanup that precedes it: suite green, and neither half of
  * MAC may drop. Anything else and the originals come back.
  */
-async function consolidate(file, covBase, mutBase) {
-  const changed = (await pr.changedTestFiles()).filter((p) => repo.GENERATED_TEST_RE.test(p));
-  if (changed.length < 2) return 0;
-  S.setStage('preparing_pr', `folding ${changed.length} generated test files into one for ${file}`);
-  const originals = changed.map((p) => ({ path: p, content: repo.readFileSafe(p, 200000) })).filter((o) => o.content);
-  if (originals.length < 2) return 0;
-  const ext = (file.match(/\.[cm]?[jt]sx?$/) || ['.ts'])[0];
-  const target = originals[0].path.replace(/\.(kill-(L\d+|batch)-[a-z0-9-]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/, `.mac.test${ext}`);
-  if (target === originals[0].path) return 0;
+// How many files one merge request may carry. A single request holding every
+// generated file is the slowest call the pipeline makes and the likeliest to be
+// dropped — live, eleven files ended in "merge skipped: fetch failed" and the PR
+// shipped all eleven, and an earlier sixteen-file merge aborted on the 300s timeout.
+// Chunks bound both the prompt and the blast radius: a chunk that fails costs its own
+// files and nothing else.
+const MERGE_CHUNK = 4;
 
-  let mergedText;
+const MERGE_SYSTEM = 'You merge several generated test files for ONE source file into a single file. '
+  + 'Keep EVERY test — same names, same assertions, same values. Deduplicate imports and shared mock setup '
+  + 'into one block at the top. Do not rename tests, do not weaken or reorder assertions, do not add tests. '
+  + 'Reply with ONLY the merged file content: no markdown fences, no explanation.';
+
+/** Test titles, used to prove a merge lost nothing. */
+const testTitles = (t) => (t.match(/\b(it|test)\s*\(\s*['"`]([^'"`]+)/g) || []).map((x) => x.slice(x.indexOf('(') + 1));
+
+/**
+ * Merge one chunk. Returns the merged text, or null if the model failed, returned
+ * something too small to be a test file, or dropped a test.
+ */
+async function mergeChunk(group) {
+  let text;
   try {
     const r = await llm.chat({
-      system: 'You merge several generated test files for ONE source file into a single file. Keep EVERY test — same names, same assertions, same values. Deduplicate imports and shared mock setup into one block at the top. Do not rename tests, do not weaken or reorder assertions, do not add tests. Reply with ONLY the merged file content: no markdown fences, no explanation.',
-      prompt: originals.map((o) => `=== ${o.path} ===\n${o.content}`).join('\n\n'),
+      system: MERGE_SYSTEM,
+      prompt: group.map((o) => `=== ${o.path} ===\n${o.content}`).join('\n\n'),
       maxTokens: 12000, temperature: 0.1,
     });
-    mergedText = (r.text || '').replace(/^[\s\S]*?<\/think>/, '')
+    text = (r.text || '').replace(/^[\s\S]*?<\/think>/, '')
       .replace(/^```[a-z]*\s*\n?/m, '').replace(/```\s*$/m, '').trim() + '\n';
   } catch (e) {
-    S.event('preparing_pr', 'merge skipped: ' + e.message.slice(0, 140));
-    return 0;
+    S.event('preparing_pr', `merge chunk skipped (${group.length} file(s)): ` + e.message.slice(0, 120));
+    return null;
   }
   // every test must still be there: losing one is a silent regression the metrics
   // might not notice, because a dropped test can leave the score untouched
-  const titles = (t) => (t.match(/\b(it|test)\s*\(\s*['"`]([^'"`]+)/g) || []).map((x) => x.slice(x.indexOf('(') + 1));
-  const before = originals.flatMap((o) => titles(o.content));
-  const after = titles(mergedText);
-  const missing = before.filter((t) => !after.includes(t));
-  if (mergedText.length < 200 || missing.length) {
-    S.event('preparing_pr', `merge rejected: ${missing.length} test(s) would be lost`);
-    return 0;
+  const missing = group.flatMap((o) => testTitles(o.content)).filter((t) => !testTitles(text).includes(t));
+  if (text.length < 200 || missing.length) {
+    S.event('preparing_pr', `merge chunk rejected: ${missing.length} test(s) would be lost`);
+    return null;
   }
+  return text;
+}
 
-  for (const o of originals) repo.deleteTestFile(o.path);
-  repo.writeTestFile(target, mergedText);
+async function consolidate(file, covBase, mutBase) {
+  const changed = (await pr.changedTestFiles()).filter((p) => repo.GENERATED_TEST_RE.test(p));
+  if (changed.length < 2) return 0;
+  const originals = changed.map((p) => ({ path: p, content: repo.readFileSafe(p, 200000) })).filter((o) => o.content);
+  if (originals.length < 2) return 0;
+  const ext = (file.match(/\.[cm]?[jt]sx?$/) || ['.ts'])[0];
+  const stem = originals[0].path.replace(/\.(kill-(L\d+|batch)-[a-z0-9-]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/, '');
+  if (stem === originals[0].path) return 0;
+
+  const chunks = [];
+  for (let i = 0; i < originals.length; i += MERGE_CHUNK) chunks.push(originals.slice(i, i + MERGE_CHUNK));
+  S.setStage('preparing_pr', `folding ${originals.length} generated test files for ${file} in ${chunks.length} chunk(s)`);
+
+  // one target per chunk: .mac.test.ts, .mac-r2.test.ts, … — all shapes
+  // GENERATED_TEST_RE already recognises, so a later round folds them again
+  const written = [], folded = [];
+  for (const [i, group] of chunks.entries()) {
+    if (group.length < 2) continue;               // nothing to gain from folding one file
+    const text = await mergeChunk(group);
+    if (!text) continue;                          // this chunk keeps its own files
+    const target = `${stem}${i === 0 ? '.mac' : `.mac-r${i + 1}`}.test${ext}`;
+    if (group.some((o) => o.path === target)) continue;
+    for (const o of group) repo.deleteTestFile(o.path);
+    repo.writeTestFile(target, text);
+    written.push(target);
+    folded.push(...group);
+  }
+  if (!written.length) return 0;
+  const mergedText = written.map((p) => repo.readFileSafe(p, 200000) || '').join('');
+  const target = written.join(', ');
   const cr = await coverage.runCoverage();
   let ok = false, newCov = null, newScore = null;
   if (cr.exitCode === 0) {
@@ -238,8 +276,8 @@ async function consolidate(file, covBase, mutBase) {
     } catch { ok = false; }
   }
   if (!ok) {
-    repo.deleteTestFile(target);
-    for (const o of originals) repo.writeTestFile(o.path, o.content);
+    for (const p of written) repo.deleteTestFile(p);
+    for (const o of folded) repo.writeTestFile(o.path, o.content);
     S.upsertFile(file, { coverage: covBase, coverageAfter: covBase });
     S.event('preparing_pr', `merge reverted: coverage ${covBase}→${newCov}, mutation ${mutBase}→${newScore}`);
     return 0;
@@ -250,15 +288,16 @@ async function consolidate(file, covBase, mutBase) {
   // files, logged success, and left three others in the PR because the filter above
   // could not see them. State what is on disk and what git has, and check the branch
   // diff afterwards, so a fold that quietly achieves nothing says so.
-  const onDisk = repo.readFileSafe(target, 200) !== null;
+  const onDisk = written.every((p) => repo.readFileSafe(p, 200) !== null);
   const pending = (await pr.changedFiles()).filter((p) => /\.test\.[cm]?[jt]sx?$/.test(p));
   S.event('preparing_pr', `merge → ${target} on disk: ${onDisk}; git sees ${pending.length} changed test file(s)`);
   try { await pr.commit(`test: fold generated tests for ${file} into one file`); }
   catch (e) { S.event('preparing_pr', 'merge commit note: ' + e.message.slice(0, 140)); }
-  const committed = (await pr.changedTestFiles()).includes(target);
-  S.event('preparing_pr', `merged ${originals.length} files into ${target} (${mergedText.length}B)`
+  const diffNow = await pr.changedTestFiles();
+  const committed = written.every((p) => diffNow.includes(p));
+  S.event('preparing_pr', `merged ${folded.length} files into ${target} (${mergedText.length}B)`
     + (committed ? '' : ' — WARNING: it is not in the branch diff, so the PR will carry the originals'));
-  return originals.length;
+  return folded.length;
 }
 
 // ── route table ────────────────────────────────────────────────────────────

@@ -1193,3 +1193,57 @@ test('the fold picks up sweep-written kill tests, not just the old single-target
     }
     assert.ok(w.read('test/a.mac.test.ts'), 'the merged file must exist');
   }));
+
+// ── folding many files must not depend on one enormous model call ────────────
+// "folding 11 generated test files into one for lib/api-schemas/models/allocation.ts"
+// → "merge skipped: fetch failed" → a PR with eleven test files. An earlier run aborted
+// at sixteen. One request carrying every file is both the slowest call the pipeline
+// makes and the one most likely to be dropped, and when it fails the whole fold is
+// lost. Chunks are bounded, and one bad chunk costs only its own files.
+async function withGenerated(sb, n) {
+  const w = await withAcceptedRound(sb);
+  const paths = [];
+  for (let i = 0; i < n; i++) {
+    const p = `test/a.kill-batch-g${i}.test.ts`;
+    w.writeTest(p, { target: FILE, kills: [10], cases: 2 });
+    paths.push(p);
+  }
+  return { w, paths };
+}
+
+test('eleven generated files are folded in bounded chunks, not one giant request',
+  () => withSandbox(async (sb) => {
+    const { w, paths } = await withGenerated(sb, 11);
+    const sizes = [];
+    w.llm.onCall(({ prompt }) => {
+      sizes.push((prompt.match(/^=== /gm) || []).length);
+      return { text: w.testSource({ target: FILE, kills: [10], cases: 2 }) };
+    });
+
+    const r = await sb.post('/api/test/cleanup', { file: FILE });
+
+    assert.ok(r.merged >= 11, `every generated file should be folded, got ${r.merged}`);
+    for (const p of paths) assert.equal(w.read(p), null, `${p} survived the fold`);
+    const merges = sizes.filter((n) => n > 1);
+    assert.ok(merges.length > 1, 'a dozen files must not be one request');
+    assert.ok(Math.max(...merges) <= 4, `a chunk carried ${Math.max(...merges)} files`);
+  }));
+
+test('one failed chunk costs only its own files', () => withSandbox(async (sb) => {
+  const { w, paths } = await withGenerated(sb, 9);
+  let merge = 0;
+  w.llm.onCall(({ prompt }) => {
+    const isMerge = (prompt.match(/^=== /gm) || []).length > 1;
+    if (!isMerge) return { text: w.testSource({ target: FILE, kills: [10], cases: 2 }) };
+    merge += 1;
+    if (merge === 2) throw new Error('fetch failed');
+    return { text: w.testSource({ target: FILE, kills: [10], cases: 2 }) };
+  });
+
+  await sb.post('/api/test/cleanup', { file: FILE });
+
+  const left = paths.filter((p) => w.read(p) !== null);
+  assert.ok(left.length > 0 && left.length < paths.length,
+    `a dropped connection on one chunk should leave only that chunk unfolded, ${left.length}/${paths.length} left`);
+  assert.match(log(sb), /merge/);
+}));
