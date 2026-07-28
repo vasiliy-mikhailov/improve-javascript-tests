@@ -82,5 +82,15 @@ export function killBuildBatchPrompt(t, opts) {
       + (o.thinking === false ? ' (fast attempt, without reasoning)' : ''),
     targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists,
     targetCount: targets.length, siteCount: groups.length,
-    siteNames: groups.map((g) => g.name) };
+    siteNames: groups.map((g) => g.name),
+    // What this prompt ACTUALLY attacked. /api/mutant/next offers two work lists —
+    // `groups` (sites from the durable queue, what we write tests for) and `targets`
+    // (the picker's ranked shortlist) — and verification used to be handed the second
+    // one. Charging a failed attempt to a mutant no test was written for spends the
+    // single shot it gets, so those mutants left the shortlist unattacked and the
+    // file's mutation loop ended early with sites still pending.
+    aimed: targets.map((m) => ({
+      mutator: m.mutator, line: m.line, column: m.column ?? 0,
+      endLine: m.endLine, replacement: m.replacement, id: m.id, status: m.status,
+    })) };
 }

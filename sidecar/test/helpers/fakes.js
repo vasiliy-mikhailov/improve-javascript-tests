@@ -243,6 +243,7 @@ function installFakes(sb, opts = {}) {
       survivedTotal: survivors.length,
       survivedAll: survivors.map((m) => ({
         mutator: m.mutator, line: m.line, column: m.column, replacement: String(m.replacement ?? '').slice(0, 60),
+        status: m.status,
       })),
       survived: survivors.slice(0, 100),
     };

@@ -90,3 +90,13 @@ test('the round gate reads the worth-another flag from Verify, which is where it
   assert.match(expr, /\$\('Verify'\)[^"]*anotherRoundWorthIt/,
     'the flag lives in Verify\'s response, so it must be read from that node');
 });
+
+test('Kill: Verify Batch is told what the prompt aimed at, not the picker\'s shortlist', () => {
+  // `Next Mutant` returns both lists; only one of them describes what got a test.
+  // Charging an attempt to a mutant nothing was written for spends its single shot.
+  const body = wf.nodes.find((n) => n.name === 'Kill: Verify Batch').parameters.jsonBody;
+  assert.match(body, /Kill: Build Batch'\)\.first\(\)\.json\.aimed/,
+    'the node that built the prompt is the only one that knows which mutants it covered');
+  assert.doesNotMatch(body, /Next Mutant'\)\.first\(\)\.json\.targets/,
+    'the ranked shortlist is a picking aid, not the set under test');
+});

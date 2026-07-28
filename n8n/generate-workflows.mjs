@@ -201,7 +201,7 @@ function mutantLoop(entryNode) {
   });
   Http('Kill: Verify Batch', {
     path: '/api/mutant/verify',
-    body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Next Mutant').first().json.targets, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
+    body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Kill: Build Batch').first().json.aimed, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
     timeout: 2400000,
   });
   IfNum('Kill: Batch Failed?');

@@ -155,9 +155,14 @@ function parseReport(reportAbs, file) {
     // files where the cap bites.
     survivedAll: survivedList.map((m) => ({
       mutator: m.mutator, line: m.line, column: m.column, replacement: String(m.replacement ?? '').slice(0, 60),
+      // status travels with the mutant: this list is what fills the durable queue, and
+      // the sweep prompt tells the model "not covered at all — this test must reach the
+      // code first" for a nocoverage site. Dropping it here made that branch dead, so
+      // every uncovered site was described as already covered but under-asserted.
+      status: m.status,
     })),
     survived: survivedList.slice(0, 100),
   };
 }
 
-module.exports = { runStryker };
+module.exports = { runStryker, parseReport };

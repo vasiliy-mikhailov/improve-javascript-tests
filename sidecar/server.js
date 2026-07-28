@@ -304,7 +304,12 @@ const routes = {
     state.decisions = {};
     state.prs = [];
     state.pickFailures = 0;
-    if (body.clearLedger) delete state.improvedLedger[slugify(state.run.config.repoUrl)];
+    if (body.clearLedger) {
+      // all four, or the run is not the independent one it claims to be: measure,
+      // overhead and token history survived and were read back as this run's own
+      const slug = slugify(state.run.config.repoUrl);
+      for (const k of ['improvedLedger', 'measureLedger', 'overheadLedger', 'tokenLedger']) delete state[k][slug];
+    }
     S.setStage('starting', `run ${state.run.id} on ${state.run.config.repoUrl}#${state.run.config.repoBranch}`);
     S.save();
     return { ok: true, run: state.run };

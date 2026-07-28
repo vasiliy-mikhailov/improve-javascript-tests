@@ -659,3 +659,41 @@ test('a flat list of mutants still works, so the single-target path is unaffecte
   assert.equal(p.targetCount, 3);
   assert.match(p.prompt, /n > 10/);
 });
+
+// ── the sweep must verify what it attacked ───────────────────────────────────
+// /api/mutant/next returns TWO work lists: `targets`, the ranked shortlist of up to 8
+// individual mutants, and `groups`, up to 12 unwritten SITES from the durable queue.
+// The prompt writes one test case per GROUP; the verify step was posting `targets`.
+// Two different sets, so the sidecar charged an attempt to mutants no test was written
+// for — and one attempt is all a mutant gets, so they were retired unattacked until the
+// shortlist emptied and the file's mutation loop ended with sites still pending.
+test('the batch prompt reports the mutants it actually aimed at', () => {
+  const groups = [
+    { name: 'kills 10:5', line: 10, column: 5, mutants: [
+      { mutator: 'BooleanLiteral', line: 10, column: 5, replacement: 'false' },
+      { mutator: 'ConditionalExpression', line: 10, column: 5, replacement: 'true' }] },
+    { name: 'kills 22:1', line: 22, column: 1, mutants: [
+      { mutator: 'EqualityOperator', line: 22, column: 1, replacement: '>=' }] },
+  ];
+  const p = killBuildBatchPrompt({
+    ok: true, runner: 'vitest', path: 'src/a.ts', source: 'x', testPath: 'test/a.test.ts',
+    groups, targets: [{ mutator: 'ArithmeticOperator', line: 99, column: 3, replacement: '-' }],
+  }, {});
+
+  assert.equal(p.aimed.length, 3, 'every mutant of every site the prompt wrote a case for');
+  assert.deepEqual(p.aimed.map((m) => m.line), [10, 10, 22]);
+  assert.ok(!p.aimed.some((m) => m.line === 99),
+    'the flat shortlist is NOT what the prompt attacked when groups are present');
+  for (const m of p.aimed) {
+    for (const k of ['mutator', 'line', 'column', 'replacement']) {
+      assert.ok(Object.hasOwn(m, k), `verification identifies a mutant by ${k}`);
+    }
+  }
+});
+
+test('with no groups the batch falls back to the shortlist, and aims at exactly that', () => {
+  const targets = [{ mutator: 'BooleanLiteral', line: 4, column: 2, replacement: 'false' }];
+  const p = killBuildBatchPrompt({ ok: true, runner: 'vitest', path: 'src/a.ts', source: 'x',
+    testPath: 'test/a.test.ts', groups: [], targets }, {});
+  assert.deepEqual(p.aimed.map((m) => m.line), [4]);
+});

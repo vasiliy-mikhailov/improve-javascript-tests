@@ -199,3 +199,25 @@ test('a kill mid-round shows up on the dashboard before the round ends', () => w
     `the row must show the score this attempt reached — got ${JSON.stringify(row.attemptMutation)}`);
   assert.ok((row.attemptMac ?? 0) > 0, 'and the MAC that follows from it');
 }));
+
+// ── a run that says it starts clean must actually start clean ────────────────
+// clearLedger deleted one of four per-repo ledgers. The other three carried the
+// previous run's measurements, overheads and token counts into a run declared
+// independent — so an eval comparing "before" against a fresh run was comparing
+// against numbers the previous run had already put there.
+test('run/start with clearLedger wipes every per-repo ledger, not just the improved one',
+  () => withSandbox(async (sb) => {
+    await sb.start();
+    const slug = sb.repoSlug;
+    for (const k of ['improvedLedger', 'measureLedger', 'overheadLedger', 'tokenLedger']) {
+      S.state[k][slug] = { 'src/old.ts': { mac: 42 } };
+      S.state[k]['some-other-repo'] = { 'src/x.ts': { mac: 7 } };
+    }
+
+    await sb.post('/api/run/start', { repoUrl: sb.repoUrl, clearLedger: true, force: true });
+
+    for (const k of ['improvedLedger', 'measureLedger', 'overheadLedger', 'tokenLedger']) {
+      assert.equal(S.state[k][slug], undefined, `${k} still holds the previous run's numbers`);
+      assert.ok(S.state[k]['some-other-repo'], `${k}: another repo's history is not ours to delete`);
+    }
+  }));
