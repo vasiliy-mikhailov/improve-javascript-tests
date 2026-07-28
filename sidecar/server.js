@@ -1202,7 +1202,9 @@ const routes = {
       // one shot, and that verdict holds for the whole file.
       mutantFailures: 0, mutantGenFailures: 0, mutantAttemptCount: 0, mutantNoOutput: {},
     });
-    S.event('improving_mac', `round ${rounds} accepted for ${file} (mac now ${f.macAfter}) — trying another round`);
+    // whether another round follows is decided AFTER this call, by the graph — this
+    // used to promise one unconditionally and now reads as a lie half the time
+    S.event('improving_mac', `round ${rounds} accepted for ${file} (mac now ${f.macAfter})`);
     return { ok: true, file, rounds };
   },
 
