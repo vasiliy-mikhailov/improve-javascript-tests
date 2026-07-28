@@ -192,13 +192,13 @@ function candidates() {
  * MAC may drop. Anything else and the originals come back.
  */
 async function consolidate(file, covBase, mutBase) {
-  const changed = (await pr.changedTestFiles()).filter((p) => /\.(kill-L\d+-|mac-cov)/.test(p));
+  const changed = (await pr.changedTestFiles()).filter((p) => repo.GENERATED_TEST_RE.test(p));
   if (changed.length < 2) return 0;
   S.setStage('preparing_pr', `folding ${changed.length} generated test files into one for ${file}`);
   const originals = changed.map((p) => ({ path: p, content: repo.readFileSafe(p, 200000) })).filter((o) => o.content);
   if (originals.length < 2) return 0;
   const ext = (file.match(/\.[cm]?[jt]sx?$/) || ['.ts'])[0];
-  const target = originals[0].path.replace(/\.(kill-L\d+-[a-z0-9-]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/, `.mac.test${ext}`);
+  const target = originals[0].path.replace(/\.(kill-(L\d+|batch)-[a-z0-9-]+|mac-cov(-r\d+)?)\.test\.[cm]?[jt]sx?$/, `.mac.test${ext}`);
   if (target === originals[0].path) return 0;
 
   let mergedText;
@@ -246,12 +246,10 @@ async function consolidate(file, covBase, mutBase) {
   }
   S.upsertFile(file, { coverage: newCov, coverageAfter: newCov, mutation: newScore, mutationAfter: newScore,
     mac: mac(newCov, newScore), macAfter: mac(newCov, newScore) });
-  // A merge that logs success and does not reach the commit is indistinguishable from
-  // one that never ran — which is exactly what happened once: the fold event fired, and
-  // the commit it made contained only an unrelated deletion. pr.commit is proven
-  // correct against real git (sidecar/test/pr-commit.test.js), so the tree must not
-  // have held the merge by the time it ran. Say what is actually there, and check
-  // afterwards, rather than trusting the sequence.
+  // The fold's own report is not evidence that anything landed: it once merged two
+  // files, logged success, and left three others in the PR because the filter above
+  // could not see them. State what is on disk and what git has, and check the branch
+  // diff afterwards, so a fold that quietly achieves nothing says so.
   const onDisk = repo.readFileSafe(target, 200) !== null;
   const pending = (await pr.changedFiles()).filter((p) => /\.test\.[cm]?[jt]sx?$/.test(p));
   S.event('preparing_pr', `merge → ${target} on disk: ${onDisk}; git sees ${pending.length} changed test file(s)`);

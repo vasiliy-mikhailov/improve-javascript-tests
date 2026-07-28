@@ -1164,3 +1164,30 @@ test('admin/reset can start ONE repo over without touching the others', () => wi
   assert.equal(S.state.improvedLedger[sb.repoSlug], undefined);
   assert.ok(S.state.improvedLedger['other-repo'], 'another repo\'s history is not ours to delete');
 }));
+
+// ── consolidation must see the files the sweep actually writes ───────────────
+// The fold selected `kill-L<line>-` files: the single-target loop's naming. The sweep
+// replaced it with `kill-batch-<hash>` and nothing failed — consolidation simply
+// stopped seeing any kill test, folded the coverage-bootstrap files on their own,
+// reported success, and every PR shipped one file per sweep call. A filter that
+// silently matches nothing is invisible from outside: the stage runs, the event fires,
+// the metrics are real, and only the PR shows it.
+test('the fold picks up sweep-written kill tests, not just the old single-target names',
+  () => withSandbox(async (sb) => {
+    const w = await withAcceptedRound(sb);
+    // what a real round leaves behind: one bootstrap coverage file and two sweep files
+    const generated = ['test/a.mac-cov.test.ts', 'test/a.kill-batch-2icypk.test.ts', 'test/a.kill-batch-6tgkgv.test.ts'];
+    for (const p of generated) w.writeTest(p, { target: FILE, kills: [10], cases: 2 });
+    // one reply per cleanup pass plus one for the merge; every title must survive
+    const same = w.testSource({ target: FILE, kills: [10], cases: 2 });
+    w.llm.onCall(() => ({ text: same }));
+
+    const r = await sb.post('/api/test/cleanup', { file: FILE });
+
+    assert.equal(r.merged, generated.length,
+      `the fold saw ${r.merged} of ${generated.length} generated files`);
+    for (const p of generated) {
+      assert.equal(w.read(p), null, `${p} must be deleted by the fold, or the PR carries it as well as the merge`);
+    }
+    assert.ok(w.read('test/a.mac.test.ts'), 'the merged file must exist');
+  }));

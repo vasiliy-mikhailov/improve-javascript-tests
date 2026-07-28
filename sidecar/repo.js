@@ -300,7 +300,13 @@ function testDirCounts() {
 // in the repo, so it would win and the model would be shown its own previous work as
 // "the repo's conventions". Errors compound and the file drifts further from what the
 // team actually writes with every round.
-const GENERATED_TEST_RE = /\.(mac-cov|mac)(-r\d+)?\.test\.|\.kill-L\d+-/;
+// Every filename this pipeline writes. Three things read it — the style reference
+// (never show the model its own output), the repo-owned snapshot (never delete a
+// test that was here before us), and the fold (gather what we wrote into one file).
+// It has to list every generator: when the sweep replaced the single-target loop,
+// `kill-batch-` was absent here, so the fold saw none of its files and every PR
+// shipped one test file per sweep call.
+const GENERATED_TEST_RE = /\.(mac-cov|mac)(-r\d+)?\.test\.|\.kill-(L\d+|batch)-/;
 
 function findStyleReference(srcRel) {
   const dir = repoDir();
@@ -372,6 +378,7 @@ function guessTestPath(srcRel) {
 }
 
 module.exports = {
+  GENERATED_TEST_RE,
   repoDir, clone, install, detectRunner, detectUi, findStyleReference, ourTestFor, listScopeFiles, createBranch, resetToBase, discardUncommitted,
   readFileSafe, writeTestFile, deleteTestFile, guessTestPath, readPkg,
 };
