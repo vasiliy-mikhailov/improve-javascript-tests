@@ -246,9 +246,20 @@ async function consolidate(file, covBase, mutBase) {
   }
   S.upsertFile(file, { coverage: newCov, coverageAfter: newCov, mutation: newScore, mutationAfter: newScore,
     mac: mac(newCov, newScore), macAfter: mac(newCov, newScore) });
+  // A merge that logs success and does not reach the commit is indistinguishable from
+  // one that never ran — which is exactly what happened once: the fold event fired, and
+  // the commit it made contained only an unrelated deletion. pr.commit is proven
+  // correct against real git (sidecar/test/pr-commit.test.js), so the tree must not
+  // have held the merge by the time it ran. Say what is actually there, and check
+  // afterwards, rather than trusting the sequence.
+  const onDisk = repo.readFileSafe(target, 200) !== null;
+  const pending = (await pr.changedFiles()).filter((p) => /\.test\.[cm]?[jt]sx?$/.test(p));
+  S.event('preparing_pr', `merge → ${target} on disk: ${onDisk}; git sees ${pending.length} changed test file(s)`);
   try { await pr.commit(`test: fold generated tests for ${file} into one file`); }
   catch (e) { S.event('preparing_pr', 'merge commit note: ' + e.message.slice(0, 140)); }
-  S.event('preparing_pr', `merged ${originals.length} files into ${target} (${mergedText.length}B)`);
+  const committed = (await pr.changedTestFiles()).includes(target);
+  S.event('preparing_pr', `merged ${originals.length} files into ${target} (${mergedText.length}B)`
+    + (committed ? '' : ' — WARNING: it is not in the branch diff, so the PR will carry the originals'));
   return originals.length;
 }
 
