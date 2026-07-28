@@ -103,27 +103,3 @@ test('EXACTLY ONE file comes back, because the parser keeps only one',
     });
     assert.ok(passed >= 2, `the prompt is not holding the model to one file: ${passed}/${total}`);
   });
-
-test('shown the runner error, the escalation fixes the import instead of repeating it',
-  { skip: skipUnlessLive, timeout: 900000 }, async () => {
-    // Today's fix, asked of the model directly. A live round wrote 13 red tests in a
-    // row because the escalation was never told WHY the previous one failed; the unit
-    // test asserts the text reaches the prompt, this asserts it changes the answer.
-    const failure = "FAIL  test/slug.kill-L3.test.js\n"
-      + "  Error: Failed to resolve import \"@/lib/slug\" from \"test/slug.kill-L3.test.js\".\n"
-      + "  Does the file exist?\n";
-    const { passed, total, out } = await samples(3, async () => {
-      const { content } = await generate(plan({
-        existingTest: "import { describe, it, expect } from 'vitest';\n"
-          + "import { slugify } from '../src/slug.js';\n\n"
-          + "describe('slugify', () => { it('lowercases', () => { expect(slugify('Ab')).toBe('ab'); }); });\n",
-      }, { thinking: true, escalated: true, failure }));
-      const repeatsBadImport = /@\/lib\/slug/.test(content);
-      const usesShownImport = /from\s+['"][^'"]*src\/slug(\.js)?['"]/.test(content);
-      return { ok: content.length > 0 && !repeatsBadImport && usesShownImport,
-        note: `repeats-bad-import=${repeatsBadImport} uses-shown-import=${usesShownImport}` };
-    });
-    assert.ok(passed >= 2,
-      `the escalation ignored the runner output in ${total - passed}/${total} samples: `
-      + JSON.stringify(out.filter((s) => !s.ok).map((s) => s.note)));
-  });

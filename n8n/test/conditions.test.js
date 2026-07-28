@@ -78,7 +78,6 @@ const BRANCHES = {
   'Cov: Green After Repair?': ['Cov: Done', 'Cov: Delete Broken Tests'],
   'Mutant To Kill?': ['Kill: Build Batch', 'Mutant Loop Done'],
   'Kill: Batch Failed?': ['Kill: Build Prompt', 'Next Mutant'],
-  'Kill: Escalate?': ['Kill: Build Prompt 2', 'Next Mutant'],
   'Round Kept?': ['Accept Round', 'Drop Last Round'],
   'Another Round?': ['Coverage Gaps', 'Drop Last Round'],
   'Approved?': ['Cleanup Tests', 'Discard Changes'],
@@ -111,8 +110,8 @@ test('the evaluator refuses what it cannot resolve', () => {
   assert.equal(evaluate('={{ $json.done ? 0 : 1 }}', { json: {} }), 1);
 });
 
-test('condition() is the single source for all 14 IF nodes', () => {
-  assert.equal(Object.keys(CONDITIONS).length, 14);
+test('condition() is the single source for all 13 IF nodes', () => {
+  assert.equal(Object.keys(CONDITIONS).length, 13);
   assert.deepEqual(Object.keys(COMPARISONS).sort(), Object.keys(CONDITIONS).sort());
   assert.deepEqual(Object.keys(BRANCHES).sort(), Object.keys(CONDITIONS).sort());
   assert.throws(() => condition('Wrote Any?'), /no condition registered/);   // near-miss name
@@ -123,7 +122,7 @@ test('condition() is the single source for all 14 IF nodes', () => {
 // the generated workflow must agree with the module the tables below exercise
 // =============================================================================
 test('every IF node in the workflow carries exactly the registered condition', () => {
-  assert.equal(ifNodes.length, 14, 'workflow has a different number of IF nodes than conditions.js knows');
+  assert.equal(ifNodes.length, 13, 'workflow has a different number of IF nodes than conditions.js knows');
   for (const n of ifNodes) {
     assert.deepEqual(n.parameters.conditions.number, [condition(n.name)], `${n.name}: expression drifted from conditions.js`);
     assert.equal(n.typeVersion, 1, `${n.name}: IF v2+ uses a different parameter shape than this test models`);
@@ -446,8 +445,6 @@ test('every condition reads a field whose falsy value already MEANS the false an
     ['Mutant To Kill?', { json: { mutant: null } }, 1, 'null is the only "no target" /api/mutant/next sends'],
     ['Kill: Batch Failed?', { json: { killed: true, retryable: false } }, 1,
       'retryable:false after a batch means something died — go straight to the next batch'],
-    ['Kill: Escalate?', { json: { killed: true, retryable: false } }, 1,
-      'retryable:false is the sidecar saying the target is spent — a kill, or the reasoning attempt already ran'],
     ['Round Kept?', { json: {}, nodes: { Verify: { improvedAny: false, degradedAny: false } } }, 1,
       'improvedAny:false is a round that changed nothing — drop it rather than commit it'],
     ['Another Round?', afterAccept(verify({ maxRounds: 0 })), 1, 'the fixed one: an explicit cap of 0 now stops the loop'],

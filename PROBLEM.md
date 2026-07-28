@@ -142,3 +142,4 @@ Current implementation flow: [SPEC.md](SPEC.md).
 | 12 | 2026-07-26 | **Unit-test the code the nodes call.** The Code nodes' logic moves out of the generator into importable files; the e2e run finds the bug, a unit test pins it red, then it is fixed. |
 | 13 | 2026-07-26 | **Prompt tests** — unit-sized tests that call the real model, with mechanical verdicts, kept out of the offline suite. |
 | 14 | 2026-07-26 | **Two-phase kill.** Try to kill a mutant without reasoning first; escalate to a thinking attempt only when that fails. A failed cheap attempt does not spend the mutant's one shot. |
+| 15 | 2026-07-28 | **Reversed #14: the reasoning retry is gone.** Attribution put it at 25.3% of a five-hour run's wall clock for roughly 8% of the kills, and one of its 15-minute calls tied with the n8n node timeout and ended a 496-file run after five files. One attempt per mutant. `phase: 'batch'` is now the only failure that condemns nobody. |

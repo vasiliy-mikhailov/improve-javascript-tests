@@ -527,20 +527,9 @@ test('the cheap attempt asks the endpoint not to think, and says so in the stage
     'the dashboard should show which of the two attempts is running');
 });
 
-test('the thinking attempt is the default, and is what an escalation asks for', () => {
-  assert.equal(killBuildPrompt(target()).thinking, undefined, 'unspecified means the endpoint default');
-  assert.equal(killBuildPrompt(target(), { thinking: true }).thinking, true);
-});
-
 test('both attempts plan the SAME file — the cheap one was deleted when it failed', () => {
   assert.equal(killBuildPrompt(target(), { thinking: false }).targetPath,
     killBuildPrompt(target(), { thinking: true }).targetPath);
-});
-
-test('the escalated prompt tells the model the cheap attempt already failed', () => {
-  const plan = killBuildPrompt(target(), { thinking: true, escalated: true });
-  assert.match(plan.prompt, /already failed|previous attempt|did not kill/i,
-    'otherwise it is likely to write the same test again');
 });
 
 test('the kill test always lands on the planned path, never one the model chose', () => {
@@ -564,42 +553,6 @@ test('the kill test always lands on the planned path, never one the model chose'
     const out = killParseTest(reply([{ path: p, content: content(1) }]), plan);
     assert.deepEqual(out.paths, [plan.targetPath], `${p} must be redirected to the planned path`);
   }
-});
-
-// ── the escalation is told WHY the cheap attempt failed ─────────────────────
-//
-// Live evidence from lib/api-schemas/models/allocation.ts: 14 tests written in one
-// round, 13 of them red against the UNMUTATED code, 0 kills, 25 minutes. Every
-// escalation was told only "a previous attempt already failed" — never the runner
-// output — so it rebuilt the same mocks and made the same mistake. The error text was
-// sitting in the verify response the whole time, unused.
-
-// The MODEL-side claim — that being shown the error actually changes the answer — is
-// prompt-tests/generated-test-quality.prompt.test.mjs. This one only proves the text
-// reaches the prompt, which is what a fast offline test can honestly assert.
-test('an escalation carries the runner output that killed the previous attempt', () => {
-  const failure = "FAIL tests/unit/a.kill-L4.test.ts\n  Error: Cannot find module '@/lib/db'\n    at <anonymous>";
-  const plan = killBuildPrompt(target(), { thinking: true, escalated: true, failure });
-
-  assert.match(plan.prompt, /Cannot find module/, 'the model cannot fix what it is not shown');
-  assert.match(plan.prompt, /did not run|failed against|error/i, 'and it must be labelled as the failure, not as context');
-});
-
-test('an escalation after a test that RAN but killed nothing says so instead', () => {
-  // Two different failures need two different instructions: a test that would not run
-  // is a mocking problem, a test that ran and killed nothing is an assertion problem.
-  const plan = killBuildPrompt(target(), { thinking: true, escalated: true });
-
-  assert.doesNotMatch(plan.prompt, /Cannot find module/);
-  assert.match(plan.prompt, /already failed|did not kill|survived/i);
-});
-
-test('a long failure summary is truncated, not pasted whole', () => {
-  const failure = 'FAIL something\n'.repeat(500);
-  const plan = killBuildPrompt(target(), { thinking: true, escalated: true, failure });
-
-  const section = plan.prompt.slice(plan.prompt.indexOf('FAIL something'));
-  assert.ok(section.length < 3000, `a 7KB stack trace crowds out the source: ${section.length}ch`);
 });
 
 // ── group-level sweep prompt ────────────────────────────────────────────────

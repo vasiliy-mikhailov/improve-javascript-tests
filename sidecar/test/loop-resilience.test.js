@@ -325,26 +325,29 @@ test('a mutation run that executed no tests is not read as 112 kills', () => wit
 // cheap answer was no worse. So the loop asks cheaply first and escalates only for
 // the mutants that survive that — which is where the reasoning is worth 6x.
 //
-// The escalation only works if the cheap failure does NOT spend the mutant's one
-// shot; otherwise the second attempt has nothing left to aim at.
+// One shot per mutant. 'batch' is the only phase whose failure condemns nobody — a
+// sweep writes one test per SITE, so a batch that kills nothing says nothing about any
+// individual mutant. Every other phase is that mutant's verdict, and must spend its
+// shot: there is no second attempt to leave anything for, and a mutant that is never
+// charged is offered again for ever.
 
-test('a failed CHEAP attempt leaves the mutant available for the thinking attempt', () => withSandbox(async (sb) => {
+test('a failed SINGLE attempt spends the mutant\'s one shot', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: mutantsAt(6) });
   const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
   const testPath = 'test/a-kill.test.ts';
   w.writeTest(testPath, { target: FILE, kills: [] });          // green, kills nothing
 
-  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'single' });
 
   assert.equal(r.killed, false);
-  assert.equal(r.retryable, true, 'the caller is told a thinking attempt is worth making');
+  assert.equal(r.retryable, false, 'there is nothing left to try on this mutant');
   assert.equal(w.exists(testPath), false, 'the useless test still goes');
   const f = sb.file(FILE);
-  assert.deepEqual(f.mutantAttempts || {}, {}, 'the one shot is not spent on the cheap try');
-  assert.equal(f.mutantFailures || 0, 0, 'nor is the failure budget');
+  assert.equal(Object.keys(f.mutantAttempts || {}).length, 1, 'the mutant is retired, or it comes back for ever');
+  assert.equal(f.mutantFailures, 1, 'and the failure budget moves, or the round never ends');
 }));
 
-test('a failed THINKING attempt does spend the shot — there is nothing further to try', () => withSandbox(async (sb) => {
+test('an unrecognised phase is treated as a verdict, not as a free attempt', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: mutantsAt(6) });
   const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
   const testPath = 'test/a-kill.test.ts';
@@ -359,16 +362,16 @@ test('a failed THINKING attempt does spend the shot — there is nothing further
   assert.equal(f.mutantFailures, 1);
 }));
 
-test('a CHEAP attempt that kills is kept exactly like any other', () => withSandbox(async (sb) => {
+test('a SINGLE attempt that kills is kept exactly like any other', () => withSandbox(async (sb) => {
   const w = await killReady(sb, { mutants: mutantsAt(6) });
   const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
   const testPath = 'test/a-kill.test.ts';
   w.writeTest(testPath, { target: FILE, kills: [target.line] });
 
-  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'single' });
 
   assert.equal(r.killed, true);
-  assert.equal(r.retryable, false, 'nothing to escalate — it worked');
+  assert.equal(r.retryable, false, 'it worked — there is nothing to retry');
   assert.equal(w.exists(testPath), true);
   assert.equal(sb.file(FILE).mutantsKilled, 1);
 }));
@@ -528,22 +531,21 @@ test('a bootstrapped file gets its coverage re-measured, so MAC stops reading ze
     assert.ok((f.mac ?? 0) > 0, `MAC must stop reading 0 once coverage is real — got ${f.mac}`);
   }));
 
-test('an escalation after a RED test is told what the failure was', () => withSandbox(async (sb) => {
-  // All nineteen misses on the live file were red tests. The escalation already runs
-  // for them, but it was told only "a previous attempt failed" — never the compiler or
-  // runner output that would let it fix an import or a mock shape. So it rebuilt the
-  // same eighty lines of scaffolding and made the same class of mistake.
+test('a RED test says what the runner said, where someone can read it', () => withSandbox(async (sb) => {
+  // Red tests are the dominant failure on schema-heavy files. The runner's output used
+  // to be carried into the escalated prompt; that prompt is gone, so the only thing
+  // that makes a red test diagnosable is the event log.
   const w = await killReady(sb, { mutants: mutantsAt(4) });
   const target = (await sb.get('/api/mutant/next', { path: FILE })).mutant;
   const testPath = 'test/a-kill.test.ts';
   w.writeTest(testPath, { target: FILE, kills: [target.line], red: true });
 
-  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'cheap' });
+  const r = await sb.post('/api/mutant/verify', { file: FILE, mutant: target, testPaths: [testPath], phase: 'single' });
 
-  assert.equal(r.retryable, true);
-  assert.ok(r.summary && r.summary.length > 0,
-    'the runner output must reach the caller, or the escalated prompt cannot use it');
-  assert.match(r.summary, /FAIL|failed/i);
+  assert.equal(r.retryable, false, 'one shot, spent');
+  assert.match(r.summary || '', /FAIL|failed/i);
+  assert.match(sb.events().join('\n'), /runner said: .*(FAIL|failed)/i,
+    'a red test whose reason appears nowhere is a red test nobody can fix');
 }));
 
 test('a test that will not even run still spends the loop budget', () => withSandbox(async (sb) => {

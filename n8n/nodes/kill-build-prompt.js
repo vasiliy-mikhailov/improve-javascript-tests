@@ -15,7 +15,7 @@ import { commonTestRules } from './common-test-rules.js';
 // the cheap attempt — which is exactly where it might be worth six times the wait.
 //
 // @param t     response of the "Next Mutant" node: { mutant, path, testPath, source, ... }
-// @param opts  { thinking, escalated, failure } — the second attempt sets all three
+// @param opts  { thinking } — the one attempt this mutant gets, without reasoning
 export function killBuildPrompt(t, opts) {
   const o = opts || {};
   const m = t.mutant;
@@ -64,23 +64,6 @@ export function killBuildPrompt(t, opts) {
     + 'Reply ONLY with JSON: {"tests":[{"path":"' + targetPath + '","content":"full test file content"}]}. Rules:' + commonTestRules(1)
     + ui
     + (constraints ? '\nTeam constraints:\n' + constraints : '');
-  // Two different failures need two different instructions. A test that would not RUN
-  // is a mocking or import problem and the runner already said exactly what was wrong —
-  // withholding that text made one live round write 13 red tests in a row, each
-  // rebuilding the same broken scaffolding. A test that ran and killed nothing is an
-  // assertion problem, and needs the opposite advice.
-  const failure = String(o.failure || '').trim();
-  const escalation = !o.escalated ? ''
-    : failure
-      ? '\n\nA previous attempt at this mutant DID NOT RUN against the real code. This is what the '
-        + 'test runner said:\n' + failure.slice(0, 2000)
-        + '\n\nFix that first: the imports, the module mocks and the setup have to match how this repo '
-        + 'actually wires things — copy the existing test file above rather than inventing a new shape. '
-        + 'A test that cannot run kills nothing.\n'
-      : '\n\nA previous attempt at this same mutant already failed: a test was written, the suite stayed '
-        + 'green, and the mutant SURVIVED it. Do not write that test again. Work out what observable '
-        + 'difference the mutation actually makes — if the obvious assertion cannot see it, assert on '
-        + 'something that can, such as the arguments a collaborator is called with.\n';
   const prompt = 'SOURCE FILE: ' + file + ' (package: ' + t.packageJson + ')\n'
     + String(t.source || '').slice(0, 12000)
     + '\n\nTARGET MUTANT — kill this one:\n'
@@ -91,13 +74,12 @@ export function killBuildPrompt(t, opts) {
     + (t.killIdea ? '\nHOW TO KILL IT (from the analysis that selected this mutant):\n  ' + t.killIdea + '\n' : '')
     + '\nEXISTING TEST FILE (' + t.testPath + ', style reference — do not rewrite it):\n'
     + String(t.existingTest || '(none)').slice(0, 4000)
-    + escalation
     + '\n\nWrite the single test file that kills this mutant. JSON only.';
   return { system, prompt, json: true, maxTokens: 9000, temperature: 0.2,
     thinking: o.thinking,
     stage: 'improving_mutation',
     stageDetail: 'writing a test to kill ' + m.mutator + ' at line ' + m.line
-      + (o.thinking === false ? ' (fast attempt, without reasoning)' : o.escalated ? ' (retry, with reasoning)' : ''),
+      + (o.thinking === false ? ' (fast attempt, without reasoning)' : ''),
     // the parser needs to know which path belongs to the repo, or it cannot refuse it
     targetPath, existingTestPath: t.testPath, existingTestExists: !!t.testExists };
 }

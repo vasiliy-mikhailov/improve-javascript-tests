@@ -29,8 +29,6 @@ export const CONDITIONS = {
   // the BATCH killed nothing and the sidecar spent nobody's shot — the single-target
   // attempt on the best of them is still worth making
   'Kill: Batch Failed?': '={{ $json.retryable ? 1 : 0 }}',
-  // the cheap attempt failed and the sidecar kept the target on the queue for us
-  'Kill: Escalate?': '={{ $json.retryable ? 1 : 0 }}',
   // multi-round: keep going iff ≥1 of coverage/mutation/MAC improved AND none degraded.
   // The cap uses `??`, not `||`: a team configuring MAX_ROUNDS_PER_FILE=0 ("one pass per
   // file, no extra rounds") means it, and `|| 5` would hand them five rounds instead.
@@ -67,7 +65,6 @@ export const COMPARISONS = {
   'Cov: Green After Repair?': { operation: 'equal', value2: 1 },
   'Mutant To Kill?': { operation: 'equal', value2: 1 },
   'Kill: Batch Failed?': { operation: 'equal', value2: 1 },
-  'Kill: Escalate?': { operation: 'equal', value2: 1 },
   'Round Kept?': { operation: 'equal', value2: 1 },
   'Another Round?': { operation: 'equal', value2: 1 },
   'Approved?': { operation: 'equal', value2: 1 },

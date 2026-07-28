@@ -220,8 +220,10 @@ function mutantLoop(entryNode) {
   });
   IfNum('Kill: Batch Failed?');
 
-  // ── fallback: the single-target attempt, cold then escalated ──────────────
-  // attempt one, deliberately WITHOUT reasoning: measured 21-28s against 112-186s
+  // ── fallback: one single-target attempt, without reasoning ────────────────
+  // Measured 21-28s against 112-186s with reasoning. There is no second attempt:
+  // the escalation that used to follow cost 25.3% of a five-hour run's wall clock
+  // and ended the last one by hanging fifteen minutes on a single call.
   Code('Kill: Build Prompt', emit(killBuildPrompt, PROMPT_DEPS,
     "$('Next Mutant').first().json",               // reached via the batch branch now
     '{ thinking: false }'));
@@ -238,26 +240,6 @@ function mutantLoop(entryNode) {
   });
   // suite must stay green AND the target must actually die; the sidecar deletes the
   // test and records the failed attempt when it does not
-  IfNum('Kill: Escalate?');
-
-  // ── second attempt, with reasoning ────────────────────────────────────────
-  // the escalation is handed the runner output from the attempt that just failed:
-  // /api/mutant/verify returns it as `summary` when the test was red
-  Code('Kill: Build Prompt 2', emit(killBuildPrompt, PROMPT_DEPS,
-    "$('Next Mutant').first().json",
-    "{ thinking: true, escalated: true, failure: $('Kill: Verify').first().json.summary }"));
-  Http('Kill: LLM 2', { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
-  Code('Kill: Parse Test 2', emit(killParseTest, [], '$json', "$('Kill: Build Prompt 2').first().json"));
-  Http('Kill: Write Test 2', {
-    path: '/api/test/write-many',
-    body: `={{ { tests: $json.tests, stage: 'improving_mutation' } }}`,
-  });
-  Http('Kill: Verify 2', {
-    path: '/api/mutant/verify',
-    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test 2').first().json.written, phase: 'thinking' } }}`,
-    timeout: outlives(STRYKER_BUDGET_MS),
-  });
-
   Http('Kill: Verify', {
     path: '/api/mutant/verify',
     // what the SIDECAR wrote, not what the model asked for: writeTestFile refuses a
@@ -265,7 +247,7 @@ function mutantLoop(entryNode) {
     // refusal lands in `errors`. Verifying the planned path would then measure a file
     // that does not exist — a scoped run that passes vacuously and a mutation run
     // spent proving nothing died.
-    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written, phase: 'cheap' } }}`,
+    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written, phase: 'single' } }}`,
     timeout: outlives(STRYKER_BUDGET_MS),
   });
   NoOp('Mutant Loop Done');
@@ -279,13 +261,9 @@ function mutantLoop(entryNode) {
   link('Kill: Batch Failed?', 'Next Mutant', 1);          // something died → next batch
   link('Mutant To Kill?', 'Mutant Loop Done', 1);   // budget spent or nothing viable
   chain('Kill: Build Prompt', 'Kill: LLM', 'Kill: Parse Test', 'Kill: Write Test', 'Kill: Verify');
-  // killed, or the cheap attempt used up the mutant's shot → next target.
-  // Otherwise the target is still on the queue and reasoning is what is left to try.
-  chain('Kill: Verify', 'Kill: Escalate?');
-  link('Kill: Escalate?', 'Kill: Build Prompt 2', 0);
-  link('Kill: Escalate?', 'Next Mutant', 1);
-  chain('Kill: Build Prompt 2', 'Kill: LLM 2', 'Kill: Parse Test 2', 'Kill: Write Test 2', 'Kill: Verify 2');
-  link('Kill: Verify 2', 'Next Mutant');
+  // killed or not, the mutant's one shot is spent — on to the next target.
+  // one attempt per mutant: verified or not, the next target is what follows
+  link('Kill: Verify', 'Next Mutant');
   return 'Mutant Loop Done';
 }
 const mutDone = mutantLoop(covDone);

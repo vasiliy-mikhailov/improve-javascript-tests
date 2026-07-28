@@ -876,9 +876,12 @@ const routes = {
 
   'POST /api/mutant/verify': async (q, body) => {
     needRun();
-    // phase 'cheap' is the no-reasoning first attempt: its failure is not a verdict on
-    // the mutant, because the escalated attempt has not happened yet. Anything else
-    // (including no phase at all) is the last word.
+    // 'batch' is the only phase whose failure condemns nobody: a sweep writes one test
+    // per SITE, so a batch that kills nothing says nothing about any individual mutant
+    // and the single-target attempt is still worth making. Every other phase IS that
+    // mutant's verdict — there used to be a reasoning retry after the cheap attempt,
+    // and while it existed a cheap failure deliberately cost nothing. It is gone, so a
+    // failure that costs nothing would simply offer the same mutant for ever.
     const { file, testPaths = [], phase } = body;
     // One entry point, two shapes: `mutants` is a batch aimed at many targets at once,
     // `mutant` is the single-target attempt (and the head of any batch). The verdict
@@ -886,7 +889,7 @@ const routes = {
     // kills nothing has a single-target attempt still to come.
     const batch = Array.isArray(body.mutants) && body.mutants.length ? body.mutants : null;
     const mutant = batch ? batch[0] : body.mutant;
-    const cheap = phase === 'cheap' || phase === 'batch';
+    const cheap = phase === 'batch';
     const f = file && state.files[file];
     if (!f || !mutant) throw new Error('file and mutant are required');
     const key = mutantsMod.mutantKey(mutant);
@@ -951,7 +954,14 @@ const routes = {
       // this mutant resists testing — the same distinction as an empty answer, and
       // capped the same way.
       drop();
+      // The runner already said exactly what was wrong. That text used to go only to
+      // the escalated prompt; with the escalation gone it would reach nobody at all,
+      // and red tests are the dominant failure on schema-heavy files — so put it where
+      // a human reading the event log can see it.
       miss('the generated test failed against the unmutated code');
+      if (suite.summary) {
+        S.event('improving_mutation', 'runner said: ' + String(suite.summary).replace(/\s+/g, ' ').slice(0, 240));
+      }
       return { ok: true, killed: false, retryable: cheap, reason: 'suite red', summary: suite.summary };
     }
     // 2. Verify the kill on a RANGE around the target, and fall back to the whole file

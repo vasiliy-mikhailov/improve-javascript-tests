@@ -156,3 +156,33 @@ test('every mutation-run call outlives the mutation run it is waiting for', () =
       `${n.name}: timeout ${timeoutOf(n)} must exceed Stryker's ${STRYKER_BUDGET_MS}ms budget`);
   }
 });
+
+// ── the thinking escalation is gone ──────────────────────────────────────────
+// A failed cheap attempt used to be retried with reasoning enabled. Measured, that
+// second attempt cost 25.3% of a five-hour run's wall clock, and the last time it ran
+// it produced a red test and then sat on a 15-minute call that ended the whole run.
+// One attempt per mutant, and on to the next.
+test('no node, condition or connection is left over from the thinking escalation', () => {
+  const gone = ['Kill: Escalate?', 'Kill: Build Prompt 2', 'Kill: LLM 2', 'Kill: Parse Test 2',
+    'Kill: Write Test 2', 'Kill: Verify 2'];
+  for (const name of gone) {
+    assert.equal(wf.nodes.find((n) => n.name === name), undefined, `${name} still exists`);
+    assert.equal(wf.connections[name], undefined, `${name} still has outgoing connections`);
+  }
+  const targets = Object.values(wf.connections).flatMap((c) => (c.main || []).flat().map((x) => x.node));
+  for (const name of gone) assert.ok(!targets.includes(name), `something still points at ${name}`);
+  assert.ok(!JSON.stringify(wf).includes('escalated'), 'the escalated prompt option survives somewhere');
+});
+
+test('a verified single-target attempt goes straight to the next mutant', () => {
+  assert.deepEqual((wf.connections['Kill: Verify']?.main?.[0] || []).map((c) => c.node), ['Next Mutant'],
+    'with no second attempt there is nothing to branch on');
+});
+
+test('the single-target attempt tells the sidecar it is the only one', () => {
+  // 'batch' is the one phase whose failure condemns nobody — the sweep covers many
+  // sites at once, so a batch that kills nothing says nothing about any single mutant.
+  // Every other phase is a verdict, and must spend the mutant's one shot.
+  const body = wf.nodes.find((n) => n.name === 'Kill: Verify').parameters.jsonBody;
+  assert.match(body, /phase: 'single'/, "a lone attempt is 'single', not 'cheap' — there is no second one to be cheap relative to");
+});

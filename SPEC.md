@@ -75,20 +75,16 @@ entirely — killing mutants raises coverage as a side effect.
 ```
 Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
      ▲              │yes
-     │       Kill: Build Prompt (thinking OFF) → LLM → Parse → Write → Kill: Verify (phase 'cheap')
-     │                                                                        │
-     │       ┌────────────────── Kill: Escalate? ◄───────────────────────────┘
-     │       │no (killed, or the shot is spent)
-     └───────┤
-             │yes    Kill: Build Prompt 2 (thinking ON, escalated) → LLM 2 → Parse 2 → Write 2
-             └────────────────────────────→ Kill: Verify 2 (phase 'thinking') ──→ Next Mutant
+     │       Kill: Build Prompt (thinking OFF) → LLM → Parse → Write → Kill: Verify (phase 'single')
+     └────────────────────────────────────────────────────────────────────────→ Next Mutant
 ```
 
 Measured on a prompt taken from the pipeline's own dialog log: the model answers in 21-28s
 without reasoning and 112-186s with it, and on everything that could be checked mechanically the
-cheap answer was no worse. In the live run the cheap attempt carries about 92% of the kills, and
-the escalation has already killed a mutant the cheap attempt missed. Reasoning is spent only where
-it demonstrably pays.
+cheap answer was no worse. A reasoning retry used to follow a failed attempt; it was removed after
+attribution showed it taking 25.3% of a five-hour run's wall clock for about 8% of the kills, and
+after one of its 15-minute calls collided with the n8n node timeout and ended a 496-file run five
+files in. One attempt per mutant, and on to the next.
 
 `GET /api/mutant/next`
 - **Re-measures first if the list is stale.** After the coverage bootstrap the stored survivors are
@@ -134,7 +130,9 @@ that killed round one's mutant, then delete it when round two failed.
    the model returned nothing; the generated test failed against the *unmutated* code; the
    verification run crashed; the verification run executed no tests at all. Each is counted as a
    generation miss with its own ceiling, and the unverified test is deleted either way.
-   A `phase: 'cheap'` failure is likewise not a verdict — the escalated attempt has not run yet.
+   A `phase: 'batch'` failure is likewise not a verdict on any single mutant — the sweep writes
+   one test per SITE, so the single-target attempt is still worth making. Every other phase is
+   that mutant's verdict, because nothing follows it.
 
    "No tests were executed" deserves its own line, because it once read as a triumph: Stryker's
    reply carries `survived: []` with no totals, and the kill check is absence from the survivor
