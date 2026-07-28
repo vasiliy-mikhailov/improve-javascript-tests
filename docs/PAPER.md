@@ -113,10 +113,11 @@ be improved are discarded cleanly; no PR is opened for them.
 
 A picked file is improved in **rounds**. Each round: write tests for uncovered code, write tests
 that kill surviving Stryker mutants, re-measure everything. The round is **kept only if at least
-one of coverage / mutation / MAC improved and none degraded** (kept rounds become individual
-commits). Rounds stop when **all three stale or any degrades** — the offending round's changes
-are dropped — or after `MAX_ROUNDS_PER_FILE`. The file then gets one cumulative PR if it netted
-improvement. This drives each file to its practical maximum instead of taking one shot at it.
+one of coverage / mutation / MAC improved and none degraded**; otherwise the round's changes are
+dropped. There is exactly one round per file. Iterating was tried and measured: a second round
+gained **+0.00 MAC on five files out of five**, at up to 25 minutes each, because one take already
+writes a test for every site it is going to attack. The file then gets one PR if it netted
+improvement.
 
 ### 2.5 Team rules — steering every stage
 
@@ -172,7 +173,7 @@ docker exec ijst-n8n node /data/eval/score.mjs               # implementation_pe
 ```
 one container (ijst-n8n)
 ┌───────────────────────────────────────────────────────────────┐
-│  n8n :5678 — workflow "Improve JS Tests" (64 native nodes:    │
+│  n8n :5678 — workflow "Improve JS Tests" (57 native nodes:    │
 │  Webhook/Manual triggers, HTTP Request, Code, IF, NoOp only)  │
 │        │  every OS-touching operation = plain HTTP call       │
 │        ▼                                                      │
@@ -219,7 +220,7 @@ anything that executes on the OS. The sidecar owns all execution behind a small 
 
 ### 3.3 The workflow in depth
 
-The canvas has 64 nodes, but only five node *types* and a lot of repetition — it decomposes
+The canvas has 57 nodes, but only five node *types* and a lot of repetition — it decomposes
 into five functional blocks and two instantiations of one template. This section walks each
 block. First, the conventions that make the whole thing tick:
 
@@ -357,10 +358,10 @@ full coverage run, Stryker on the file. It computes three verdicts:
 - `improved` — cumulative: is MAC now above the file's **original** baseline (and are there
   real file changes — protection against Stryker timing flakiness)?
 
-**Another Round?** implements the criterion exactly: continue iff
-`improvedAny && !degradedAny && rounds < MAX_ROUNDS_PER_FILE`. **Accept Round** commits this
-round's tests as their own commit (so a later bad round can be dropped alone) and advances the
-round baseline. **Drop Last Round** discards only the uncommitted (stale/degraded) changes and
+**Round Kept?** implements the criterion exactly: keep iff `improvedAny && !degradedAny`.
+**Accept Round** commits this round's tests and advances the round baseline. **Drop Last Round**
+discards only the uncommitted (stale/degraded) changes — after an accepted round it therefore
+discards nothing, which is why both paths settle through it — and
 reports the cumulative numbers from the last accepted state.
 
 #### Block E — Decision and PR tail
@@ -453,7 +454,7 @@ Everything in §2 — target repo, scope, limits, rules, PR mode, setup script, 
 
 ### 4.2 Edit the workflow in n8n
 
-![The Improve JS Tests workflow in the n8n editor: 64 native nodes — trigger spine, coverage and mutation improvement rows with repair branches, verify/round loop, PR tail](img/n8n-workflow.png)
+![The Improve JS Tests workflow in the n8n editor: 57 native nodes — trigger spine, coverage and mutation improvement rows with repair branches, verify/round loop, PR tail](img/n8n-workflow.png)
 
 Open *Improve JS Tests* in the editor. Useful edits:
 
@@ -536,7 +537,6 @@ Failure modes met (and fixed) while evaluating against 13 real repos — check t
 | `SCOPE_LIMIT` | `0` | stop after N files settled (0 = no cap) |
 | `MAX_ITERATIONS` | `0` | max file picks per execution (0 = no limit for the repo) |
 | `MAX_MUTANTS_PER_FILE` | `5` | surviving mutants targeted per round |
-| `MAX_ROUNDS_PER_FILE` | `5` | improvement rounds per file (see §2.4) |
 | `MAX_ATTEMPTS_PER_FILE` | `3` | pick attempts per file before it settles as no-improvement |
 | `PR_MODE` | `github` | `github` (real PRs) or `local` (branch + patch artifact) |
 | `PR_BASE` | = `REPO_BRANCH` | PR base branch |

@@ -218,52 +218,18 @@ function mutantLoop(entryNode) {
     body: `={{ { file: $('Start Iteration').first().json.file, mutants: $('Kill: Build Batch').first().json.aimed, testPaths: $('Kill: Write Batch').first().json.written, phase: 'batch' } }}`,
     timeout: outlives(STRYKER_BUDGET_MS),
   });
-  IfNum('Kill: Batch Failed?');
-
-  // ── fallback: one single-target attempt, without reasoning ────────────────
-  // Measured 21-28s against 112-186s with reasoning. There is no second attempt:
-  // the escalation that used to follow cost 25.3% of a five-hour run's wall clock
-  // and ended the last one by hanging fifteen minutes on a single call.
-  Code('Kill: Build Prompt', emit(killBuildPrompt, PROMPT_DEPS,
-    "$('Next Mutant').first().json",               // reached via the batch branch now
-    '{ thinking: false }'));
-
-  Http('Kill: LLM', { path: '/api/llm/chat', body: '={{ $json }}', timeout: outlives(LLM_BUDGET_MS), onError: 'continueRegularOutput' });
-
-  Code('Kill: Parse Test', emit(killParseTest, [],
-    '$json',                                       // the LLM response
-    `$('Kill: Build Prompt').first().json`));      // the plan it was asked to follow
-
-  Http('Kill: Write Test', {
-    path: '/api/test/write-many',
-    body: `={{ { tests: $json.tests, stage: 'improving_mutation' } }}`,
-  });
-  // suite must stay green AND the target must actually die; the sidecar deletes the
-  // test and records the failed attempt when it does not
-  Http('Kill: Verify', {
-    path: '/api/mutant/verify',
-    // what the SIDECAR wrote, not what the model asked for: writeTestFile refuses a
-    // path that is not a js/ts test file or that the repo already owned, and a
-    // refusal lands in `errors`. Verifying the planned path would then measure a file
-    // that does not exist — a scoped run that passes vacuously and a mutation run
-    // spent proving nothing died.
-    body: `={{ { file: $('Start Iteration').first().json.file, mutant: $('Next Mutant').first().json.mutant, testPaths: $('Kill: Write Test').first().json.written, phase: 'single' } }}`,
-    timeout: outlives(STRYKER_BUDGET_MS),
-  });
   NoOp('Mutant Loop Done');
 
   chain(entryNode, 'Next Mutant', 'Mutant To Kill?');
   link('Mutant To Kill?', 'Kill: Build Batch', 0);
   chain('Kill: Build Batch', 'Kill: LLM Batch', 'Kill: Parse Batch', 'Kill: Write Batch',
     'Kill: Sites Written', 'Kill: Verify Batch');
-  chain('Kill: Verify Batch', 'Kill: Batch Failed?');
-  link('Kill: Batch Failed?', 'Kill: Build Prompt', 0);   // nothing died → try one properly
-  link('Kill: Batch Failed?', 'Next Mutant', 1);          // something died → next batch
-  link('Mutant To Kill?', 'Mutant Loop Done', 1);   // budget spent or nothing viable
-  chain('Kill: Build Prompt', 'Kill: LLM', 'Kill: Parse Test', 'Kill: Write Test', 'Kill: Verify');
-  // killed or not, the mutant's one shot is spent — on to the next target.
-  // one attempt per mutant: verified or not, the next target is what follows
-  link('Kill: Verify', 'Next Mutant');
+  // One take per file. Whatever the sweep achieved, the mutant phase is over: every
+  // layer that used to follow earned less than the one below it — a second sweep, then
+  // a single-target attempt at half the kills per call, then rounds that measured
+  // +0.00 MAC on five files out of five.
+  link('Kill: Verify Batch', 'Mutant Loop Done');
+  link('Mutant To Kill?', 'Mutant Loop Done', 1);   // nothing viable to attack
   return 'Mutant Loop Done';
 }
 const mutDone = mutantLoop(covDone);
@@ -273,7 +239,6 @@ const mutDone = mutantLoop(covDone);
 // =============================================================================
 Http('Verify', { path: '/api/verify', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: outlives(COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS) });
 IfNum('Round Kept?');
-IfNum('Another Round?');
 Http('Accept Round', { path: '/api/round/accept', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Drop Last Round', { path: '/api/round/drop', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Cleanup Tests', { path: '/api/test/cleanup', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: outlives(COVERAGE_BUDGET_MS + STRYKER_BUDGET_MS) });
@@ -295,11 +260,10 @@ chain(mutDone, 'Verify', 'Round Kept?');
 // gate, so "improved, nothing left to do" discarded the round it had just earned
 link('Round Kept?', 'Accept Round', 0);
 link('Round Kept?', 'Drop Last Round', 1);
-link('Accept Round', 'Another Round?');
-link('Another Round?', 'Coverage Gaps', 0);      // next round on the same file
-// settling after a commit: discardUncommitted() has nothing to discard, and the
-// metric restore puts back the accepted round's own numbers
-link('Another Round?', 'Drop Last Round', 1);
+// One round per file. Settling through Drop Last Round after a commit is deliberate:
+// discardUncommitted() has nothing to discard, and the metric restore puts back the
+// accepted round's own numbers.
+link('Accept Round', 'Drop Last Round');
 chain('Drop Last Round', 'Rules: check changes', 'Approved?');
 link('Approved?', 'Cleanup Tests', 0);
 link('Cleanup Tests', 'Rules: make PR');

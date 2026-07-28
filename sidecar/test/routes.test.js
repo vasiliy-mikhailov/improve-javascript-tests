@@ -107,17 +107,16 @@ test('run/start takes over a run that has been idle past the staleness window', 
 test('run/start silently replaces an explicit per-file cap of 0 with the default', () => withSandbox(async (sb) => {
   // REPORTED, NOT FIXED: freshRun() ends with `parseInt(x, 10) || 5`, so an
   // operator asking for maxMutantsPerFile: 0 ("skip the mutant loop") gets 5 and
-  // is never told. Same for maxRoundsPerFile (0 → 5) and maxAttemptsPerFile
+  // is never told. Same for maxAttemptsPerFile
   // (0 → 3). scopeLimit and maxIterations document 0 as "unlimited" and handle
   // it; these three do not document 0 at all. This test pins today's behaviour
   // so a change to it has to be deliberate.
   installFakes(sb);
   await sb.call('POST /api/run/start', {
-    repoUrl: sb.repoUrl, maxMutantsPerFile: 0, maxRoundsPerFile: 0, maxAttemptsPerFile: 0,
+    repoUrl: sb.repoUrl, maxMutantsPerFile: 0, maxAttemptsPerFile: 0,
   });
 
   assert.equal(S.state.run.config.maxMutantsPerFile, 5);
-  assert.equal(S.state.run.config.maxRoundsPerFile, 5);
   assert.equal(S.state.run.config.maxAttemptsPerFile, 3);
 }));
 
@@ -798,7 +797,6 @@ test('verify records the round result and calls it progress', () => withSandbox(
   assert.equal(r.degradedAny, false);
   assert.equal(r.improved, true);
   assert.equal(r.rounds, 0);
-  assert.equal(r.maxRounds, 5);
   assert.deepEqual(r.changedFiles, [KILL_TEST]);
   assert.match(r.diff, /\+\+\+ b\/test\/a-kill\.test\.ts/);
 
@@ -811,7 +809,7 @@ test('verify records the round result and calls it progress', () => withSandbox(
   assert.equal(S.state.measureLedger[sb.repoSlug][FILE].attemptMac, 40);
   // the verdict states what happens NEXT, because the same line used to promise a
   // round the graph then declined to run
-  assert.match(log(sb), /PROGRESS \(keep, (another round|no site left untried — settle)\)/);
+  assert.match(log(sb), /PROGRESS \(keep, \d+ site\(s\) left untried\)/);
 }));
 
 test('verify calls a round degraded when any metric fell below the round base', () => withSandbox(async (sb) => {
@@ -823,7 +821,7 @@ test('verify calls a round degraded when any metric fell below the round base', 
 
   assert.equal(r.degradedAny, true);
   assert.equal(r.improvedAny, false);
-  assert.match(log(sb), /DEGRADED \(drop round\)/);
+  assert.match(log(sb), /DEGRADED \(drop\)/);
 }));
 
 test('verify does not measure a round that produced nothing', () => withSandbox(async (sb) => {

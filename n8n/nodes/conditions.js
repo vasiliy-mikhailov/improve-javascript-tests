@@ -1,4 +1,4 @@
-// The 13 IF conditions, keyed by node name.
+// The 11 IF conditions, keyed by node name.
 //
 // An n8n IF node evaluates its own expression — it cannot call our code — so unlike
 // the Code nodes these stay as expression STRINGS. They live here anyway so that the
@@ -26,9 +26,6 @@ export const CONDITIONS = {
   'Cov: Wrote Any?': "={{ $('Cov: Parse Tests').first().json.count }}",
   'Cov: Green After Repair?': '={{ $json.passed ? 1 : 0 }}',
   'Mutant To Kill?': '={{ $json.mutant ? 1 : 0 }}',
-  // the BATCH killed nothing and the sidecar spent nobody's shot — the single-target
-  // attempt on the best of them is still worth making
-  'Kill: Batch Failed?': '={{ $json.retryable ? 1 : 0 }}',
   // multi-round: keep going iff ≥1 of coverage/mutation/MAC improved AND none degraded.
   // The cap uses `??`, not `||`: a team configuring MAX_ROUNDS_PER_FILE=0 ("one pass per
   // file, no extra rounds") means it, and `|| 5` would hand them five rounds instead.
@@ -45,9 +42,6 @@ export const CONDITIONS = {
   // saying "improved, but nothing left to do", a single gate read it as stale and
   // discarded a file taken to MAC 100.
   'Round Kept?': "={{ ($('Verify').first().json.improvedAny && !$('Verify').first().json.degradedAny) ? 1 : 0 }}",
-  // read from Verify by name: this now runs after Accept Round, whose payload has no
-  // such field, and an absent flag is falsy — indistinguishable from a correct stop
-  'Another Round?': "={{ ($('Verify').first().json.anotherRoundWorthIt && ($json.rounds || 0) < ($('Verify').first().json.maxRounds ?? 5)) ? 1 : 0 }}",
   // the rules engine approving is not enough — the round must also have improved something
   'Approved?': "={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}",
 };
@@ -64,9 +58,7 @@ export const COMPARISONS = {
   'Cov: Wrote Any?': { operation: 'larger', value2: 0 },
   'Cov: Green After Repair?': { operation: 'equal', value2: 1 },
   'Mutant To Kill?': { operation: 'equal', value2: 1 },
-  'Kill: Batch Failed?': { operation: 'equal', value2: 1 },
   'Round Kept?': { operation: 'equal', value2: 1 },
-  'Another Round?': { operation: 'equal', value2: 1 },
   'Approved?': { operation: 'equal', value2: 1 },
 };
 

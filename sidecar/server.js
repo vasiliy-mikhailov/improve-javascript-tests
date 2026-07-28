@@ -1158,9 +1158,9 @@ const routes = {
         S.event('improving_mac', `nothing to verify for ${file} — this round changed no files`);
         return {
           ok: true, improved: false, improvedAny: false, degradedAny: false, testsGreen: true,
-          pendingSites: mutantStore.pending(file).length, anotherRoundWorthIt: false,
+          pendingSites: mutantStore.pending(file).length,
           reason: 'no changes in this round', rounds: f.rounds || 0,
-          maxRounds: state.run.config.maxRoundsPerFile, file,
+          file,
         };
       }
       // ONE measurement pass: runCoverage runs the whole suite already, so a separate
@@ -1228,7 +1228,7 @@ const routes = {
       if ((macAfter ?? 0) >= (prev.attemptMac ?? -1)) {
         recordMeasurement(file, { attemptCoverage: coverageAfter, attemptMutation: st.score, attemptMac: macAfter });
       }
-      S.event('improving_mac', `round ${(f.rounds || 0) + 1} of ${file}: cov ${rb.coverage}→${coverageAfter}, mut ${rb.mutation}→${st.score}, mac ${rb.mac}→${macAfter} — ${improvedAny && !degradedAny ? `PROGRESS (keep${pendingSites > 0 ? ', another round' : ', no site left untried — settle'})` : degradedAny ? 'DEGRADED (drop round)' : 'STALE (drop round)'}`);
+      S.event('improving_mac', `round ${(f.rounds || 0) + 1} of ${file}: cov ${rb.coverage}→${coverageAfter}, mut ${rb.mutation}→${st.score}, mac ${rb.mac}→${macAfter} — ${improvedAny && !degradedAny ? `PROGRESS (keep, ${pendingSites} site(s) left untried)` : degradedAny ? 'DEGRADED (drop)' : 'STALE (drop)'}`);
       return {
         ok: true, file, testsGreen: true,
         coverageBefore: f.coverageBefore, coverageAfter,
@@ -1236,11 +1236,7 @@ const routes = {
         macBefore: f.macBefore, macAfter,
         improved,
         improvedAny, degradedAny, pendingSites,
-        // a second round can only re-measure what the first one settled unless a site
-        // is still untried — measured +0.00 MAC on five files out of five
-        anotherRoundWorthIt: pendingSites > 0 && improvedAny && !degradedAny,
         rounds: f.rounds || 0,
-        maxRounds: state.run.config.maxRoundsPerFile || 5,
         totalCoverage: cov.totalPct,
         changedFiles: changed,
         diff: diff.slice(0, 30000),

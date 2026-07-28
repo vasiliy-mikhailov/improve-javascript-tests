@@ -70,21 +70,29 @@ imports the module. The model writes at most 2 test files; if the suite goes red
 repair attempt, then the files are deleted. Once any coverage exists this phase is skipped
 entirely — killing mutants raises coverage as a side effect.
 
-**Mutant loop** — the core. One attempt per mutant, without reasoning:
+**Mutant sweep** — the core, and a single pass:
 
 ```
-Next Mutant → Mutant To Kill? ─no→ Mutant Loop Done → Verify
-     ▲              │yes
-     │       Kill: Build Prompt (thinking OFF) → LLM → Parse → Write → Kill: Verify (phase 'single')
-     └────────────────────────────────────────────────────────────────────────→ Next Mutant
+Next Mutant → Mutant To Kill? ─no──────────────────────────→ Mutant Loop Done → Verify
+                    │yes                                            ▲
+                    └→ Kill: Build Batch (thinking OFF) → LLM → Parse → Write
+                       → Kill: Sites Written → Kill: Verify Batch ───┘
 ```
 
-Measured on a prompt taken from the pipeline's own dialog log: the model answers in 21-28s
-without reasoning and 112-186s with it, and on everything that could be checked mechanically the
-cheap answer was no worse. A reasoning retry used to follow a failed attempt; it was removed after
-attribution showed it taking 25.3% of a five-hour run's wall clock for about 8% of the kills, and
-after one of its 15-minute calls collided with the n8n node timeout and ended a 496-file run five
-files in. One attempt per mutant, and on to the next.
+One take per file. The sweep writes one test per SITE — every mutation at one line and column
+shares a test — for up to twelve sites at once, then the file is verified and the run moves on.
+
+Everything that used to follow this earned less than the layer below it, and each was removed
+after measurement rather than on taste. A second sweep and then a single-target attempt: the
+single-target prompt managed 3.0 kills per call against the sweep's 6.0, and additionally paid a
+scoped suite run and a mutation check for its one mutant. A reasoning retry after that: 25.3% of a
+five-hour run's wall clock for about 8% of the kills, and one of its 15-minute calls tied with the
+n8n node timeout and ended a 496-file run five files in. Rounds on top: round 2 measured +0.00 MAC
+on five files out of five.
+
+Measured on a prompt taken from the pipeline's own dialog log, the model answers in 21-28s without
+reasoning and 112-186s with it, and on everything checkable mechanically the fast answer was no
+worse — so the one take does not reason.
 
 `GET /api/mutant/next`
 - **Re-measures first if the list is stale.** After the coverage bootstrap the stored survivors are
@@ -152,7 +160,7 @@ Verify → Another Round? ─yes→ Accept Round (commit) → back to Coverage G
   `improvedAny` (≥1 of coverage/mutation/MAC rose against the round baseline), `degradedAny` (any
   fell), and cumulative `improved` (MAC above the file's original baseline, with real file changes
   — the guard against Stryker flakiness).
-- **Another Round?** — continue iff `improvedAny && !degradedAny && rounds < MAX_ROUNDS_PER_FILE`.
+- **Another Round?** — continue iff `improvedAny && !degradedAny && rounds < MAX_MUTANTS_PER_FILE`.
   Accepted rounds are committed individually, so a later bad round can be dropped alone.
 - **Cleanup Tests** — strips leaked scratch commentary and vacuous tests, then re-runs the suite
   and re-measures; any regression reverts the cleanup. Selection is against the base branch, since
@@ -195,7 +203,7 @@ position-stable key, since Stryker ids are not stable), `mutantFailures`, `mutan
 | Secrets redacted from events, stage text, progress lines and API errors | `util.redact` |
 
 **Effort — these only bound cost and are tuned freely:**
-`SCOPE_LIMIT`, `MAX_ITERATIONS`, `MAX_ROUNDS_PER_FILE`, `MAX_ATTEMPTS_PER_FILE`,
+`SCOPE_LIMIT`, `MAX_ITERATIONS`, `MAX_MUTANTS_PER_FILE`, `MAX_ATTEMPTS_PER_FILE`,
 `MAX_MUTANTS_PER_FILE` (failures only), shortlist size, prompt/token budgets.
 
 `STRYKER_CONCURRENCY` is the exception that looks like an effort knob but is not: Stryker scores a
