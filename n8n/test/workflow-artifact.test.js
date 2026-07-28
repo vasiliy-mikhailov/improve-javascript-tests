@@ -48,3 +48,45 @@ test('Kill: Verify is told what the sidecar WROTE, not what the model asked for'
   assert.doesNotMatch(node.parameters.jsonBody, /Kill: Parse Test/,
     'the planned paths are a request, not a fact');
 });
+
+// ── a round's work must survive the decision to stop ─────────────────────────
+// One IF answered two different questions. `Another Round?` chose between
+// Accept Round (commit this round, loop) and Drop Last Round (discardUncommitted).
+// That was survivable only while the sole reason to stop was a stale round: stopping
+// and discarding were the same event. The moment the gate started saying "this round
+// improved, and there is nothing left to do" — a file taken to MAC 100 — the graph
+// read it as "stale" and threw the round away. Observed live: ChartCard.tsx reached
+// cov 0→100, mut 0→100, then "finalizing after 0 accepted round(s) — discarding".
+//
+// Keeping a round and running another one are separate facts, and /api/verify has
+// always returned both.
+const edges = (from, out = 0) => (wf.connections[from]?.main?.[out] || []).map((c) => c.node);
+const nodeNamed = (n) => wf.nodes.find((x) => x.name === n);
+
+test('a round that improved is committed even when no further round is worthwhile', () => {
+  const kept = wf.nodes.find((n) => /Round Kept\?/.test(n.name));
+  assert.ok(kept, 'the graph needs a decision for "keep this round" separate from "run another"');
+  const expr = JSON.stringify(kept.parameters);
+  assert.match(expr, /improvedAny/, 'keeping a round is decided by whether it improved anything');
+  assert.match(expr, /degradedAny/, 'a round that degraded a metric is not kept');
+
+  assert.deepEqual(edges('Round Kept?', 0), ['Accept Round'], 'improved → commit the round');
+  assert.deepEqual(edges('Round Kept?', 1), ['Drop Last Round'], 'not improved → discard it');
+
+  // and only after the round is safely committed do we ask whether to go again
+  assert.deepEqual(edges('Accept Round'), ['Another Round?']);
+  assert.deepEqual(edges('Another Round?', 0), ['Coverage Gaps'], 'worth another → next round');
+  assert.deepEqual(edges('Another Round?', 1), ['Drop Last Round'],
+    'not worth another → settle; after a commit this discards nothing and restores the accepted metrics');
+
+  assert.deepEqual(edges('Verify'), ['Round Kept?'], 'the first question after verifying is whether to keep');
+});
+
+test('the round gate reads the worth-another flag from Verify, which is where it is computed', () => {
+  // Another Round? now runs downstream of Accept Round, whose payload is {ok,file,rounds}.
+  // Reading $json.anotherRoundWorthIt there is reading a field that is never present —
+  // undefined is falsy, so it would look exactly like a correct "stop" forever.
+  const expr = JSON.stringify(nodeNamed('Another Round?').parameters);
+  assert.match(expr, /\$\('Verify'\)[^"]*anotherRoundWorthIt/,
+    'the flag lives in Verify\'s response, so it must be read from that node');
+});

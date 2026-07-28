@@ -1143,7 +1143,7 @@
         "conditions": {
           "number": [
             {
-              "value1": "={{ ($json.anotherRoundWorthIt && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}",
+              "value1": "={{ ($('Verify').first().json.improvedAny && !$('Verify').first().json.degradedAny) ? 1 : 0 }}",
               "value2": 1,
               "operation": "equal"
             }
@@ -1154,6 +1154,27 @@
       "typeVersion": 1,
       "position": [
         2200,
+        600
+      ],
+      "id": "dd21ef08-5f3f-0787-793f-29a67976ba4d",
+      "name": "Round Kept?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($('Verify').first().json.anotherRoundWorthIt && ($json.rounds || 0) < ($('Verify').first().json.maxRounds ?? 5)) ? 1 : 0 }}",
+              "value2": 1,
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2420,
         600
       ],
       "id": "7a9491af-d1cf-def6-b48d-d83180d1d370",
@@ -1176,7 +1197,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2420,
+        2640,
         600
       ],
       "id": "c195a047-4583-ee7e-1930-2139122a32d8",
@@ -1199,7 +1220,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
+        2860,
         600
       ],
       "id": "c8211682-1aab-9a91-926b-a1b4529b0533",
@@ -1222,7 +1243,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
+        3080,
         600
       ],
       "id": "5add3374-dcee-7a0f-27d8-a29efdf7b5b1",
@@ -1245,7 +1266,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3080,
+        3300,
         600
       ],
       "id": "014af70d-d643-cb84-cb4a-bee31bcfbd82",
@@ -1266,7 +1287,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        3300,
+        3520,
         600
       ],
       "id": "bd1d66fd-d9d9-3196-dfdb-b107a09c3f38",
@@ -1289,8 +1310,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3520,
-        600
+        220,
+        800
       ],
       "id": "f4a3300c-62e0-b33d-ce5e-9ffe342fbab7",
       "name": "Rules: make PR"
@@ -1312,7 +1333,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        220,
+        440,
         800
       ],
       "id": "c61c01f7-0a6f-623c-6e54-144d1c4fc08a",
@@ -1335,7 +1356,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
+        660,
         800
       ],
       "id": "d6e1ac9e-9323-48ad-aeb4-f604bcc8fd93",
@@ -1346,7 +1367,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        660,
+        880,
         800
       ],
       "id": "10a831b2-5961-1acf-57cb-45dc4b4902b1",
@@ -1369,7 +1390,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        1100,
         800
       ],
       "id": "e339d30d-a9f5-0ee0-3f72-f057772e643a",
@@ -1380,7 +1401,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1100,
+        1320,
         800
       ],
       "id": "63260fbc-1dcf-61bf-818e-62229a10a90d",
@@ -2067,14 +2088,14 @@
       "main": [
         [
           {
-            "node": "Another Round?",
+            "node": "Round Kept?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Another Round?": {
+    "Round Kept?": {
       "main": [
         [
           {
@@ -2096,7 +2117,25 @@
       "main": [
         [
           {
+            "node": "Another Round?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Another Round?": {
+      "main": [
+        [
+          {
             "node": "Coverage Gaps",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Drop Last Round",
             "type": "main",
             "index": 0
           }

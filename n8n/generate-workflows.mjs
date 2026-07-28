@@ -280,6 +280,7 @@ const mutDone = mutantLoop(covDone);
 // VERIFY → CHECK RULES → PR / DISCARD → LOOP
 // =============================================================================
 Http('Verify', { path: '/api/verify', body: `={{ { file: $('Start Iteration').first().json.file } }}`, timeout: 3600000 });
+IfNum('Round Kept?');
 IfNum('Another Round?');
 Http('Accept Round', { path: '/api/round/accept', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
 Http('Drop Last Round', { path: '/api/round/drop', body: `={{ { file: $('Start Iteration').first().json.file } }}` });
@@ -297,9 +298,15 @@ NoOp('Iteration Done');
 Http('Finish Run', { path: '/api/run/finish', body: '={{ {} }}' });
 NoOp('End');
 
-chain(mutDone, 'Verify', 'Another Round?');
-link('Another Round?', 'Accept Round', 0);
-link('Accept Round', 'Coverage Gaps');           // next round on the same file
+chain(mutDone, 'Verify', 'Round Kept?');
+// commit an improving round BEFORE deciding whether to run another: the two were one
+// gate, so "improved, nothing left to do" discarded the round it had just earned
+link('Round Kept?', 'Accept Round', 0);
+link('Round Kept?', 'Drop Last Round', 1);
+link('Accept Round', 'Another Round?');
+link('Another Round?', 'Coverage Gaps', 0);      // next round on the same file
+// settling after a commit: discardUncommitted() has nothing to discard, and the
+// metric restore puts back the accepted round's own numbers
 link('Another Round?', 'Drop Last Round', 1);
 chain('Drop Last Round', 'Rules: check changes', 'Approved?');
 link('Approved?', 'Cleanup Tests', 0);

@@ -41,7 +41,15 @@ export const CONDITIONS = {
   // finds nothing to attempt and merely re-measures a settled file. Measured: round 1
   // gained +70 MAC on average, round 2 gained +0.00 five times out of five, at up to 25
   // minutes each.
-  'Another Round?': '={{ ($json.anotherRoundWorthIt && ($json.rounds || 0) < ($json.maxRounds ?? 5)) ? 1 : 0 }}',
+  // Two questions, not one. "Did this round earn its place?" decides commit-or-discard;
+  // "is another round worth paying for?" decides loop-or-settle. They coincided while
+  // the only reason to stop was a stale round, and the day the second one started
+  // saying "improved, but nothing left to do", a single gate read it as stale and
+  // discarded a file taken to MAC 100.
+  'Round Kept?': "={{ ($('Verify').first().json.improvedAny && !$('Verify').first().json.degradedAny) ? 1 : 0 }}",
+  // read from Verify by name: this now runs after Accept Round, whose payload has no
+  // such field, and an absent flag is falsy — indistinguishable from a correct stop
+  'Another Round?': "={{ ($('Verify').first().json.anotherRoundWorthIt && ($json.rounds || 0) < ($('Verify').first().json.maxRounds ?? 5)) ? 1 : 0 }}",
   // the rules engine approving is not enough — the round must also have improved something
   'Approved?': "={{ ($json.result && $json.result.approved && $('Drop Last Round').first().json.improved) ? 1 : 0 }}",
 };
@@ -60,6 +68,7 @@ export const COMPARISONS = {
   'Mutant To Kill?': { operation: 'equal', value2: 1 },
   'Kill: Batch Failed?': { operation: 'equal', value2: 1 },
   'Kill: Escalate?': { operation: 'equal', value2: 1 },
+  'Round Kept?': { operation: 'equal', value2: 1 },
   'Another Round?': { operation: 'equal', value2: 1 },
   'Approved?': { operation: 'equal', value2: 1 },
 };

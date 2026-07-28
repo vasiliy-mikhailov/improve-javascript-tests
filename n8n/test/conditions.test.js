@@ -79,7 +79,8 @@ const BRANCHES = {
   'Mutant To Kill?': ['Kill: Build Batch', 'Mutant Loop Done'],
   'Kill: Batch Failed?': ['Kill: Build Prompt', 'Next Mutant'],
   'Kill: Escalate?': ['Kill: Build Prompt 2', 'Next Mutant'],
-  'Another Round?': ['Accept Round', 'Drop Last Round'],
+  'Round Kept?': ['Accept Round', 'Drop Last Round'],
+  'Another Round?': ['Coverage Gaps', 'Drop Last Round'],
   'Approved?': ['Cleanup Tests', 'Discard Changes'],
 };
 
@@ -110,8 +111,8 @@ test('the evaluator refuses what it cannot resolve', () => {
   assert.equal(evaluate('={{ $json.done ? 0 : 1 }}', { json: {} }), 1);
 });
 
-test('condition() is the single source for all 13 IF nodes', () => {
-  assert.equal(Object.keys(CONDITIONS).length, 13);
+test('condition() is the single source for all 14 IF nodes', () => {
+  assert.equal(Object.keys(CONDITIONS).length, 14);
   assert.deepEqual(Object.keys(COMPARISONS).sort(), Object.keys(CONDITIONS).sort());
   assert.deepEqual(Object.keys(BRANCHES).sort(), Object.keys(CONDITIONS).sort());
   assert.throws(() => condition('Wrote Any?'), /no condition registered/);   // near-miss name
@@ -122,7 +123,7 @@ test('condition() is the single source for all 13 IF nodes', () => {
 // the generated workflow must agree with the module the tables below exercise
 // =============================================================================
 test('every IF node in the workflow carries exactly the registered condition', () => {
-  assert.equal(ifNodes.length, 13, 'workflow has a different number of IF nodes than conditions.js knows');
+  assert.equal(ifNodes.length, 14, 'workflow has a different number of IF nodes than conditions.js knows');
   for (const n of ifNodes) {
     assert.deepEqual(n.parameters.conditions.number, [condition(n.name)], `${n.name}: expression drifted from conditions.js`);
     assert.equal(n.typeVersion, 1, `${n.name}: IF v2+ uses a different parameter shape than this test models`);
@@ -292,9 +293,15 @@ const verify = (over = {}) => {
   }
   return base;
 };
-const round = (over) => branchOf('Another Round?', { json: verify(over) });
+// After the split, Another Round? runs DOWNSTREAM of Accept Round: $json is that
+// node's {ok, file, rounds} payload, and every fact about the round just verified is
+// read from Verify by name. Keeping the fixture in this shape is the point — the
+// previous shape would let the expression read $json.anotherRoundWorthIt forever,
+// which at runtime is undefined, i.e. a permanent and invisible "stop".
+const afterAccept = (v) => ({ json: { ok: true, file: v.file, rounds: v.rounds }, nodes: { Verify: v } });
+const round = (over) => branchOf('Another Round?', afterAccept(verify(over)));
 // for the missing-field cases: the key must be absent, not overridden with undefined
-const roundOn = (json) => branchOf('Another Round?', { json });
+const roundOn = (json) => branchOf('Another Round?', afterAccept(json));
 
 test('Another Round? continues only on improvement with no degradation', () => {
   assert.equal(round({ improvedAny: true, degradedAny: false }), 0, 'progress ⇒ Accept Round');
@@ -324,13 +331,13 @@ test('Another Round? falls back to rounds=0 / maxRounds=5 when the fields are mi
   // verdict must not buy a round.
   assert.equal(roundOn(without(verify(), 'anotherRoundWorthIt')), 1, 'no verdict ⇒ do not spend another round');
   assert.equal(roundOn(verify({ anotherRoundWorthIt: false })), 1, 'nothing untried ⇒ nothing to do');
-  assert.equal(branchOf('Another Round?', { json: {} }), 1);
+  assert.equal(branchOf('Another Round?', afterAccept({})), 1);
 });
 
 test('Another Round? stops when /api/verify itself failed', () => {
   // the endpoint's two failure shapes carry no improvedAny/rounds at all
-  assert.equal(branchOf('Another Round?', { json: { ok: true, improved: false, testsGreen: false, reason: 'full suite red', file: 'src/a.ts' } }), 1);
-  assert.equal(branchOf('Another Round?', { json: { ok: true, improved: false, testsGreen: false, error: 'stryker crashed', file: 'src/a.ts' } }), 1);
+  assert.equal(branchOf('Another Round?', afterAccept({ ok: true, improved: false, testsGreen: false, reason: 'full suite red', file: 'src/a.ts' })), 1);
+  assert.equal(branchOf('Another Round?', afterAccept({ ok: true, improved: false, testsGreen: false, error: 'stryker crashed', file: 'src/a.ts' })), 1);
 });
 
 test('Another Round? honours an explicit maxRounds of 0 — one pass per file, no extra rounds', () => {
@@ -391,7 +398,7 @@ test('Approved? survives a malformed rules answer and requires Drop Last Round t
 // cross-cutting: nothing may throw on the shapes a broken model answer produces
 // =============================================================================
 test('no condition throws on an empty response from its own node', () => {
-  const nodes = { 'Cov: Parse Tests': {}, 'Drop Last Round': {} };
+  const nodes = { 'Cov: Parse Tests': {}, 'Drop Last Round': {}, Verify: {} };
   for (const name of Object.keys(CONDITIONS)) {
     const idx = branchOf(name, { json: {}, nodes });
     assert.ok(idx === 0 || idx === 1, `${name} produced ${idx}`);
@@ -399,7 +406,7 @@ test('no condition throws on an empty response from its own node', () => {
     // Cov: Has Work? (write tests anyway) and Baseline OK? (an absent `failed` flag
     // means the run did not crash). All three are self-limiting: the pick fails, the
     // prompt is nonsense and gets deleted, or the empty survivor list ends the loop.
-    // The other eight fail CLOSED: no repair, no kill, no extra round, no PR.
+    // The other nine fail CLOSED: no repair, no kill, no round kept, no extra round, no PR.
     const expected = ['More Work?', 'Cov: Has Work?', 'Baseline OK?'].includes(name) ? 0 : 1;
     assert.equal(idx, expected, `${name}: empty input changed which way it fails`);
   }
@@ -420,7 +427,7 @@ test('only the rounds counter may default with `||`, because 0 IS its default', 
   const another = CONDITIONS['Another Round?'];
   assert.equal(another.match(/\|\|/g).length, 1, 'exactly one `||` survives the audit');
   assert.match(another, /\$json\.rounds \|\| 0/, 'the survivor is the rounds counter, whose default IS 0');
-  assert.match(another, /\$json\.maxRounds \?\? 5/, 'the cap must distinguish an explicit 0 from a missing field');
+  assert.match(another, /maxRounds \?\? 5/, 'the cap must distinguish an explicit 0 from a missing field');
 });
 
 test('every condition reads a field whose falsy value already MEANS the false answer', () => {
@@ -441,11 +448,16 @@ test('every condition reads a field whose falsy value already MEANS the false an
       'retryable:false after a batch means something died — go straight to the next batch'],
     ['Kill: Escalate?', { json: { killed: true, retryable: false } }, 1,
       'retryable:false is the sidecar saying the target is spent — a kill, or the reasoning attempt already ran'],
-    ['Another Round?', { json: verify({ maxRounds: 0 }) }, 1, 'the fixed one: an explicit cap of 0 now stops the loop'],
+    ['Round Kept?', { json: {}, nodes: { Verify: { improvedAny: false, degradedAny: false } } }, 1,
+      'improvedAny:false is a round that changed nothing — drop it rather than commit it'],
+    ['Another Round?', afterAccept(verify({ maxRounds: 0 })), 1, 'the fixed one: an explicit cap of 0 now stops the loop'],
     ['Approved?', approved({ approved: false }, { improved: true }), 1, 'approved:false is a refusal, not a missing verdict'],
   ];
   assert.deepEqual(cases.map((c) => c[0]).sort(), Object.keys(CONDITIONS).sort(), 'every condition must be audited');
   for (const [name, fx, expected, why] of cases) assert.equal(branchOf(name, fx), expected, `${name}: ${why}`);
+  // the audit above is one entry per condition; this is the other half of the pair
+  assert.equal(branchOf('Round Kept?', { json: {}, nodes: { Verify: { improvedAny: true, degradedAny: false } } }), 0,
+    'a round that improved something is committed even when it is the last one this file gets');
 });
 
 test('Baseline OK? routes a file whose baseline could not be measured to the next iteration', () => {
@@ -470,9 +482,9 @@ test('Another Round? asks the sidecar whether another round can DO anything', ()
 
   // and it must still respect the cap
   assert.match(expr, /maxRounds/);
-  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: true, rounds: 0, maxRounds: 5 }) }), 0);
-  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: false, rounds: 0, maxRounds: 5 }) }), 1,
+  assert.equal(branchOf('Another Round?', afterAccept(verify({ anotherRoundWorthIt: true, rounds: 0, maxRounds: 5 }))), 0);
+  assert.equal(branchOf('Another Round?', afterAccept(verify({ anotherRoundWorthIt: false, rounds: 0, maxRounds: 5 }))), 1,
     'nothing untried means another round can only re-measure a settled file');
-  assert.equal(branchOf('Another Round?', { json: verify({ anotherRoundWorthIt: true, rounds: 5, maxRounds: 5 }) }), 1,
+  assert.equal(branchOf('Another Round?', afterAccept(verify({ anotherRoundWorthIt: true, rounds: 5, maxRounds: 5 }))), 1,
     'the cap still stops it');
 });
