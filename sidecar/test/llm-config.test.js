@@ -21,11 +21,16 @@ test('an unset endpoint is refused with a message that says what to set', () => 
   assert.match(llm.endpointProblem('', 'sk-real') || '', /LLM_BASE_URL/);
 });
 
-test('the example host is refused even with a real-looking key', () => {
-  // the whole point: someone pastes their own key and leaves the shipped URL
-  const p = llm.endpointProblem('https://inference.mikhailov.tech/qwen-3.6-27b-fp8/v1', 'sk-a-real-key');
-  assert.match(p || '', /LLM_BASE_URL/,
-    'a key must never be sent to the example host just because the operator forgot to change it');
+test('a configured host is never second-guessed, whichever host it is', () => {
+  // An earlier guard rejected a hardcoded "example host" and took production down on
+  // deploy — that host is this operator's own endpoint. .env.example ships no url, so a
+  // value being present IS the operator's choice; the guard checks that a choice was
+  // made, not whose infrastructure it names.
+  assert.equal(llm.endpointProblem('https://inference.mikhailov.tech/qwen-3.6-27b-fp8/v1', 'sk-a-real-key'), null);
+});
+
+test('a url that is not a url is refused', () => {
+  assert.match(llm.endpointProblem('not-a-url', 'sk-real') || '', /not a valid url/);
 });
 
 test('a configured endpoint passes the guard', () => {

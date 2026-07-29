@@ -10,20 +10,22 @@ const ENABLE_THINKING = String(process.env.LLM_ENABLE_THINKING || 'false') === '
 // thinking consumes completion tokens before any visible output — give it headroom
 const THINKING_EXTRA = ENABLE_THINKING ? parseInt(process.env.LLM_THINKING_BUDGET || '3000', 10) : 0;
 
-// The endpoint has to be the operator's own. .env.example used to ship a working URL —
+// The endpoint has to be the operator's own. .env.example used to ship a WORKING url —
 // the author's inference host — beside `LLM_API_KEY=sk-replace_me`, so the natural edit
-// was to paste a real key and leave the URL, sending that key and up to 24000 characters
-// of the operator's source to someone else's machine. Refuse before anything is sent,
-// and name the variable that is wrong.
-const EXAMPLE_HOSTS = /(^|\.)mikhailov\.tech$/i;
+// was to paste a real key and leave the url, sending that key and up to 24000 characters
+// of the operator's source to someone else's machine. .env.example now ships no url at
+// all, which makes any value an explicit choice — so the guard checks that a choice was
+// MADE, and never second-guesses which host it was.
+//
+// An earlier version rejected a hardcoded "example host" and took production down on
+// deploy: that host is this operator's own endpoint. A guard that decides whose
+// infrastructure is legitimate is a guard that blocks the person it is meant to help.
 function endpointProblem(base = BASE, key = KEY) {
-  if (!base) return 'LLM_BASE_URL is not set — point it at any OpenAI-compatible /v1 endpoint (vLLM, Ollama, OpenAI)';
-  let host = '';
-  try { host = new URL(base).hostname; } catch { return `LLM_BASE_URL is not a valid url: ${base}`; }
-  if (EXAMPLE_HOSTS.test(host)) {
-    return `LLM_BASE_URL still points at the example host (${host}) — set it to your own endpoint before running, `
-      + 'or your api key and your source code are sent to a machine you do not control';
+  if (!base) {
+    return 'LLM_BASE_URL is not set — point it at any OpenAI-compatible /v1 endpoint '
+      + '(vLLM, Ollama, OpenAI). The prompt carries your source code, so it must be an endpoint you control.';
   }
+  try { new URL(base); } catch { return `LLM_BASE_URL is not a valid url: ${base}`; }
   // an empty key is fine: local endpoints usually want none. A placeholder is not.
   if (/replace_me|^sk-xxx|your[-_]?key/i.test(key)) return 'LLM_API_KEY is still the placeholder from .env.example';
   return null;

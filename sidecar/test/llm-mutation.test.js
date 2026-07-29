@@ -258,26 +258,10 @@ test('a base url that is not a url names the value it choked on', () => {
   assert.match(String(p), /llm\.invalid\/v1/);
 });
 
-test('the example host is refused when it IS the host, not only as a subdomain', () => {
-  // llm-config.test.js only tries inference.mikhailov.tech. A guard anchored on a
-  // literal dot lets the bare domain through, and the bare domain is what someone
-  // trims a URL down to.
-  assert.notEqual(llm.endpointProblem('https://mikhailov.tech/v1', 'sk-a-real-key'), null);
-});
-
 test('a host that merely starts with the example domain belongs to the operator', () => {
   // mikhailov.tech.example.com is a different machine. Refusing it would be a guard
   // that blocks a legitimate endpoint, which is how guards get deleted.
   assert.equal(llm.endpointProblem('https://mikhailov.tech.my-own-host.invalid/v1', 'sk-mine'), null);
-});
-
-test('the refusal names the host and says exactly what is at stake', () => {
-  // Without the second half — the api key and the source — this reads as pedantry
-  // about a URL and gets overridden.
-  const p = llm.endpointProblem('https://inference.mikhailov.tech/v1', 'sk-a-real-key');
-  assert.match(p, /inference\.mikhailov\.tech/);
-  assert.match(p, /api key/);
-  assert.match(p, /source code/);
 });
 
 test('the placeholder key is caught however .env.example spelled it', () => {
@@ -737,3 +721,12 @@ test('a choice with no message is an empty answer too', () =>
       const r = await llm.chat({ prompt: 'x', maxTokens: 100, thinking: false });
       assert.equal(r.text, '');
     }));
+
+// The example-host rejection these two tests pinned is gone: it took production down on
+// deploy, because the host it rejected is this operator's own endpoint. .env.example now
+// ships no url at all, so a value being present is the operator's explicit choice, and
+// the guard checks only that a choice was made. See sidecar/test/llm-config.test.js.
+test('a configured endpoint passes the guard whichever host it names', () => {
+  assert.equal(llm.endpointProblem('https://inference.mikhailov.tech/v1', 'sk-real'), null);
+  assert.equal(llm.endpointProblem('http://localhost:11434/v1', ''), null);
+});
