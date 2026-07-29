@@ -77,6 +77,22 @@ async function commit(message) {
   return { sha };
 }
 
+/**
+ * Write the branch's diff (and the PR payload, when there is one) under DATA_DIR/prs.
+ * Used for PR_MODE=local, and again when a push or `gh pr create` fails: the tests are
+ * already committed on the branch, and losing the PR must not lose the work.
+ * @returns {Promise<string>} path of the written patch
+ */
+async function savePatch(branch, record = null) {
+  const prDir = path.join(DATA_DIR, 'prs');
+  fs.mkdirSync(prDir, { recursive: true });
+  const slug = String(branch).replace(/[^a-zA-Z0-9._-]+/g, '-');
+  const patchPath = path.join(prDir, slug + '.patch');
+  fs.writeFileSync(patchPath, await diffAgainstBase());
+  if (record) fs.writeFileSync(path.join(prDir, slug + '.json'), JSON.stringify(record, null, 2));
+  return patchPath;
+}
+
 async function createPr({ file, branch, title, body, labels = [] }) {
   const dir = repoDir();
   const cfg = state.run.config;
@@ -104,18 +120,12 @@ async function createPr({ file, branch, title, body, labels = [] }) {
     record.url = url;
   } else {
     // local mode: keep the branch, save patch + PR payload as the deliverable
-    const prDir = path.join(DATA_DIR, 'prs');
-    fs.mkdirSync(prDir, { recursive: true });
-    const slug = branch.replace(/[^a-zA-Z0-9._-]+/g, '-');
-    const patch = await diffAgainstBase();
-    const patchPath = path.join(prDir, slug + '.patch');
-    fs.writeFileSync(patchPath, patch);
-    fs.writeFileSync(path.join(prDir, slug + '.json'), JSON.stringify(record, null, 2));
-    record.patchPath = patchPath;
+    record.patchPath = await savePatch(branch, record);
   }
   state.prs.push(record);
   event('preparing_pr', record.url ? 'PR created: ' + record.url : 'PR prepared locally: ' + record.patchPath);
   return record;
 }
 
-module.exports = { commit, createPr, changedFiles, changedTestFiles, diffAgainstBase };
+module.exports = {
+  savePatch, commit, createPr, changedFiles, changedTestFiles, diffAgainstBase };

@@ -1368,9 +1368,29 @@ const routes = {
       }
       throw e;
     }
-    const rec = await pr.createPr({
-      file, branch: f.branch, title: body.title, body: body.body || '', labels: body.labels || [],
-    });
+    // A push rejected for THIS repo — a protected base branch, a token without write
+    // access, an org requiring SAML, a rate limit — used to throw, become a 500, mark
+    // the run failed and end the n8n execution at this node. Every remaining candidate
+    // file was abandoned, and this file kept status 'picked' with a local commit and no
+    // ledger entry. One repo's permissions are not the run's problem: record what we
+    // have, settle the file, and let the graph go to the next one.
+    let rec;
+    try {
+      rec = await pr.createPr({
+        file, branch: f.branch, title: body.title, body: body.body || '', labels: body.labels || [],
+      });
+    } catch (e) {
+      const patchPath = await pr.savePatch(f.branch).catch(() => null);
+      S.upsertFile(file, { status: 'failed', failedKind: 'pr', prPatch: patchPath, failure: e.message.slice(0, 300) });
+      ledger()[file] = { state: 'failed', branch: f.branch, patchPath, ts: Date.now(),
+        metrics: { coverageBefore: f.coverageBefore, coverageAfter: f.coverageAfter,
+          mutationBefore: f.mutationBefore, mutationAfter: f.mutationAfter,
+          macBefore: f.macBefore, macAfter: f.macAfter, timesheet: ts, tokens: f.tokens } };
+      S.save();
+      S.event('preparing_pr', `PR failed for ${file}: ${e.message.slice(0, 200)} — the work is committed on `
+        + `${f.branch}${patchPath ? ` and saved to ${patchPath}` : ''}; continuing with the next file`);
+      return { ok: true, pr: null, error: e.message.slice(0, 300), branch: f.branch, patchPath };
+    }
     const spentSec = accrueSpent(file);
     S.upsertFile(file, { status: 'improved', prUrl: rec.url, prPatch: rec.patchPath, timesheet: ts });
     ledger()[file] = {

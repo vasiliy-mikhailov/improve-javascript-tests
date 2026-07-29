@@ -10,11 +10,32 @@ const ENABLE_THINKING = String(process.env.LLM_ENABLE_THINKING || 'false') === '
 // thinking consumes completion tokens before any visible output — give it headroom
 const THINKING_EXTRA = ENABLE_THINKING ? parseInt(process.env.LLM_THINKING_BUDGET || '3000', 10) : 0;
 
+// The endpoint has to be the operator's own. .env.example used to ship a working URL —
+// the author's inference host — beside `LLM_API_KEY=sk-replace_me`, so the natural edit
+// was to paste a real key and leave the URL, sending that key and up to 24000 characters
+// of the operator's source to someone else's machine. Refuse before anything is sent,
+// and name the variable that is wrong.
+const EXAMPLE_HOSTS = /(^|\.)mikhailov\.tech$/i;
+function endpointProblem(base = BASE, key = KEY) {
+  if (!base) return 'LLM_BASE_URL is not set — point it at any OpenAI-compatible /v1 endpoint (vLLM, Ollama, OpenAI)';
+  let host = '';
+  try { host = new URL(base).hostname; } catch { return `LLM_BASE_URL is not a valid url: ${base}`; }
+  if (EXAMPLE_HOSTS.test(host)) {
+    return `LLM_BASE_URL still points at the example host (${host}) — set it to your own endpoint before running, `
+      + 'or your api key and your source code are sent to a machine you do not control';
+  }
+  // an empty key is fine: local endpoints usually want none. A placeholder is not.
+  if (/replace_me|^sk-xxx|your[-_]?key/i.test(key)) return 'LLM_API_KEY is still the placeholder from .env.example';
+  return null;
+}
+
 /**
  * chat({system, prompt, messages, maxTokens, temperature, json})
  * json=true → returns parsed object (retries once with a repair nudge).
  */
 async function chat(opts) {
+  const problem = endpointProblem();
+  if (problem) throw new Error(problem);
   const messages = opts.messages && opts.messages.length ? opts.messages.slice() : [];
   if (!messages.length) {
     if (opts.system) messages.push({ role: 'system', content: opts.system });
@@ -199,4 +220,4 @@ async function post(body, attempt = 0) {
   } finally { clearTimeout(timer); }
 }
 
-module.exports = { chat, timeoutFor };
+module.exports = { chat, timeoutFor, endpointProblem };

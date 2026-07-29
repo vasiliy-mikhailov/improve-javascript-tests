@@ -1007,3 +1007,43 @@ test('a crashed baseline still gets another go, because no take was spent', () =
   const slug = require('../util').slugify(sb.repoUrl);
   assert.equal(S.state.improvedLedger[slug]?.[FILE], undefined, 'not settled after one crash');
 }));
+
+// ── one repo's permissions must not end the run ──────────────────────────────
+// createPr throws when the push is rejected or `gh pr create` fails, /api/pr/create did
+// not catch it, and the generic handler turns a throw into a 500 that marks the run
+// failed. The Create PR node has no onError, so the n8n execution ends there: every
+// remaining candidate file is abandoned and the improved file keeps status 'picked'
+// with a local commit and no ledger entry. One protected branch, or a token without
+// write access, and hours of work on other files is thrown away.
+async function readyForPr(sb) {
+  const w = await killReady(sb, { mutants: [{ line: 10 }, { line: 20 }] });
+  w.writeTest('test/a.kill-batch-pr.test.ts', { target: FILE, kills: [10], cases: 4 });
+  await sb.post('/api/verify', { file: FILE });
+  await sb.post('/api/round/accept', { file: FILE });
+  await sb.post('/api/round/drop', { file: FILE });
+  return w;
+}
+
+test('a rejected push costs that file, not the run', () => withSandbox(async (sb) => {
+  const w = await readyForPr(sb);
+  w.failNext('createPr', new Error('git push failed: remote: Permission to org/repo.git denied'));
+
+  const r = await sb.post('/api/pr/create', { file: FILE, title: 'test: improve', body: '' });
+
+  assert.equal(r.ok, true, 'the route must answer, or the graph stops at this node');
+  assert.equal(r.pr, null);
+  assert.match(r.error || '', /Permission/);
+  assert.notEqual(S.state.run.status, 'failed', 'the run continues to the next file');
+  assert.equal(sb.file(FILE).status, 'failed');
+  assert.match(sb.events().join('\n'), /Permission/, 'and the operator is told why');
+}));
+
+test('the work is kept on disk when the PR cannot be opened', () => withSandbox(async (sb) => {
+  // the tests are committed locally on the file's branch; losing the PR must not lose
+  // them, or the run's whole output for that file is gone
+  const w = await readyForPr(sb);
+  w.failNext('createPr', new Error('gh: rate limit exceeded'));
+  const r = await sb.post('/api/pr/create', { file: FILE, title: 't', body: '' });
+  assert.equal(r.ok, true);
+  assert.ok(r.patchPath || r.branch, 'the branch or a patch must be recorded so the work can be recovered');
+}));
