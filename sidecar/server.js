@@ -41,6 +41,10 @@ function readBody(req) {
 // How many mutants one generated file is asked to kill. Eight measured best against
 // the real model; more crowds the prompt, fewer wastes the cycle.
 const BATCH_TARGETS = 8;
+// How many times a file's BASELINE measurement may crash before we stop offering it.
+// Deliberately independent of maxAttemptsPerFile (one take per file): a crash means
+// we never got as far as taking one.
+const BASELINE_CRASH_TOLERANCE = 3;
 
 function needRun() { if (!state.run) throw new Error('no active run — POST /api/run/start first'); }
 function ledger() {
@@ -161,7 +165,7 @@ function metricsPayload() {
 
 function candidates() {
   const cfg = state.run.config;
-  const maxAttempts = cfg.maxAttemptsPerFile || 3;
+  const maxAttempts = cfg.maxAttemptsPerFile || 1;
   const all = Object.values(state.files);
   // ledger-replayed files were settled in PREVIOUS batches — they must not
   // consume this batch's scopeLimit quota
@@ -392,7 +396,7 @@ const routes = {
       if (!state.files[p]) continue;
       S.upsertFile(p, rec.state === 'improved'
         ? { status: 'improved', fromLedger: true, prUrl: rec.prUrl || null, prPatch: rec.patchPath || null, ...(rec.metrics || {}) }
-        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 3, ...(rec.metrics || {}) });
+        : { status: rec.state === 'failed' ? 'failed' : 'no_improvement', fromLedger: true, attempts: state.run.config.maxAttemptsPerFile || 1, ...(rec.metrics || {}) });
       replayed += 1;
     }
     if (replayed || remeasured) {
@@ -485,7 +489,12 @@ const routes = {
         // one timeout or OOM would blacklist a file forever. Let it come back until
         // it has failed as often as any other file is allowed to be attempted.
         const crashes = (measured()[file]?.baselineCrashes || 0) + 1;
-        const settled = crashes >= (state.run.config.maxAttemptsPerFile || 3);
+        // A crashed baseline is not a TAKE — nothing was attempted, nothing was
+        // written, no model was called. Crashes are usually transient (machine load,
+        // a Stryker hiccup), so they keep their own tolerance rather than inheriting
+        // maxAttemptsPerFile, which is now 1: otherwise one bad moment blacklists a
+        // file from every future batch, and the ledger is replayed in all of them.
+        const settled = crashes >= BASELINE_CRASH_TOLERANCE;
         S.upsertFile(file, {
           status: 'failed', failedKind: 'measurement', coverageBefore: cov, failure: e.message.slice(0, 200),
         });
@@ -1387,7 +1396,7 @@ const routes = {
       const f = state.files[file];
       const spentSec = accrueSpent(file);
       if (f.status !== 'failed') {
-        const maxAttempts = state.run.config.maxAttemptsPerFile || 3;
+        const maxAttempts = state.run.config.maxAttemptsPerFile || 1;
         S.upsertFile(file, { status: f.attempts >= maxAttempts ? 'no_improvement' : 'candidate' });
         if (f.attempts >= maxAttempts) {
           // keep the numbers: a file we could not improve is still a file we measured

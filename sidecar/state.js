@@ -19,7 +19,7 @@ function envConfig() {
     scopeLimit: parseInt(e.SCOPE_LIMIT || '0', 10),
     maxIterations: parseInt(e.MAX_ITERATIONS || '0', 10), // 0 = unlimited
     maxMutantsPerFile: parseInt(e.MAX_MUTANTS_PER_FILE || '5', 10),
-    maxAttemptsPerFile: parseInt(e.MAX_ATTEMPTS_PER_FILE || '3', 10),
+    maxAttemptsPerFile: parseInt(e.MAX_ATTEMPTS_PER_FILE || '1', 10),
     prMode: e.PR_MODE || 'github', // github | local
     prBase: e.PR_BASE || '',       // defaults to repoBranch
     setupScript: e.SETUP_SCRIPT || '', // npm script to run after install (e.g. a build)
@@ -48,7 +48,7 @@ function freshRun(overrides = {}) {
   cfg.scopeLimit = parseInt(cfg.scopeLimit, 10) || 0;
   cfg.maxIterations = Math.max(0, parseInt(cfg.maxIterations, 10) || 0); // 0 = unlimited
   cfg.maxMutantsPerFile = parseInt(cfg.maxMutantsPerFile, 10) || 5;
-  cfg.maxAttemptsPerFile = parseInt(cfg.maxAttemptsPerFile, 10) || 3;
+  cfg.maxAttemptsPerFile = parseInt(cfg.maxAttemptsPerFile, 10) || 1;
   if (!cfg.prBase) cfg.prBase = cfg.repoBranch;
   return {
     id: 'run-' + Date.now(),

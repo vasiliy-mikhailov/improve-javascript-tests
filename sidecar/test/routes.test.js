@@ -117,7 +117,7 @@ test('run/start silently replaces an explicit per-file cap of 0 with the default
   });
 
   assert.equal(S.state.run.config.maxMutantsPerFile, 5);
-  assert.equal(S.state.run.config.maxAttemptsPerFile, 3);
+  assert.equal(S.state.run.config.maxAttemptsPerFile, 1);
 }));
 
 test('run/start keeps the per-repo ledger unless clearLedger is asked for', () => withSandbox(async (sb) => {

@@ -970,3 +970,40 @@ test('tests that kill mutants are kept even when the repo hides the file from co
     assert.equal(d.improved, true,
       'and it reaches the PR: judging it on MAC alone throws away tests that kill 68% of a file');
   }));
+
+// ── one take per file, and a crash is not a take ─────────────────────────────
+// Observed on ts-debounce: a file's first sweep gained nothing, the file went back on
+// the candidate list and was picked again, and the second sweep gained +6.35 MAC. That
+// is the file-level retry, and it is separate from the mutant loop. The default is now
+// one take — a file that gained nothing usually gains nothing next time either, and the
+// durable queue keeps its untried sites for a later run. Teams who want a repo hardened
+// rather than surveyed raise MAX_ATTEMPTS_PER_FILE.
+test('a file that gained nothing is not offered again under the default', () => withSandbox(async (sb) => {
+  await sb.start();
+  assert.equal(S.state.run.config.maxAttemptsPerFile, 1, 'one take is the default');
+  const w = installFakes(sb);
+  w.addFile({ path: FILE, mutants: mutantsAt(4, 8) });
+  await sb.post('/api/coverage/run', { phase: 'baseline' });
+  await sb.post('/api/iteration/start', { file: FILE });
+  await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+  await sb.post('/api/iteration/discard', { file: FILE, reason: 'nothing improved' });
+
+  const again = await sb.get('/api/files/candidates');
+  const offered = (again.files || again.candidates || again || []).map((f) => f.path || f);
+  assert.ok(!offered.includes(FILE), `${FILE} was offered a second take`);
+}));
+
+test('a crashed baseline still gets another go, because no take was spent', () => withSandbox(async (sb) => {
+  // the distinction that matters: a crash means we never wrote a test or called a
+  // model, so charging it against the file's single take would blacklist a file for
+  // one bad moment on a loaded machine
+  const w = installFakes(sb);
+  await sb.start();
+  w.addFile({ path: FILE, mutants: mutantsAt(4) });
+  await sb.post('/api/iteration/start', { file: FILE });
+  w.failNext('stryker', new Error('stryker produced no report (exit 1)'));
+  await sb.post('/api/stryker/run', { file: FILE, phase: 'baseline' });
+
+  const slug = require('../util').slugify(sb.repoUrl);
+  assert.equal(S.state.improvedLedger[slug]?.[FILE], undefined, 'not settled after one crash');
+}));
