@@ -1,9 +1,9 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Mutation testing for the pipeline's OWN code. The suite is node:test, so the command runner is the honest choice: it runs `npm test` per mutant, and the whole suite takes under a second.",
+  "_comment": "Mutation testing for the pipeline's OWN code. node:test via the command runner. The dot reporter matters: Stryker stores a failing mutant's entire stdout as statusReason, and TAP output at 6k mutants exhausts the heap while writing the report.",
   "testRunner": "command",
   "commandRunner": {
-    "command": "npm test"
+    "command": "node --test --test-reporter=dot sidecar/test/*.test.js n8n/test/*.test.js"
   },
   "mutate": [
     "sidecar/*.js",
@@ -13,15 +13,11 @@
     "!**/*.test.js"
   ],
   "reporters": [
-    "html",
     "json",
     "progress"
   ],
   "jsonReporter": {
     "fileName": "reports/self-mutation/mutation.json"
-  },
-  "htmlReporter": {
-    "fileName": "reports/self-mutation/index.html"
   },
   "coverageAnalysis": "off",
   "timeoutMS": 60000,

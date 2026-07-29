@@ -17,3 +17,4 @@ node_modules/
 # mutation testing of our own code: sandbox copies and reports are build output
 .stryker-tmp/
 reports/
+.stryker-tmp-*/
