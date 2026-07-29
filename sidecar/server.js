@@ -1453,18 +1453,24 @@ function serveStatic(req, res, rel) {
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
-  const key = req.method + ' ' + u.pathname;
+  // Strip /dashboard BEFORE anything looks at the path. The deployed shape has Caddy in
+  // front doing this (`handle_path /dashboard/*`), and the standalone compose has no
+  // proxy at all — so resolving it after the route table meant the dashboard's own
+  // relative fetches (app.js asks for `api/metrics`, i.e. /dashboard/api/metrics) hit
+  // the static server and 404'd. The page loaded and then sat on "offline — sidecar
+  // unreachable" while the run behind it was working perfectly.
+  const pathname = u.pathname.startsWith('/dashboard')
+    ? (u.pathname.slice('/dashboard'.length) || '/')
+    : u.pathname;
+  const key = req.method + ' ' + pathname;
   try {
     if (routes[key]) {
       const body = req.method === 'POST' ? await readBody(req) : {};
       const out = await routes[key](u.searchParams, body);
       return json(res, 200, out);
     }
-    if (u.pathname.startsWith('/api/')) return json(res, 404, { error: 'no such endpoint: ' + key });
-    // dashboard: served at / and /dashboard (Caddy strips the /dashboard prefix)
-    let rel = u.pathname;
-    if (rel.startsWith('/dashboard')) rel = rel.slice('/dashboard'.length) || '/';
-    return serveStatic(req, res, rel);
+    if (pathname.startsWith('/api/')) return json(res, 404, { error: 'no such endpoint: ' + key });
+    return serveStatic(req, res, pathname);
   } catch (e) {
     S.event('error', `${key}: ${e.message}`);
     // a rejected concurrent start is a guard, not a run failure
