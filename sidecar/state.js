@@ -25,12 +25,16 @@ function envConfig() {
     setupScript: e.SETUP_SCRIPT || '', // npm script to run after install (e.g. a build)
     dryRun: String(e.DRY_RUN || 'false') === 'true',
     rules: {
-      post_clone: e.RULES_POST_CLONE || '',
-      pre_pick: e.RULES_PRE_PICK || '',
-      pick_file: e.RULES_PICK_FILE || '',
-      write_test: e.RULES_WRITE_TEST || '',
-      check_changes: e.RULES_CHECK_CHANGES || '',
-      make_pr: e.RULES_MAKE_PR || '',
+      // DEFAULT_, because these are only the fallback. Team rules ARE prompts, so they
+      // belong in the repo they describe (improve-tests.json, `rules`), not with
+      // whoever happens to run the container — see feedback.rulesFor(). The legacy
+      // RULES_ names are still read so a deployed .env keeps working through the rename.
+      post_clone: e.DEFAULT_RULES_POST_CLONE || e.RULES_POST_CLONE || '',
+      pre_pick: e.DEFAULT_RULES_PRE_PICK || e.RULES_PRE_PICK || '',
+      pick_file: e.DEFAULT_RULES_PICK_FILE || e.RULES_PICK_FILE || '',
+      write_test: e.DEFAULT_RULES_WRITE_TEST || e.RULES_WRITE_TEST || '',
+      check_changes: e.DEFAULT_RULES_CHECK_CHANGES || e.RULES_CHECK_CHANGES || '',
+      make_pr: e.DEFAULT_RULES_MAKE_PR || e.RULES_MAKE_PR || '',
     },
   };
 }

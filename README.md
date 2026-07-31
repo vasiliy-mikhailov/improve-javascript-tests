@@ -129,18 +129,35 @@ Stages you'll see live on the dashboard: cloning, installing, measuring baseline
 
 ### Team rules (applied at every stage)
 
-Set free-text rules in `.env`; the LLM interprets them; mechanical guardrails enforce the
-non-negotiables (suite must stay green, MAC must strictly improve, generated files can only be
-tests):
+Rules are free text, the LLM interprets them, and mechanical guardrails enforce the
+non-negotiables (suite must stay green, MAC must strictly improve, generated files can
+only be tests).
 
-| env var | stage | example |
+**They live in the repo they describe** — `improve-tests.json` at its root, the same file
+as the feedback corpus:
+
+```json
+{ "rules": {
+    "write_test": "never mock the database; use the in-memory adapter",
+    "pick_file": "don't touch ui"
+} }
+```
+
+Rules are prompts, and a prompt that lives in one operator's `.env` means the tests a
+repo gets depend on whose container ran, and nobody reading the repo can see what was
+asked for. `.env` supplies **defaults** for stages the repo says nothing about:
+
+| default env var | stage | example |
 |---|---|---|
-| `RULES_POST_CLONE` | after cloning | `read AGENTS.md to find out how to behave` |
-| `RULES_PRE_PICK` | before picking | `create a separate branch per file named tests/improve-{file}` |
-| `RULES_PICK_FILE` | picking a file | `don't touch ui` |
-| `RULES_WRITE_TEST` | writing tests | `don't use introspection` |
-| `RULES_CHECK_CHANGES` | validating | `good only if suite green and MAC improved` |
-| `RULES_MAKE_PR` | making the PR | `title starts with "test:"; body has a metrics table` |
+| `DEFAULT_RULES_POST_CLONE` | after cloning | `read AGENTS.md to find out how to behave` |
+| `DEFAULT_RULES_PRE_PICK` | before picking | `create a separate branch per file named tests/improve-{file}` |
+| `DEFAULT_RULES_PICK_FILE` | picking a file | `don't touch ui` |
+| `DEFAULT_RULES_WRITE_TEST` | writing tests | `don't use introspection` |
+| `DEFAULT_RULES_CHECK_CHANGES` | validating | `good only if suite green and MAC improved` |
+| `DEFAULT_RULES_MAKE_PR` | making the PR | `title starts with "test:"; body has a metrics table` |
+
+`GET /api/rules` shows the effective rules, the defaults, and which ones the repo set
+itself. Edits to `improve-tests.json` take effect at the next stage, not the next run.
 
 ### Adapting the workflow
 

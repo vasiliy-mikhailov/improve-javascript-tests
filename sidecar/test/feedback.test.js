@@ -135,3 +135,42 @@ test('a kept test is recorded with the prompt that produced it', () => withSandb
   assert.equal(recs[0].outcome.kept, true);
   assert.ok(recs[0].outcome.mutantsKilled >= 1);
 }));
+
+// ── rules belong to the repo, not to the container's environment ─────────────
+// The team rules ARE prompts: "don't use introspection", "never mock the database".
+// They were only settable in .env, which means they live with whoever runs the
+// container rather than with the code they describe — a second team pointing a second
+// container at the same repo gets different tests, and nobody reviewing the repo can
+// see what rules produced them. They belong in the repo root, next to the corpus, with
+// .env supplying DEFAULTS for a repo that has not said anything.
+test('rules in the repo override the container defaults, stage by stage', () => withSandbox(async (sb) => {
+  await sb.start();
+  fs.mkdirSync(sb.repoDir, { recursive: true });
+  fs.writeFileSync(path.join(sb.repoDir, 'improve-tests.json'), JSON.stringify({
+    version: 1,
+    rules: { write_test: 'never mock the database; use the in-memory adapter' },
+    records: [],
+  }));
+
+  const r = feedback.rulesFor({ write_test: 'env default', pick_file: 'env picks' });
+
+  assert.match(r.write_test, /in-memory adapter/, 'the repo has the final say on its own tests');
+  assert.equal(r.pick_file, 'env picks', 'and stages it says nothing about keep the default');
+}));
+
+test('writing the corpus never destroys hand-written rules', () => withSandbox(async (sb) => {
+  // the same file holds a machine-appended corpus and human-edited rules, so a write
+  // that clobbered the rules would silently undo a team's configuration
+  await sb.start();
+  fs.mkdirSync(sb.repoDir, { recursive: true });
+  fs.writeFileSync(path.join(sb.repoDir, 'improve-tests.json'), JSON.stringify({
+    version: 1, rules: { write_test: 'no snapshots' }, notes: 'ours, keep it', records: [],
+  }));
+
+  feedback.recordGeneration({ file: 'a.ts', testPath: 't.test.ts', prompt: {}, source: 's', test: 't', outcome: {} });
+
+  const doc = feedback.load();
+  assert.equal(doc.rules.write_test, 'no snapshots');
+  assert.equal(doc.notes, 'ours, keep it', 'unknown keys are the team\'s, not ours to drop');
+  assert.equal(doc.records.length, 1);
+}));

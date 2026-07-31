@@ -334,7 +334,13 @@ const routes = {
     return { ok: true, path: feedback.filePath(), judged: feedback.judged(), total: feedback.load().records.length };
   },
 
-  'GET /api/rules': async () => ({ rules: state.run?.config?.rules || S.envConfig().rules, decisions: state.decisions }),
+  'GET /api/rules': async () => {
+    const defaults = state.run?.config?.rules || S.envConfig().rules;
+    let effective = defaults, own = {};
+    try { effective = feedback.rulesFor(defaults); own = feedback.load().rules || {}; } catch { }
+    // say which rules the repo set itself, so an operator can tell where a rule came from
+    return { rules: effective, defaults, fromRepo: own, rulesPath: (() => { try { return feedback.filePath(); } catch { return null; } })(), decisions: state.decisions };
+  },
   // live model transcript for the dashboard; `after` makes it an incremental feed
   'GET /api/dialog': async (q) => {
     const after = parseInt(q.get('after') || '0', 10);

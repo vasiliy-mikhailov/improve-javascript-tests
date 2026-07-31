@@ -106,9 +106,24 @@ function addFeedback({ id, testPath, file, text, author = null, labels = [] }) {
   return hits.length;
 }
 
+/**
+ * The team rules for this repo: what improve-tests.json says, falling back per stage to
+ * the container defaults from .env. Rules ARE prompts, so their home is the repo they
+ * describe — otherwise the tests a repo gets depend on whose container ran, and nobody
+ * reading the repo can see what was asked for.
+ */
+function rulesFor(defaults = {}) {
+  const own = load().rules || {};
+  const out = { ...defaults };
+  for (const [stage, text] of Object.entries(own)) {
+    if (typeof text === 'string' && text.trim()) out[stage] = text;
+  }
+  return out;
+}
+
 /** Everything a human has judged, newest first — the corpus worth reflecting on. */
 function judged() {
   return load().records.filter((r) => r.feedback && r.feedback.length).sort((a, b) => b.ts - a.ts);
 }
 
-module.exports = { load, save, recordGeneration, addFeedback, judged, signalsFor, filePath, FILE, MAX_UNJUDGED };
+module.exports = { load, save, recordGeneration, addFeedback, judged, rulesFor, signalsFor, filePath, FILE, MAX_UNJUDGED };

@@ -5,7 +5,13 @@ const { state, event } = require('./state');
 const { readFileSafe } = require('./repo');
 const { chat } = require('./llm');
 
-function rules() { return state.run?.config?.rules || {}; }
+// The repo's own rules win, stage by stage; the run config supplies the defaults. Read
+// on every call rather than cached at run start, so editing improve-tests.json takes
+// effect on the next stage instead of the next run.
+function rules() {
+  const defaults = state.run?.config?.rules || {};
+  try { return require('./feedback').rulesFor(defaults); } catch { return defaults; }
+}
 
 function repoContextHead() {
   const parts = [];
