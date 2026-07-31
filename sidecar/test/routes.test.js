@@ -6,7 +6,7 @@
 // first and on the response second.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { withSandbox, S, mutants, util } = require('./helpers/env');   // FIRST, always
+const { feedback, withSandbox, S, mutants, util } = require('./helpers/env');   // FIRST, always
 const { installFakes } = require('./helpers/fakes');
 
 const { mac } = util;
@@ -1245,4 +1245,49 @@ test('one failed chunk costs only its own files', () => withSandbox(async (sb) =
   assert.ok(left.length > 0 && left.length < paths.length,
     `a dropped connection on one chunk should leave only that chunk unfolded, ${left.length}/${paths.length} left`);
   assert.match(log(sb), /merge/);
+}));
+
+// ── giving feedback on a generated test ─────────────────────────────────────
+// The corpus is only useful if a human can add to it from what they are looking at —
+// a test file in a PR diff — without knowing any internal id.
+test('feedback posted for a test file lands on the record that produced it',
+  () => withSandbox(async (sb) => {
+    await sb.start();
+    const id = feedback.recordGeneration({
+      file: FILE, testPath: KILL_TEST, generator: 'kill-batch',
+      prompt: { system: 'sys', user: 'usr', model: 'm' },
+      source: 'x', test: "it('a', () => {});", outcome: { kept: true },
+    });
+
+    const r = await sb.post('/api/feedback', {
+      testPath: KILL_TEST, text: "i don't like too many mocks in these tests", author: 'vasiliy',
+    });
+
+    assert.equal(r.ok, true);
+    assert.equal(r.attached, 1);
+    const rec = feedback.load().records.find((x) => x.id === id);
+    assert.match(rec.feedback[0].text, /too many mocks/);
+  }));
+
+test('feedback with no text is refused rather than stored empty', () => withSandbox(async (sb) => {
+  await sb.start();
+  await assert.rejects(() => sb.post('/api/feedback', { testPath: KILL_TEST, text: '  ' }), /needs text/);
+}));
+
+test('feedback for something we never generated says so instead of silently vanishing',
+  () => withSandbox(async (sb) => {
+    await sb.start();
+    const r = await sb.post('/api/feedback', { testPath: 'tests/nothing.test.ts', text: 'hm' });
+    assert.equal(r.attached, 0);
+    assert.match(r.note || '', /no generation record/i);
+  }));
+
+test('the corpus is readable back out, newest judged first', () => withSandbox(async (sb) => {
+  await sb.start();
+  feedback.recordGeneration({ file: FILE, testPath: KILL_TEST, prompt: {}, source: 's', test: 't', outcome: {} });
+  await sb.post('/api/feedback', { testPath: KILL_TEST, text: 'too many mocks' });
+  const r = await sb.get('/api/feedback');
+  assert.equal(r.judged.length, 1);
+  assert.match(r.judged[0].feedback[0].text, /too many mocks/);
+  assert.ok(r.path.endsWith('improve-tests.json'), 'and it says where the file is');
 }));

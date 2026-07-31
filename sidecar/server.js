@@ -13,6 +13,7 @@ const rulesMod = require('./rules');
 const pr = require('./pr');
 const llm = require('./llm');
 const timesheet = require('./timesheet');
+const feedback = require('./feedback');
 const mutantsMod = require('./mutants');
 const mutantStore = require('./mutant-store');
 const { run } = require('./exec');
@@ -40,6 +41,8 @@ function readBody(req) {
 }
 // How many mutants one generated file is asked to kill. Eight measured best against
 // the real model; more crowds the prompt, fewer wastes the cycle.
+// last prompt sent per file, so a kept test can be filed with the prompt behind it
+const lastPrompt = new Map();
 const BATCH_TARGETS = 8;
 // How many times a file's BASELINE measurement may crash before we stop offering it.
 // Deliberately independent of maxAttemptsPerFile (one take per file): a crash means
@@ -309,6 +312,28 @@ const routes = {
   'GET /api/health': async () => ({ ok: true, service: 'ijst-sidecar', stage: state.stage.name, ts: Date.now() }),
   'GET /api/state': async () => state,
   'GET /api/metrics': async () => metricsPayload(),
+  // ── feedback corpus: prompt + code + test + outcome + what a human thought ──
+  // Lives in the target repo's root (improve-tests.json) so it is versioned with the
+  // code it judges and survives a fresh clone. A prompt optimiser reflects on these;
+  // "too many mocks in these tests" is only actionable next to the prompt that asked
+  // for them.
+  'POST /api/feedback': async (q, body) => {
+    needRun();
+    const attached = feedback.addFeedback({
+      id: body.id, testPath: body.testPath, file: body.file,
+      text: body.text, author: body.author || null, labels: body.labels || [],
+    });
+    if (attached) S.event('feedback', `feedback on ${body.testPath || body.file || body.id}: ${String(body.text).slice(0, 120)}`);
+    return attached
+      ? { ok: true, attached, path: feedback.filePath() }
+      : { ok: true, attached: 0, path: feedback.filePath(),
+        note: 'no generation record matches that test path or file — nothing was written for it in this repo yet' };
+  },
+  'GET /api/feedback': async () => {
+    needRun();
+    return { ok: true, path: feedback.filePath(), judged: feedback.judged(), total: feedback.load().records.length };
+  },
+
   'GET /api/rules': async () => ({ rules: state.run?.config?.rules || S.envConfig().rules, decisions: state.decisions }),
   // live model transcript for the dashboard; `after` makes it an incremental feed
   'GET /api/dialog': async (q) => {
@@ -621,6 +646,10 @@ const routes = {
     } catch (e) { return { ok: false, passed: false, error: e.message }; }
   },
 
+  // The prompt that produced a test is half of what a prompt optimiser needs, and the
+  // graph is the only place that knows it — so remember it here, keyed by the file being
+  // improved, and pair it with the outcome at verification time. Nobody is going to
+  // paste a prompt into a feedback file by hand.
   'POST /api/llm/chat': async (q, body) => {
     if (body.stage) S.setStage(body.stage, body.stageDetail || 'consulting LLM');
     try {
@@ -631,6 +660,8 @@ const routes = {
         // explicit override from the workflow: kill attempts ask for no reasoning
         thinking: body.thinking,
       });
+      const pf = pickedFile();
+      if (pf) lastPrompt.set(pf, { system: body.system, user: body.prompt, model: body.model || null, thinking: body.thinking ?? null });
       return { ok: true, text: r.text, json: r.json ?? null };
     } catch (e) { S.event('llm', 'LLM error: ' + e.message); return { ok: false, error: e.message }; }
   },
@@ -1143,6 +1174,18 @@ const routes = {
     S.event('improving_mutation', `KILLED ${killedCount} mutant(s) — target ${mutant.mutator} at line ${mutant.line} `
       + `${killedTarget ? 'died' : 'SURVIVED but the test killed others'}${collateral ? `, ${collateral} collateral` : ''} `
       + `— keeping ${testPaths.join(', ')} (${state.files[file].survivedTotal ?? (f.lastSurvived || []).length} survivor(s) left)`);
+    try {
+      const p = lastPrompt.get(file) || {};
+      const src = repo.readFileSafe(file, 20000);
+      for (const tp of testPaths) {
+        feedback.recordGeneration({
+          file, testPath: tp, generator: sweep ? 'kill-batch' : 'kill-single',
+          prompt: p, source: src, test: repo.readFileSafe(tp, 20000),
+          outcome: { kept: true, suiteGreen: true, mutantsKilled: killedCount,
+            aimedAt: (batch || [mutant]).length, macAfter: f.macAfter ?? null },
+        });
+      }
+    } catch (e) { S.event('feedback', 'not recorded: ' + e.message.slice(0, 120)); }
     return {
       ok: true, killed: true, killedTarget, killedCount, collateral, retryable: false,
       killedTargets: deadTargets.length, aimedAt: (batch || [mutant]).length,

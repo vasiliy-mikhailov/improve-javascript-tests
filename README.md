@@ -75,6 +75,41 @@ curl -X POST https://improve-javascript-tests.mikhailov.tech/webhook/improve-run
   -d '{"scopeLimit": 1}'   # any .env key can be overridden per run (camelCase)
 ```
 
+## Feedback on the tests it writes
+
+Every kept test is filed in **`improve-tests.json` at the target repo's root**, together
+with the prompt that produced it, the source it was shown, and how it scored:
+
+```json
+{ "id": "gen_ab12…", "file": "lib/foo.ts", "testPath": "tests/unit/foo.mac.test.ts",
+  "prompt": { "system": "You are an expert test engineer…", "user": "…", "model": "qwen" },
+  "source": "…", "test": "…",
+  "outcome": { "kept": true, "mutantsKilled": 3, "aimedAt": 5, "macAfter": 42.5 },
+  "signals": { "cases": 6, "mockSetup": 2, "mockAssertions": 1, "realAssertions": 12 },
+  "feedback": [] }
+```
+
+Add a judgement to any of them — by test path, which is what you have in front of you in
+a PR diff:
+
+```bash
+curl -X POST http://localhost:3000/api/feedback -H 'content-type: application/json' \
+  -d '{"testPath":"tests/unit/foo.mac.test.ts","text":"i do not like too many mocks in these tests","author":"you"}'
+```
+
+`GET /api/feedback` reads the judged records back.
+
+The file lives in the repo it describes, so it is versioned with that code, reviewable in
+a pull request, and still there on a fresh clone — which is when a run would otherwise
+repeat a mistake the team has already objected to. It is the corpus a prompt optimiser
+(GEPA) reflects on: a verdict like "too many mocks" can only improve anything when it
+sits next to the prompt that asked for them and the score that prompt earned. `signals`
+records mock setup lines, mock assertions and real assertions so that complaint is a
+number, not an argument.
+
+Records carrying human feedback are never evicted; unjudged ones are capped so the file
+stays readable.
+
 ## How it works
 
 ```

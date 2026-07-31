@@ -79,6 +79,7 @@ let execImpl = refuseExec;
 exec.run = (argv, opts) => execImpl(argv, opts);
 function setExecImpl(fn) { const prev = execImpl; execImpl = fn || refuseExec; return () => { execImpl = prev; }; }
 
+const feedback = require('../../feedback');
 const llm = require('../../llm');
 function refuseChat() { throw new Error('a test called llm.chat() with no fake installed — call installFakes() first'); }
 let chatImpl = refuseChat;
@@ -202,5 +203,5 @@ module.exports = {
   DATA_DIR, sidecar, sandbox, withSandbox, resetState,
   setExecImpl, setChatImpl,
   // re-exported for convenience so a test file needs one require
-  S, routes, repo, coverage, stryker, tests, pr, rules, mutants, llm, util,
+  S, routes, repo, coverage, stryker, tests, pr, rules, mutants, llm, util, feedback,
 };
