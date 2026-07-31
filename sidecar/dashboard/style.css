@@ -74,3 +74,18 @@ details summary { cursor: pointer; padding: 4px 0; }
 .events { max-height: 640px; overflow-y: auto; background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 10px 14px; }
 .ev { padding: 3px 0; font-size: 12.5px; border-bottom: 1px solid #21262d; }
 .ev .ts { color: #8b949e; font-family: ui-monospace, monospace; margin-right: 8px; }
+
+button.say { background:none; border:0; cursor:pointer; font-size:15px; opacity:.55; padding:2px 6px; color:inherit; }
+button.say:hover { opacity:1; }
+dialog#fb { border:1px solid #2b3648; border-radius:10px; background:#131a26; color:#dbe4f0;
+  width:min(560px,92vw); padding:20px; }
+dialog#fb::backdrop { background:rgba(0,0,0,.55); }
+dialog#fb h3 { margin:0 0 6px; font-size:15px; }
+.fb-hint { margin:0 0 12px; font-size:12px; line-height:1.5; opacity:.6; }
+dialog#fb textarea, dialog#fb input { width:100%; box-sizing:border-box; background:#0d1420;
+  border:1px solid #2b3648; border-radius:6px; color:inherit; padding:8px; font:inherit; margin-bottom:8px; }
+dialog#fb menu { display:flex; gap:8px; justify-content:flex-end; margin:8px 0 0; padding:0; }
+dialog#fb button { background:#1c2636; border:1px solid #2b3648; color:inherit; border-radius:6px;
+  padding:6px 14px; cursor:pointer; font:inherit; }
+dialog#fb button.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+.fb-status { margin:10px 0 0; font-size:12px; min-height:1em; opacity:.75; }

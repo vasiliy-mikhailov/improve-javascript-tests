@@ -81,6 +81,14 @@ function accrueSpent(file) {
 }
 
 function metricsPayload() {
+  // how many comments each file already carries, so the dashboard can show it on the
+  // button; a failure here must never keep the metrics from rendering
+  let fbCounts = {};
+  try {
+    for (const r of feedback.load().records) {
+      if (r.feedback && r.feedback.length) fbCounts[r.file] = (fbCounts[r.file] || 0) + r.feedback.length;
+    }
+  } catch { fbCounts = {}; }
   const files = Object.values(state.files).sort((a, b) => (a.mac ?? 999) - (b.mac ?? 999));
   const targeted = files.filter((f) => f.macBefore != null);
   const avg = (xs) => xs.length ? round2(xs.reduce((s, x) => s + x, 0) / xs.length) : null;
@@ -148,6 +156,7 @@ function metricsPayload() {
       path: f.path, status: f.status, attempts: f.attempts, rounds: f.rounds || 0,
       coverage: f.coverage, mutation: f.mutation, mac: f.mac,
       coverageBefore: f.coverageBefore, mutationBefore: f.mutationBefore, macBefore: f.macBefore,
+      feedbackCount: fbCounts[f.path] || 0,
       coverageAfter: f.coverageAfter, mutationAfter: f.mutationAfter, macAfter: f.macAfter,
       // what the best attempt reached even when the result was not kept
       attemptCoverage: f.attemptCoverage, attemptMutation: f.attemptMutation, attemptMac: f.attemptMac,

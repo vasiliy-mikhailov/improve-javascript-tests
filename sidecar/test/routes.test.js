@@ -1291,3 +1291,16 @@ test('the corpus is readable back out, newest judged first', () => withSandbox(a
   assert.match(r.judged[0].feedback[0].text, /too many mocks/);
   assert.ok(r.path.endsWith('improve-tests.json'), 'and it says where the file is');
 }));
+
+test('the dashboard is told how many comments each file already has', () => withSandbox(async (sb) => {
+  // the button shows a count, so a reviewer can see at a glance which files have been
+  // judged already and which are still waiting for an opinion
+  await sb.start();
+  S.upsertFile(FILE, { status: 'improved', macAfter: 40 });
+  feedback.recordGeneration({ file: FILE, testPath: KILL_TEST, prompt: {}, source: 's', test: 't', outcome: {} });
+  await sb.post('/api/feedback', { file: FILE, text: 'too many mocks' });
+  await sb.post('/api/feedback', { file: FILE, text: 'and the names are vague' });
+
+  const row = (await sb.get('/api/metrics')).files.find((f) => f.path === FILE);
+  assert.equal(row.feedbackCount, 2);
+}));

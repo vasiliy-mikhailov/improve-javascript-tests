@@ -115,6 +115,7 @@ function render(m) {
     <td${f.tokens ? ` title="${esc(f.tokens.calls + ' model call(s)')}"` : ''}>${f.tokens ? `${fmtTok(f.tokens.in)} / ${fmtTok(f.tokens.out)}` : '–'}</td>
     <td><span class="badge b-${esc(f.status)}">${esc(f.status)}</span></td>
     <td>${f.prUrl ? `<a href="${esc(f.prUrl)}" target="_blank">PR ↗</a>` : (f.prPatch ? 'patch' : '')}</td>
+    <td>${f.status === 'candidate' ? '' : `<button class="say" data-file="${esc(f.path)}" title="tell the pipeline what you think of these tests">💬${f.feedbackCount ? ` ${f.feedbackCount}` : ''}</button>`}</td>
   </tr>`;
   }).join('');
 
@@ -207,3 +208,41 @@ tick();
 pollDialog();
 setInterval(tick, 2000);
 setInterval(pollDialog, 2000);
+
+
+// ── leaving a comment on the tests written for a file ────────────────────────
+// The corpus is only worth having if a judgement can be given from the place a person
+// is already looking. Everything else about it — the prompt, the tests, the score — is
+// captured automatically; this is the one part that needs a human.
+let fbFile = null;
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button.say');
+  if (!b) return;
+  fbFile = b.dataset.file;
+  document.getElementById('fb-title').textContent = 'Feedback on tests for ' + fbFile;
+  document.getElementById('fb-text').value = '';
+  document.getElementById('fb-status').textContent = '';
+  document.getElementById('fb').showModal();
+  document.getElementById('fb-text').focus();
+});
+
+document.getElementById('fb-form').addEventListener('submit', async (e) => {
+  const save = e.submitter && e.submitter.value === 'save';
+  if (!save || !fbFile) return;
+  const text = document.getElementById('fb-text').value.trim();
+  const author = document.getElementById('fb-author').value.trim() || null;
+  if (!text) return;
+  const status = document.getElementById('fb-status');
+  try {
+    const r = await fetch('api/feedback', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: fbFile, text, author }),
+    });
+    const d = await r.json();
+    // "attached: 0" is a real answer, not a failure: nothing has been generated for
+    // that file yet, so there is no record for the judgement to hang on
+    status.textContent = d.attached
+      ? `saved to ${d.path.split('/').slice(-1)[0]} (${d.attached} record${d.attached > 1 ? 's' : ''})`
+      : (d.note || 'nothing to attach it to yet');
+  } catch (err) { status.textContent = 'could not save: ' + err.message; }
+});
