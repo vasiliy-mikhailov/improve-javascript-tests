@@ -232,7 +232,14 @@ document.getElementById('fb-form').addEventListener('submit', async (e) => {
   const text = document.getElementById('fb-text').value.trim();
   const author = document.getElementById('fb-author').value.trim() || null;
   if (!text) return;
+  // The form is method="dialog", so submitting closes it immediately — which wrote the
+  // result into an already-closed dialog and left the person who just typed a comment
+  // with no idea whether it saved. Hold it open until the answer is back.
+  e.preventDefault();
   const status = document.getElementById('fb-status');
+  const btn = document.getElementById('fb-save');
+  btn.disabled = true;
+  status.textContent = 'saving…';
   try {
     const r = await fetch('api/feedback', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -245,4 +252,7 @@ document.getElementById('fb-form').addEventListener('submit', async (e) => {
       ? `saved to ${d.path.split('/').slice(-1)[0]} (${d.attached} record${d.attached > 1 ? 's' : ''})`
       : (d.note || 'nothing to attach it to yet');
   } catch (err) { status.textContent = 'could not save: ' + err.message; }
+  btn.disabled = false;
+  // long enough to read the outcome, short enough not to be in the way
+  setTimeout(() => document.getElementById('fb').close(), 1600);
 });

@@ -110,6 +110,23 @@ number, not an argument.
 Records carrying human feedback are never evicted; unjudged ones are capped so the file
 stays readable.
 
+## Browser tests
+
+The dashboard is checked in a real browser, in containers — nothing installed on the host:
+
+```bash
+docker compose -f docker-compose.ui.yml up --build --abort-on-container-exit --exit-code-from playwright
+```
+
+`dash` runs the real sidecar against a fixed `ui-tests/seed/state.json`, so a failing
+assertion means the UI changed rather than that a live run moved on; `playwright` drives
+Chromium against it over the compose network.
+
+They cover what neither the unit suite nor the API tests can see: the page reaching its
+own API at both `/` and `/dashboard/`, the seeded metrics rendering in the right columns,
+the comment button appearing on improved files but not candidates, and a comment
+travelling from a click through to `improve-tests.json` and back as a count on the button.
+
 ## How it works
 
 ```

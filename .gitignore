@@ -18,3 +18,7 @@ node_modules/
 .stryker-tmp/
 reports/
 .stryker-tmp-*/
+ui-tests/node_modules/
+ui-tests/test-results/
+ui-tests/playwright-report/
+ui-tests/package-lock.json

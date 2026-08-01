@@ -1,0 +1,40 @@
+# Browser tests for the dashboard, entirely in containers.
+#
+#   docker compose -f docker-compose.ui.yml up --build --abort-on-container-exit --exit-code-from playwright
+#
+# `dash` runs the real sidecar — the same image the pipeline ships — serving a FIXED
+# state.json, so a failing assertion means the UI changed rather than that a live run
+# moved on. `playwright` drives Chromium against it over the compose network. Neither
+# needs anything installed on the host.
+services:
+  dash:
+    build: .
+    image: improve-javascript-tests:latest
+    container_name: ijst-ui-dash
+    # the sidecar alone: no n8n, no clone, no model calls
+    entrypoint: ["node", "/app/sidecar/server.js"]
+    environment:
+      DATA_DIR: /data
+      SIDECAR_PORT: "3000"
+    volumes:
+      - ./ui-tests/seed:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.49.1-jammy
+    container_name: ijst-ui-playwright
+    depends_on:
+      dash:
+        condition: service_healthy
+    working_dir: /work
+    environment:
+      BASE_URL: http://dash:3000
+      CI: "true"
+    volumes:
+      - ./ui-tests:/work
+    command: >
+      sh -c "npm install --no-audit --no-fund --silent && npx playwright test"

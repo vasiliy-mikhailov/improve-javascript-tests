@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "id": "gen_uifixture01",
+      "ts": 1785570150221,
+      "file": "lib/admin-page-data.ts",
+      "testPath": "tests/unit/admin-page-data.mac.test.ts",
+      "generator": "kill-batch",
+      "prompt": {
+        "system": "You are an expert test engineer.",
+        "user": "kill these mutants",
+        "model": "qwen",
+        "thinking": false
+      },
+      "source": "export const f = (a) => a > 1;\n",
+      "test": "it('f', () => { expect(f(2)).toBe(true); });\n",
+      "outcome": {
+        "kept": true,
+        "mutantsKilled": 3,
+        "aimedAt": 5,
+        "macAfter": 92.06
+      },
+      "signals": {
+        "lines": 2,
+        "cases": 1,
+        "mockSetup": 0,
+        "mockAssertions": 0,
+        "realAssertions": 1
+      },
+      "feedback": [
+        {
+          "ts": 1785570674015,
+          "author": "playwright",
+          "text": "i don't like too many mocks in these tests",
+          "labels": []
+        }
+      ]
+    }
+  ],
+  "updated": "2026-08-01T07:51:14.015Z"
+}
