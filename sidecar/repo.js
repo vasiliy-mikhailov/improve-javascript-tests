@@ -36,7 +36,7 @@ async function clone() {
     if (r.code !== 0) throw new Error('git fetch failed: ' + r.stderr.slice(-400));
     await run(['git', 'checkout', '-f', cfg.repoBranch], { cwd: dir, timeoutMs: 60000 });
     await run(['git', 'reset', '--hard', `origin/${cfg.repoBranch}`], { cwd: dir, timeoutMs: 60000 });
-    await run(['git', 'clean', '-fd', '-e', 'node_modules'], { cwd: dir, timeoutMs: 60000 });
+    await run(['git', 'clean', '-fd', ...KEEP], { cwd: dir, timeoutMs: 60000 });
   } else {
     event('cloning', `cloning ${cfg.repoUrl} (branch ${cfg.repoBranch})`);
     const r = await run(['git', 'clone', '--branch', cfg.repoBranch, '--single-branch',
@@ -186,7 +186,7 @@ async function createBranch(name) {
   const dir = repoDir();
   const cfg = state.run.config;
   await run(['git', 'checkout', '-f', cfg.repoBranch], { cwd: dir, timeoutMs: 60000 });
-  await run(['git', 'clean', '-fd', '-e', 'node_modules'], { cwd: dir, timeoutMs: 60000 });
+  await run(['git', 'clean', '-fd', ...KEEP], { cwd: dir, timeoutMs: 60000 });
   const r = await run(['git', 'checkout', '-B', name, cfg.repoBranch], { cwd: dir, timeoutMs: 60000 });
   if (r.code !== 0) throw new Error('branch create failed: ' + r.stderr.slice(-300));
   event('branching', 'working on branch ' + name);
@@ -194,17 +194,23 @@ async function createBranch(name) {
 }
 
 /** Discard uncommitted changes on the current branch, keeping its commits. */
+// The feedback corpus and the team's rules live in this file, in the repo working tree,
+// and it is UNTRACKED until a team commits it — so every `git clean -fd` between files
+// would delete it. Kept in step with feedback.js by a test, because a filename repeated
+// in two modules is exactly how this project has lost things before.
+const KEEP = ['-e', 'node_modules', '-e', 'improve-tests.json'];
+
 async function discardUncommitted() {
   const dir = repoDir();
   await run(['git', 'checkout', '--', '.'], { cwd: dir, timeoutMs: 60000 });
-  await run(['git', 'clean', '-fd', '-e', 'node_modules'], { cwd: dir, timeoutMs: 60000 });
+  await run(['git', 'clean', '-fd', ...KEEP], { cwd: dir, timeoutMs: 60000 });
 }
 
 async function resetToBase() {
   const dir = repoDir();
   const cfg = state.run.config;
   await run(['git', 'checkout', '-f', cfg.repoBranch], { cwd: dir, timeoutMs: 60000 });
-  await run(['git', 'clean', '-fd', '-e', 'node_modules'], { cwd: dir, timeoutMs: 60000 });
+  await run(['git', 'clean', '-fd', ...KEEP], { cwd: dir, timeoutMs: 60000 });
 }
 
 function readFileSafe(rel, maxLen = 200000) {

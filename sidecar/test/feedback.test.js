@@ -174,3 +174,11 @@ test('writing the corpus never destroys hand-written rules', () => withSandbox(a
   assert.equal(doc.notes, 'ours, keep it', 'unknown keys are the team\'s, not ours to drop');
   assert.equal(doc.records.length, 1);
 }));
+
+test('the cleanup exclusion names the same file the store writes', () => {
+  // repo.js cannot require feedback.js (feedback requires repo), so the name is written
+  // twice. A drift between them deletes the corpus on the next file, silently.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'repo.js'), 'utf8');
+  assert.ok(src.includes(`'${feedback.FILE}'`),
+    `repo.js must exclude ${feedback.FILE} from git clean, or every reset deletes it`);
+});

@@ -99,3 +99,41 @@ test('pipeline artifacts are never committed, whatever else changed', () => with
   assert.ok(!files.some((p) => p.startsWith('reports/') || p.startsWith('.ijst-')),
     `artifacts leaked into the commit: ${JSON.stringify(files)}`);
 }));
+
+// ── the corpus must survive the cleanup that runs between files ──────────────
+// improve-tests.json lives in the repo working tree and is UNTRACKED until a team
+// commits it. discardUncommitted() and resetToBase() both run `git clean -fd`, which
+// deletes exactly that: every round drop and every file reset would have wiped the
+// prompt/test/outcome corpus and any rules a team had written into it, silently, before
+// anyone noticed the file was gone.
+const { feedback } = require('./helpers/env');
+
+test('git clean between files does not delete the feedback corpus', () => withSandbox(async (sb) => {
+  await sb.start({ prBase: 'main' });
+  initRepo(sb.repoDir);
+  sb.onCleanup(realGit(sb));
+  // what a team owns: rules they wrote, and records the pipeline appended
+  feedback.recordGeneration({ file: 'lib/a.ts', testPath: 't.test.ts', prompt: {}, source: 's', test: 't', outcome: {} });
+  fs.writeFileSync(path.join(sb.repoDir, 'junk.tmp'), 'build output nobody wants');
+
+  await repo.discardUncommitted();
+
+  assert.ok(fs.existsSync(path.join(sb.repoDir, 'improve-tests.json')),
+    'the corpus was deleted by the cleanup that runs between every file');
+  assert.equal(feedback.load().records.length, 1, 'and its contents survived intact');
+  assert.ok(!fs.existsSync(path.join(sb.repoDir, 'junk.tmp')), 'while real junk is still removed');
+}));
+
+test('resetting to the base branch keeps it too', () => withSandbox(async (sb) => {
+  await sb.start({ prBase: 'main' });
+  initRepo(sb.repoDir);
+  sb.onCleanup(realGit(sb));
+  feedback.addFeedback; // referenced so the intent is clear: rules and feedback both live here
+  fs.writeFileSync(path.join(sb.repoDir, 'improve-tests.json'),
+    JSON.stringify({ version: 1, rules: { write_test: 'no snapshots' }, records: [] }));
+
+  await repo.resetToBase();
+
+  assert.equal(feedback.load().rules.write_test, 'no snapshots',
+    'a reset between files must not throw away the team\'s rules');
+}));
