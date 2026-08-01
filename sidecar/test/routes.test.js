@@ -1229,7 +1229,10 @@ test('eleven generated files are folded in bounded chunks, not one giant request
   }));
 
 test('one failed chunk costs only its own files', () => withSandbox(async (sb) => {
-  const { w, paths } = await withGenerated(sb, 9);
+  // 10, not 9: chunks of 4 leave a singleton, and the fold skips any group of one, so
+  // with 9 files exactly one is always left unfolded whether a chunk failed or not —
+  // the assertion below held with the injected failure removed entirely.
+  const { w, paths } = await withGenerated(sb, 10);
   let merge = 0;
   w.llm.onCall(({ prompt }) => {
     const isMerge = (prompt.match(/^=== /gm) || []).length > 1;
@@ -1242,9 +1245,10 @@ test('one failed chunk costs only its own files', () => withSandbox(async (sb) =
   await sb.post('/api/test/cleanup', { file: FILE });
 
   const left = paths.filter((p) => w.read(p) !== null);
-  assert.ok(left.length > 0 && left.length < paths.length,
-    `a dropped connection on one chunk should leave only that chunk unfolded, ${left.length}/${paths.length} left`);
-  assert.match(log(sb), /merge/);
+  assert.deepEqual(left, paths.slice(4, 8),
+    'exactly the failed chunk keeps its files; every other chunk still folds');
+  // /merge/ alone matches the SUCCESS log too — this is the line only a failure writes
+  assert.match(log(sb), /merge chunk skipped \(4 file\(s\)\)/);
 }));
 
 // ── giving feedback on a generated test ─────────────────────────────────────

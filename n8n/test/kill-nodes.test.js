@@ -446,11 +446,11 @@ test('content is passed through byte for byte', () => {
   assert.equal(out.tests[0].content, raw);
 });
 
-test('paths always mirrors tests, since Kill: Verify deletes by path', () => {
-  const out = killParseTest(reply([{ path: 'test/somewhere.test.ts', content: content(1) }]), plan);
-  assert.equal(out.count, out.tests.length);
-  assert.deepEqual(out.paths, out.tests.map((t) => t.path));
-});
+// 'paths always mirrors tests' was deleted: killParseTest returns
+// `{ tests, paths: tests.map(t => t.path), count: tests.length }`, so asserting that
+// paths mirrors tests re-derived the value from itself and could not fail. The
+// concrete `deepEqual(out.paths, [plan.targetPath])` assertions elsewhere in this file
+// pin the real contract.
 
 // ── production bugs: these FAIL on purpose. Do not "fix" the tests. ──────────
 

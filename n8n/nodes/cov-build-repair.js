@@ -22,5 +22,10 @@ export function covBuildRepair(fail, parsed, gaps, stage) {
     + '\n\nSOURCE FILE ' + gaps.path + ' (for reference):\n' + String(gaps.source || '').slice(0, 10000)
     + '\n\nReply with corrected JSON now: all ' + n + (n === 1 ? ' file' : ' files')
     + ', on these exact paths: ' + parsed.tests.map(t => t.path).join(', ');
-  return { system, prompt, json: true, maxTokens: 6000, temperature: 0.2, stage, stageDetail: 'repairing failing generated tests' };
+  // Reason HERE, explicitly. This is the one place in the pipeline where reasoning earns
+  // its cost: the cheap attempt has already failed and we are looking at the runner's
+  // actual complaint. It used to be left unset, which meant the repair turn reasoned only
+  // if LLM_ENABLE_THINKING happened to be on — and a test asserting `notEqual(thinking,
+  // false)` passed on the field's absence, so nothing noticed.
+  return { system, prompt, json: true, thinking: true, maxTokens: 6000, temperature: 0.2, stage, stageDetail: 'repairing failing generated tests' };
 }

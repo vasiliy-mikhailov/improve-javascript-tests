@@ -69,7 +69,7 @@ test('a generation retry KEEPS thinking — it is the hard cases that run out of
     // was the BUDGET, so the budget is what changes.
     const f = scriptFetch(['', GOOD]);
     try {
-      const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 4000 });
+      const r = await llm.chat({ prompt: 'write a test', json: true, maxTokens: 20000 });
       assert.equal(f.seen.length, 2, 'one generation, one retry');
       assert.equal(f.seen[0].chat_template_kwargs.enable_thinking, true);
       assert.equal(f.seen[1].chat_template_kwargs.enable_thinking, true,
@@ -148,13 +148,10 @@ test('a free-form call is never repaired — there is nothing to parse', async (
 // finish_reason "length" with content null. Nothing malformed was ever parsed —
 // there was nothing to parse.
 
-test('the captured reply is exactly the shape the run received', () => {
-  const ch = TRUNCATED.choices[0];
-  assert.equal(ch.finish_reason, 'length');
-  assert.equal(ch.message.content, null, 'content is null, not even an empty string');
-  assert.ok(ch.message.reasoning.length > 1000, 'the answer was being written in the reasoning channel');
-  assert.equal(TRUNCATED.usage.completion_tokens, 2000, 'every completion token went to reasoning');
-});
+// 'the captured reply is exactly the shape the run received' was deleted: every
+// assertion read a constant out of a checked-in fixture without running any sidecar
+// code, so it could only fail if someone edited the fixture — while counting toward
+// coverage as though it exercised the parser.
 
 test('an empty completion is reported as such, not as bad JSON', async () => {
   const f = scriptFetch([TRUNCATED, GOOD]);

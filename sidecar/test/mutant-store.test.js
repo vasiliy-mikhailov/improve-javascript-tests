@@ -86,7 +86,7 @@ test('a killed mutant leaves the queue; a survivor stays but is not re-offered',
 
 test('re-measuring replaces the queue without forgetting what was tried', () => withSandbox(async (sb) => {
   await sb.start();
-  store.replace('src/a.ts', surv(6));
+  store.replace('src/a.ts', surv(6).slice(1));
   const g = store.nextGroups('src/a.ts', 3);
   store.markWritten('src/a.ts', g.map((x) => x.name));
 

@@ -587,7 +587,7 @@ test('each round gets its own waste budget, or round two is a no-op', () => with
   // The budget bounds waste WITHIN a round. Rounds are already bounded by their own
   // rule: they continue only while a metric improves and none degrades.
   const w = await killReady(sb, { mutants: mutantsAt(20) }, { maxMutantsPerFile: 3 });
-  S.upsertFile(FILE, { mutantFailures: 2, mutantGenFailures: 1 });
+  S.upsertFile(FILE, { mutantFailures: 2, mutantGenFailures: 1, mutantsKilled: 7 });
   const spent = await sb.get('/api/mutant/next', { path: FILE });
   assert.equal(spent.mutant, null, 'precondition: the budget is spent');
 
@@ -598,7 +598,9 @@ test('each round gets its own waste budget, or round two is a no-op', () => with
   const f = sb.file(FILE);
   assert.equal(f.mutantFailures, 0);
   assert.equal(f.mutantGenFailures, 0);
-  assert.ok((f.mutantsKilled ?? 0) >= 0, 'kills are cumulative for the file, not reset');
+  // seeded above, because `>= 0` held for undefined, 0 and every real count alike — an
+  // accepted round that wiped the counter passed the whole suite
+  assert.equal(f.mutantsKilled, 7, 'kills are cumulative for the file, not reset with the budget');
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1045,5 +1047,8 @@ test('the work is kept on disk when the PR cannot be opened', () => withSandbox(
   w.failNext('createPr', new Error('gh: rate limit exceeded'));
   const r = await sb.post('/api/pr/create', { file: FILE, title: 't', body: '' });
   assert.equal(r.ok, true);
-  assert.ok(r.patchPath || r.branch, 'the branch or a patch must be recorded so the work can be recovered');
+  // not `patchPath || branch`: branch is set by iteration/start and always truthy, so
+  // that disjunction stayed green with the work deleted and no patch written
+  assert.equal(w.exists('test/a.kill-batch-pr.test.ts'), true,
+    'the committed test must survive a PR that could not be opened');
 }));

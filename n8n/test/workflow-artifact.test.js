@@ -113,9 +113,8 @@ test('the mutant phase is a single pass, not a loop', () => {
   for (const name of gone) {
     assert.equal(wf.nodes.find((n) => n.name === name), undefined, `${name} still exists`);
   }
-  const targets = Object.values(wf.connections).flatMap((c) => (c.main || []).flat().map((x) => x.node));
-  assert.ok(!targets.includes('Next Mutant') || wf.connections['Mutant Loop Done'],
-    'nothing may loop back to Next Mutant');
+  // the backEdges assertion below is the claim; an earlier `!targets.includes(...) || …`
+  // line here could not fail, because Cov: Done legitimately targets Next Mutant
   const backEdges = Object.entries(wf.connections)
     .filter(([, c]) => (c.main || []).flat().some((x) => x.node === 'Next Mutant'))
     .map(([from]) => from);

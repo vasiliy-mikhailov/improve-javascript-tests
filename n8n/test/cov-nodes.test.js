@@ -631,6 +631,8 @@ test('the repair turn is the escalation, and it reasons', () => {
     gaps(),
     'improving_coverage',
   );
-  assert.notEqual(plan.thinking, false,
-    'the cheap attempt already failed — reasoning is what is left to try');
+  // asserted positively: covBuildRepair returns no `thinking` key, so notEqual(undefined,
+  // false) passed on the field's ABSENCE — it would have gone green if the repair turn
+  // silently stopped reasoning
+  assert.equal(plan.thinking, true, 'the repair turn is where reasoning is worth its cost');
 });
